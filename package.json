@@ -1,0 +1,40 @@
+{
+  "name": "umler",
+  "version": "0.3.0-step3",
+  "private": true,
+  "type": "module",
+  "description": "Skeleton-to-CeTZ ER and UML diagram editor",
+  "scripts": {
+    "dev": "vite --configLoader native",
+    "build": "tsc --noEmit && vite build --configLoader native",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "validate:scene": "node --experimental-strip-types --no-warnings scripts/validate-fixtures.ts",
+    "test:layout": "node --experimental-strip-types --no-warnings scripts/test-layout.ts",
+    "test:persistence": "node --experimental-strip-types --no-warnings scripts/test-persistence.ts",
+    "bootstrap:typst": "node scripts/bootstrap-typst-packages.mjs",
+    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence",
+    "proof": "typst compile --package-path .typst/packages --format png --ppi 96 docs/assets/notation-proof.typ docs/assets/notation-proof.png"
+  },
+  "keywords": [
+    "er-diagram",
+    "uml",
+    "cetz",
+    "typst",
+    "diagram-editor"
+  ],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.7"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}
+

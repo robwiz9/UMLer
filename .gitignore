@@ -1,0 +1,10 @@
+node_modules/
+.npm-cache/
+.typst/
+dist/
+.research/
+.chrome-profile/
+.tmp*
+cetz_dump.txt
+*.log
+.DS_Store

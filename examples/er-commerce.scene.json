@@ -1,0 +1,570 @@
+{
+  "schemaVersion": "umler.scene/1",
+  "id": "scene_er_commerce",
+  "revision": 1,
+  "meta": {
+    "title": "ER — commerce",
+    "diagramKind": "er",
+    "createdAt": "2026-11-09T12:00:00.000Z",
+    "updatedAt": "2026-11-09T12:00:00.000Z",
+    "appVersion": "0.1.0-step1",
+    "description": "Step 1 schema fixture"
+  },
+  "canvas": {
+    "grid": {
+      "size": 9,
+      "visible": true,
+      "majorEvery": 4,
+      "snapNodes": true,
+      "snapPorts": true,
+      "snapWaypoints": true,
+      "snapLabels": false,
+      "labelStep": 1
+    },
+    "background": "#fbfaf7",
+    "exportPadding": 18,
+    "minZoom": 0.2,
+    "maxZoom": 4,
+    "initialZoom": 1
+  },
+  "layout": {
+    "engine": "manual",
+    "direction": "TB",
+    "rankGap": 54,
+    "nodeGap": 27,
+    "edgeGap": 18,
+    "respectLocks": true,
+    "reduceCrossings": true,
+    "maxIterations": 12
+  },
+  "theme": {
+    "colors": {
+      "ink": "#1f2933",
+      "muted": "#6b7280",
+      "canvas": "#fbfaf7",
+      "grid": "#e6e2d9",
+      "gridMajor": "#d4cec1",
+      "selection": "#2563eb",
+      "port": "#0f766e",
+      "portActive": "#0d9488",
+      "warning": "#b45309"
+    },
+    "table": {
+      "fill": {
+        "color": "#ffffff"
+      },
+      "stroke": {
+        "color": "#1f2933",
+        "width": 0.75,
+        "pattern": "solid"
+      },
+      "text": {
+        "fontFamily": "Arial",
+        "fontSize": 9,
+        "color": "#1f2933",
+        "weight": 400
+      },
+      "headerFill": {
+        "color": "#f3f1eb"
+      },
+      "headerText": {
+        "fontFamily": "Arial",
+        "fontSize": 10,
+        "color": "#1f2933",
+        "weight": 600
+      },
+      "divider": {
+        "color": "#1f2933",
+        "width": 0.5,
+        "pattern": "solid"
+      },
+      "cornerRadius": 0,
+      "paddingX": 7,
+      "headerHeight": 28,
+      "rowHeight": 18,
+      "rowPaddingY": 2,
+      "sectionGap": 2
+    },
+    "shape": {
+      "fill": {
+        "color": "#ffffff"
+      },
+      "stroke": {
+        "color": "#1f2933",
+        "width": 0.75,
+        "pattern": "solid"
+      },
+      "text": {
+        "fontFamily": "Arial",
+        "fontSize": 9,
+        "color": "#1f2933",
+        "weight": 400
+      },
+      "cornerRadius": 0,
+      "padding": 8
+    },
+    "edge": {
+      "stroke": {
+        "color": "#1f2933",
+        "width": 0.75,
+        "pattern": "solid"
+      },
+      "labelText": {
+        "fontFamily": "Arial",
+        "fontSize": 8,
+        "color": "#1f2933",
+        "weight": 400
+      },
+      "labelFill": {
+        "color": "#fbfaf7"
+      },
+      "labelPadding": 2,
+      "labelInset": 18,
+      "arrowScale": 1
+    }
+  },
+  "nodes": {
+    "customers": {
+      "id": "customers",
+      "kind": "table",
+      "name": "customers",
+      "frame": {
+        "x": 36,
+        "y": 72,
+        "width": 225,
+        "height": 90
+      },
+      "z": 2,
+      "locked": false,
+      "visible": true,
+      "tableKind": "entity",
+      "header": {},
+      "sections": [
+        {
+          "id": "customers_attrs",
+          "role": "attributes",
+          "rows": [
+            {
+              "id": "customers_id",
+              "kind": "attribute",
+              "name": "id",
+              "type": "uuid",
+              "constraints": [
+                "PK",
+                "NN"
+              ]
+            },
+            {
+              "id": "customers_email",
+              "kind": "attribute",
+              "name": "email",
+              "type": "citext",
+              "constraints": [
+                "UQ",
+                "NN"
+              ]
+            },
+            {
+              "id": "customers_name",
+              "kind": "attribute",
+              "name": "name",
+              "type": "text"
+            }
+          ]
+        }
+      ],
+      "style": {
+        "fill": {
+          "color": "#ffffff"
+        },
+        "stroke": {
+          "color": "#1f2933",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "text": {
+          "fontFamily": "Arial",
+          "fontSize": 9,
+          "color": "#1f2933",
+          "weight": 400
+        },
+        "headerFill": {
+          "color": "#f3f1eb"
+        },
+        "headerText": {
+          "fontFamily": "Arial",
+          "fontSize": 10,
+          "color": "#1f2933",
+          "weight": 600
+        },
+        "divider": {
+          "color": "#1f2933",
+          "width": 0.5,
+          "pattern": "solid"
+        },
+        "cornerRadius": 0,
+        "paddingX": 7,
+        "headerHeight": 28,
+        "rowHeight": 18,
+        "rowPaddingY": 2,
+        "sectionGap": 2
+      }
+    },
+    "orders": {
+      "id": "orders",
+      "kind": "table",
+      "name": "orders",
+      "frame": {
+        "x": 396,
+        "y": 72,
+        "width": 225,
+        "height": 108
+      },
+      "z": 2,
+      "locked": false,
+      "visible": true,
+      "tableKind": "entity",
+      "header": {},
+      "sections": [
+        {
+          "id": "orders_attrs",
+          "role": "attributes",
+          "rows": [
+            {
+              "id": "orders_id",
+              "kind": "attribute",
+              "name": "id",
+              "type": "uuid",
+              "constraints": [
+                "PK",
+                "NN"
+              ]
+            },
+            {
+              "id": "orders_customer_id",
+              "kind": "attribute",
+              "name": "customer_id",
+              "type": "uuid",
+              "constraints": [
+                "FK",
+                "NN"
+              ]
+            },
+            {
+              "id": "orders_total",
+              "kind": "attribute",
+              "name": "total",
+              "type": "numeric(12,2)",
+              "constraints": [
+                "NN"
+              ]
+            },
+            {
+              "id": "orders_placed_at",
+              "kind": "attribute",
+              "name": "placed_at",
+              "type": "timestamptz",
+              "constraints": [
+                "NN"
+              ]
+            }
+          ]
+        }
+      ],
+      "style": {
+        "fill": {
+          "color": "#ffffff"
+        },
+        "stroke": {
+          "color": "#1f2933",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "text": {
+          "fontFamily": "Arial",
+          "fontSize": 9,
+          "color": "#1f2933",
+          "weight": 400
+        },
+        "headerFill": {
+          "color": "#f3f1eb"
+        },
+        "headerText": {
+          "fontFamily": "Arial",
+          "fontSize": 10,
+          "color": "#1f2933",
+          "weight": 600
+        },
+        "divider": {
+          "color": "#1f2933",
+          "width": 0.5,
+          "pattern": "solid"
+        },
+        "cornerRadius": 0,
+        "paddingX": 7,
+        "headerHeight": 28,
+        "rowHeight": 18,
+        "rowPaddingY": 2,
+        "sectionGap": 2
+      }
+    },
+    "order_line": {
+      "id": "order_line",
+      "kind": "relationAttribute",
+      "name": "order_line",
+      "frame": {
+        "x": 225,
+        "y": 207,
+        "width": 198,
+        "height": 72
+      },
+      "z": 3,
+      "locked": false,
+      "visible": true,
+      "rows": [
+        {
+          "id": "order_line_quantity",
+          "kind": "attribute",
+          "name": "quantity",
+          "type": "int",
+          "constraints": [
+            "NN"
+          ]
+        },
+        {
+          "id": "order_line_unit_price",
+          "kind": "attribute",
+          "name": "unit_price",
+          "type": "numeric(12,2)",
+          "constraints": [
+            "NN"
+          ]
+        }
+      ],
+      "style": {
+        "fill": {
+          "color": "#ffffff"
+        },
+        "stroke": {
+          "color": "#1f2933",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "text": {
+          "fontFamily": "Arial",
+          "fontSize": 9,
+          "color": "#1f2933",
+          "weight": 400
+        },
+        "headerFill": {
+          "color": "#f3f1eb"
+        },
+        "headerText": {
+          "fontFamily": "Arial",
+          "fontSize": 10,
+          "color": "#1f2933",
+          "weight": 600
+        },
+        "divider": {
+          "color": "#1f2933",
+          "width": 0.5,
+          "pattern": "solid"
+        },
+        "cornerRadius": 0,
+        "paddingX": 7,
+        "headerHeight": 28,
+        "rowHeight": 18,
+        "rowPaddingY": 2,
+        "sectionGap": 2
+      }
+    }
+  },
+  "edges": {
+    "edge_places": {
+      "id": "edge_places",
+      "source": {
+        "target": "node",
+        "nodeId": "customers",
+        "port": {
+          "kind": "perimeter",
+          "side": "east"
+        }
+      },
+      "target": {
+        "target": "node",
+        "nodeId": "orders",
+        "port": {
+          "kind": "perimeter",
+          "side": "west"
+        }
+      },
+      "routing": {
+        "mode": "orthogonal",
+        "avoidObstacles": true,
+        "obstaclePadding": 9,
+        "stubLength": 9,
+        "waypoints": []
+      },
+      "markers": {
+        "source": {
+          "family": "er",
+          "kind": "one"
+        },
+        "target": {
+          "family": "er",
+          "kind": "zeroOrMany"
+        }
+      },
+      "labels": [
+        {
+          "id": "label_places_source",
+          "zone": "source",
+          "text": "1",
+          "anchor": {
+            "kind": "edgePoint",
+            "t": 0.12
+          },
+          "offset": {
+            "x": 0,
+            "y": -12
+          },
+          "locked": false,
+          "visible": true
+        },
+        {
+          "id": "label_places_center",
+          "zone": "center",
+          "text": "places",
+          "anchor": {
+            "kind": "edgePoint",
+            "t": 0.5
+          },
+          "offset": {
+            "x": 0,
+            "y": -12
+          },
+          "locked": false,
+          "visible": true
+        },
+        {
+          "id": "label_places_target",
+          "zone": "target",
+          "text": "0..*",
+          "anchor": {
+            "kind": "edgePoint",
+            "t": 0.88
+          },
+          "offset": {
+            "x": 0,
+            "y": -12
+          },
+          "locked": false,
+          "visible": true
+        }
+      ],
+      "semantic": {
+        "family": "er",
+        "name": "places"
+      },
+      "style": {
+        "stroke": {
+          "color": "#1f2933",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "labelText": {
+          "fontFamily": "Arial",
+          "fontSize": 8,
+          "color": "#1f2933",
+          "weight": 400
+        },
+        "labelFill": {
+          "color": "#fbfaf7"
+        },
+        "labelPadding": 2,
+        "labelInset": 18,
+        "arrowScale": 1
+      },
+      "locked": false,
+      "visible": true,
+      "z": 10
+    },
+    "edge_order_line": {
+      "id": "edge_order_line",
+      "source": {
+        "target": "node",
+        "nodeId": "order_line",
+        "port": {
+          "kind": "perimeter",
+          "side": "east"
+        }
+      },
+      "target": {
+        "target": "edge",
+        "edgeId": "edge_places",
+        "t": 0.5
+      },
+      "routing": {
+        "mode": "orthogonal",
+        "avoidObstacles": true,
+        "obstaclePadding": 9,
+        "stubLength": 9,
+        "waypoints": []
+      },
+      "markers": {
+        "source": {
+          "family": "none",
+          "kind": "none"
+        },
+        "target": {
+          "family": "none",
+          "kind": "none"
+        }
+      },
+      "labels": [
+        {
+          "id": "label_order_line_center",
+          "zone": "center",
+          "text": "line items",
+          "anchor": {
+            "kind": "edgePoint",
+            "t": 0.5
+          },
+          "offset": {
+            "x": 0,
+            "y": -12
+          },
+          "locked": false,
+          "visible": true
+        }
+      ],
+      "semantic": {
+        "family": "er",
+        "name": "has"
+      },
+      "style": {
+        "stroke": {
+          "color": "#1f2933",
+          "width": 0.75,
+          "pattern": "dashed"
+        },
+        "labelText": {
+          "fontFamily": "Arial",
+          "fontSize": 8,
+          "color": "#1f2933",
+          "weight": 400
+        },
+        "labelFill": {
+          "color": "#fbfaf7"
+        },
+        "labelPadding": 2,
+        "labelInset": 18,
+        "arrowScale": 1
+      },
+      "locked": false,
+      "visible": true,
+      "z": 10
+    }
+  },
+  "assets": {}
+}
