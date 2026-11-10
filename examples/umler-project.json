@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-10T22:41:58.658Z",
+  "exportedAt": "2026-11-10T22:49:43.747Z",
   "activeSceneId": "scene_e2cfe1a5",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_e2cfe1a5",
-      "revision": 53,
+      "revision": 67,
       "meta": {
         "title": "umler-project",
         "diagramKind": "er",
         "createdAt": "2026-11-10T21:38:00.793Z",
-        "updatedAt": "2026-11-10T22:41:07.991Z",
+        "updatedAt": "2026-11-10T22:49:42.103Z",
         "appVersion": "0.1.0-step1"
       },
       "canvas": {
@@ -35,10 +35,10 @@
       "layout": {
         "engine": "sugiyama",
         "direction": "TB",
-        "spacing": "wide",
-        "rankGap": 126,
-        "nodeGap": 72,
-        "edgeGap": 48,
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
         "respectLocks": true,
         "reduceCrossings": true,
         "maxIterations": 12
@@ -210,13 +210,13 @@
           "id": "entity_b0a9f22b",
           "name": "new_entity",
           "frame": {
-            "x": -270,
-            "y": 54,
+            "x": 18,
+            "y": 108,
             "width": 225,
             "height": 90
           },
           "z": 2,
-          "locked": false,
+          "locked": true,
           "visible": true,
           "style": {
             "fill": {
@@ -286,8 +286,8 @@
           "id": "image_19987399",
           "name": "Image",
           "frame": {
-            "x": -216,
-            "y": -243,
+            "x": 162,
+            "y": -162,
             "width": 144,
             "height": 90
           },
@@ -323,8 +323,8 @@
           "id": "image_41180266",
           "name": "IMG_20261110_180825_506.jpg",
           "frame": {
-            "x": -9,
-            "y": -270,
+            "x": 9,
+            "y": -216,
             "width": 101,
             "height": 197.05338983050848
           },
@@ -355,6 +355,67 @@
           "alt": "IMG_20261110_180825_506.jpg",
           "showBorder": false,
           "caption": "hello"
+        },
+        "relation_attribute_71e4b30e": {
+          "id": "relation_attribute_71e4b30e",
+          "name": "hello",
+          "frame": {
+            "x": -117,
+            "y": 18,
+            "width": 198,
+            "height": 72
+          },
+          "z": 3,
+          "locked": false,
+          "visible": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          },
+          "kind": "relationAttribute",
+          "rows": [
+            {
+              "id": "row_bcaf9647",
+              "kind": "attribute",
+              "name": "quantity",
+              "type": "int",
+              "constraints": [
+                "NN"
+              ]
+            }
+          ]
         }
       },
       "edges": {
@@ -365,7 +426,7 @@
             "nodeId": "entity_f97fd248",
             "port": {
               "kind": "perimeter",
-              "side": "south"
+              "side": "east"
             }
           },
           "target": {
@@ -373,7 +434,7 @@
             "nodeId": "entity_b0a9f22b",
             "port": {
               "kind": "perimeter",
-              "side": "north"
+              "side": "west"
             }
           },
           "labels": [],
@@ -405,6 +466,66 @@
               "color": "#111111",
               "width": 0.75,
               "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          }
+        },
+        "edge_a0c23b62": {
+          "id": "edge_a0c23b62",
+          "source": {
+            "target": "node",
+            "nodeId": "relation_attribute_71e4b30e",
+            "port": {
+              "kind": "perimeter",
+              "side": "north"
+            }
+          },
+          "target": {
+            "target": "edge",
+            "edgeId": "edge_93e75d5a",
+            "t": 0.5
+          },
+          "labels": [],
+          "locked": false,
+          "visible": true,
+          "z": 10,
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "semantic": {
+            "family": "er",
+            "name": "has"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "dashed"
             },
             "labelText": {
               "fontFamily": "Latin Modern Roman",
