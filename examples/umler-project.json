@@ -1,8 +1,8 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-10T22:57:49.965Z",
-  "activeSceneId": "scene_815ac1a4",
+  "exportedAt": "2026-11-10T23:01:52.061Z",
+  "activeSceneId": "scene_094f3ea4",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
@@ -2478,6 +2478,1060 @@
               "color": "#111111",
               "width": 0.75,
               "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        }
+      },
+      "assets": {}
+    },
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_1f42c546",
+      "revision": 3,
+      "meta": {
+        "title": "Untitled UML Sequence diagram",
+        "diagramKind": "uml-sequence",
+        "createdAt": "2026-11-10T23:00:13.385Z",
+        "updatedAt": "2026-11-10T23:01:05.283Z",
+        "appVersion": "0.1.0-step1",
+        "description": "Step 1 schema fixture"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {
+        "seq_customer": {
+          "id": "seq_customer",
+          "kind": "lifeline",
+          "name": "Customer",
+          "frame": {
+            "x": 36,
+            "y": 72,
+            "width": 108,
+            "height": 630
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "head": {
+            "headKind": "actor",
+            "label": "Customer"
+          },
+          "headHeight": 36,
+          "activationBars": [],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "seq_order_service": {
+          "id": "seq_order_service",
+          "kind": "lifeline",
+          "name": ":OrderService",
+          "frame": {
+            "x": 216,
+            "y": 72,
+            "width": 108,
+            "height": 630
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "head": {
+            "headKind": "object",
+            "label": ":OrderService"
+          },
+          "headHeight": 36,
+          "activationBars": [
+            {
+              "id": "act_order_service",
+              "top": 108,
+              "height": 234,
+              "level": 0
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "seq_gateway": {
+          "id": "seq_gateway",
+          "kind": "lifeline",
+          "name": ":PaymentGateway",
+          "frame": {
+            "x": 396,
+            "y": 72,
+            "width": 108,
+            "height": 630
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "head": {
+            "headKind": "boundary",
+            "label": ":PaymentGateway"
+          },
+          "headHeight": 36,
+          "activationBars": [
+            {
+              "id": "act_gateway",
+              "top": 198,
+              "height": 90,
+              "level": 0
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        }
+      },
+      "edges": {
+        "msg_submit": {
+          "id": "msg_submit",
+          "source": {
+            "target": "node",
+            "nodeId": "seq_customer",
+            "port": {
+              "kind": "spine",
+              "t": 0.18
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "seq_order_service",
+            "port": {
+              "kind": "spine",
+              "t": 0.18000000000000002
+            }
+          },
+          "routing": {
+            "mode": "straight",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_msg_submit",
+              "zone": "center",
+              "text": "submit()",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -18
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "sequence",
+            "messageKind": "sync",
+            "signature": "submit()"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "msg_charge": {
+          "id": "msg_charge",
+          "source": {
+            "target": "node",
+            "nodeId": "seq_order_service",
+            "port": {
+              "kind": "spine",
+              "t": 0.32
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "seq_gateway",
+            "port": {
+              "kind": "spine",
+              "t": 0.32
+            }
+          },
+          "routing": {
+            "mode": "straight",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_msg_charge",
+              "zone": "center",
+              "text": "charge(total)",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -18
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "sequence",
+            "messageKind": "sync",
+            "signature": "charge(total)"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "msg_approved": {
+          "id": "msg_approved",
+          "source": {
+            "target": "node",
+            "nodeId": "seq_gateway",
+            "port": {
+              "kind": "spine",
+              "t": 0.44
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "seq_order_service",
+            "port": {
+              "kind": "spine",
+              "t": 0.44
+            }
+          },
+          "routing": {
+            "mode": "straight",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_msg_approved",
+              "zone": "center",
+              "text": "approved",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -18
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "sequence",
+            "messageKind": "reply",
+            "signature": "approved"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "dashed"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "msg_receipt": {
+          "id": "msg_receipt",
+          "source": {
+            "target": "node",
+            "nodeId": "seq_order_service",
+            "port": {
+              "kind": "spine",
+              "t": 0.58
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "seq_customer",
+            "port": {
+              "kind": "spine",
+              "t": 0.58
+            }
+          },
+          "routing": {
+            "mode": "straight",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_msg_receipt",
+              "zone": "center",
+              "text": "receipt",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -18
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "sequence",
+            "messageKind": "reply",
+            "signature": "receipt"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "dashed"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        }
+      },
+      "assets": {}
+    },
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_094f3ea4",
+      "revision": 1,
+      "meta": {
+        "title": "Untitled UML Communication diagram",
+        "diagramKind": "uml-communication",
+        "createdAt": "2026-11-10T23:00:17.701Z",
+        "updatedAt": "2026-11-10T23:00:17.701Z",
+        "appVersion": "0.1.0-step1",
+        "description": "Step 1 schema fixture"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {
+        "comm_ui": {
+          "id": "comm_ui",
+          "kind": "object",
+          "name": ":CheckoutUI",
+          "frame": {
+            "x": 72,
+            "y": 90,
+            "width": 162,
+            "height": 45
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "underlineName": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "comm_service": {
+          "id": "comm_service",
+          "kind": "object",
+          "name": ":OrderService",
+          "frame": {
+            "x": 360,
+            "y": 90,
+            "width": 180,
+            "height": 45
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "underlineName": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "comm_inventory": {
+          "id": "comm_inventory",
+          "kind": "object",
+          "name": ":Inventory",
+          "frame": {
+            "x": 360,
+            "y": 225,
+            "width": 180,
+            "height": 45
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "underlineName": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        }
+      },
+      "edges": {
+        "comm_create": {
+          "id": "comm_create",
+          "source": {
+            "target": "node",
+            "nodeId": "comm_ui",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "comm_service",
+            "port": {
+              "kind": "perimeter",
+              "side": "west"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_comm_create",
+              "zone": "center",
+              "text": "1: create()",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "communication",
+            "sequence": "1",
+            "signature": "create()",
+            "direction": "forward"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "comm_reserve": {
+          "id": "comm_reserve",
+          "source": {
+            "target": "node",
+            "nodeId": "comm_service",
+            "port": {
+              "kind": "perimeter",
+              "side": "south"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "comm_inventory",
+            "port": {
+              "kind": "perimeter",
+              "side": "north"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_comm_reserve",
+              "zone": "center",
+              "text": "1.1: reserve()",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "communication",
+            "sequence": "1.1",
+            "signature": "reserve()",
+            "direction": "forward"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "comm_confirm": {
+          "id": "comm_confirm",
+          "source": {
+            "target": "node",
+            "nodeId": "comm_inventory",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "comm_service",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_comm_confirm",
+              "zone": "center",
+              "text": "1.2: confirmed",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "communication",
+            "sequence": "1.2",
+            "signature": "confirmed",
+            "direction": "reverse"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "dashed"
             },
             "labelText": {
               "fontFamily": "Latin Modern Roman",
