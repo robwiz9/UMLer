@@ -1,0 +1,137 @@
+{
+  "format": "umler.project",
+  "version": 1,
+  "exportedAt": "2026-11-10T21:38:00.794Z",
+  "activeSceneId": "scene_e2cfe1a5",
+  "scenes": [
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_e2cfe1a5",
+      "revision": 1,
+      "meta": {
+        "title": "umler-project",
+        "diagramKind": "er",
+        "createdAt": "2026-11-10T21:38:00.793Z",
+        "updatedAt": "2026-11-10T21:38:00.793Z",
+        "appVersion": "0.1.0-step1"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {},
+      "edges": {},
+      "assets": {}
+    }
+  ]
+}
