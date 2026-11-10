@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-10T21:41:42.649Z",
+  "exportedAt": "2026-11-10T21:47:02.901Z",
   "activeSceneId": "scene_e2cfe1a5",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_e2cfe1a5",
-      "revision": 2,
+      "revision": 4,
       "meta": {
         "title": "umler-project",
         "diagramKind": "er",
         "createdAt": "2026-11-10T21:38:00.793Z",
-        "updatedAt": "2026-11-10T21:41:33.965Z",
+        "updatedAt": "2026-11-10T21:47:02.391Z",
         "appVersion": "0.1.0-step1"
       },
       "canvas": {
@@ -198,6 +198,82 @@
                 },
                 {
                   "id": "row_bd277ce9",
+                  "kind": "attribute",
+                  "name": "name",
+                  "type": "text"
+                }
+              ]
+            }
+          ]
+        },
+        "entity_b0a9f22b": {
+          "id": "entity_b0a9f22b",
+          "name": "new_entity",
+          "frame": {
+            "x": 144,
+            "y": 36,
+            "width": 225,
+            "height": 90
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          },
+          "kind": "table",
+          "tableKind": "entity",
+          "header": {},
+          "sections": [
+            {
+              "id": "section_06ab453d",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "row_842afc44",
+                  "kind": "attribute",
+                  "name": "id",
+                  "type": "uuid",
+                  "constraints": [
+                    "PK",
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "row_90ce7054",
                   "kind": "attribute",
                   "name": "name",
                   "type": "text"
