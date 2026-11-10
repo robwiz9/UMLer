@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { ER_COMMERCE, STEP1_FIXTURES } from "../fixtures/index.ts";
 import type { Rect } from "../model/geometry.ts";
-import type { DiagramKind, SceneDocument } from "../model/scene.ts";
-import { createEmptyScene } from "../model/scene.ts";
+import type { DiagramKind, LayoutSpacing, SceneDocument } from "../model/scene.ts";
+import { createEmptyScene, LAYOUT_SPACING_PRESETS } from "../model/scene.ts";
 import {
   deserializeProjectFile,
   deserializeSceneFile,
@@ -16,27 +16,52 @@ import { buildLayoutSnapshot, withNodeFrames } from "../layout/build-layout.ts";
 import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
 import { zoomAtScreenPoint, type Camera, type ViewportSize } from "../canvas/camera.ts";
-import { CanvasStage } from "../canvas/CanvasStage.tsx";
+import { CanvasStage, type CanvasStageHandle } from "../canvas/CanvasStage.tsx";
+import { GitHubDecisionDialog, type GitHubDecision, type GitHubDecisionOption } from "./GitHubDecisionDialog.tsx";
+import { GitHubProjectDialog } from "./GitHubProjectDialog.tsx";
 import { LayoutPanel } from "./LayoutPanel.tsx";
 import { ProjectImportDialog } from "./ProjectImportDialog.tsx";
 import { SceneDialog, type SceneDialogMode } from "./SceneDialog.tsx";
+import { ThemePanel } from "./ThemePanel.tsx";
 import { Toolbar } from "./Toolbar.tsx";
 import { downloadTextFile, readTextFile } from "./file-transfer.ts";
+import { loadStoredGitHubSession, storeGitHubSession } from "./github-session.ts";
+import { loadStoredProject, saveStoredProject } from "./project-storage.ts";
+import {
+  describeGitHubError,
+  getProjectFile,
+  isGitHubConflict,
+  writeProjectFile,
+  type GitHubRemoteFile,
+  type GitHubSession,
+} from "./github-client.ts";
 import { useSceneHistory } from "./use-scene-history.ts";
+import {
+  compareRemoteFile,
+  githubTargetLabel,
+  projectDigest,
+  projectTitleFromPath,
+  type GitHubBinding,
+  type GitHubTarget,
+  type ProjectSnapshot,
+} from "../model/github-project.ts";
 import type {
   EdgeAttachment,
   EdgeLabelZone,
   EdgeRoutingMode,
 } from "../model/edges.ts";
 import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
-import type { StrokePattern } from "../model/styles.ts";
+import type { StrokePattern, TextStyleOverride, Theme } from "../model/styles.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
-import type { SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
 import { asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, newId, type ActivationId, type SceneId } from "../model/ids.ts";
 import { snap, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
-import { createObjectFromTemplate } from "../model/object-catalog.ts";
+import { createImageObject, createObjectFromTemplate } from "../model/object-catalog.ts";
+import { collectProjectAssets, pruneUnusedProjectAssets, unusedProjectAssets } from "../model/assets.ts";
+import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
+import { createImageAssetFromFile, isSupportedImageFile } from "./image-assets.ts";
 import type { EdgeAttachmentRef, EdgeTargetRef, PortAttachmentRef } from "../model/edge-create.ts";
 import { createEdgeForDiagram } from "../model/edge-create.ts";
 import {
@@ -51,15 +76,19 @@ import {
   deleteSection,
   insertEdge,
   insertObject,
+  insertConnectedObject,
   moveSequenceEdge,
   patchLayout,
   patchNode,
   rerouteEdge,
   setEdgeAttachment,
   setEdgeLabelOffset,
+  setEdgeLabelTextStyle,
   setEndpointLabel,
   setMarker,
+  setNodeImage,
   setRoutingMode,
+  setSceneTheme,
   setStrokePattern,
   setStrokeWidth,
   updateActivation,
@@ -111,10 +140,50 @@ const uniqueSceneTitle = (
   return `${base} (${suffix})`;
 };
 
-type ImportTarget = "scene" | "project";
-type ToastTone = "info" | "error";
+const initialScenes = (): SceneDocument[] =>
+  STEP1_FIXTURES.map((fixture) => fixture.scene);
 
-interface ToastMessage {
+const uploadProjectSnapshot = async (
+  session: GitHubSession,
+  target: GitHubTarget,
+  snapshot: ProjectSnapshot,
+  sha: string | null,
+  message: string,
+): Promise<{ sha: string; htmlUrl: string }> =>
+  writeProjectFile({
+    token: session.token,
+    target,
+    text: serializeProjectFile(
+      snapshot.scenes,
+      snapshot.activeSceneId,
+      snapshot.assets,
+    ),
+    sha,
+    message,
+  });
+
+const targetOf = (binding: GitHubBinding): GitHubTarget => ({
+  owner: binding.owner,
+  repo: binding.repo,
+  branch: binding.branch,
+  path: binding.path,
+});
+
+type ImportTarget = "scene" | "project";
+type ToastTone = "info" | "error" | "warning" | "progress";
+type GitHubSaveMode = "manual" | "auto";
+
+interface ToastAction {
+  readonly label: string;
+  readonly run: () => void;
+}
+
+interface ToastOptions {
+  readonly sticky?: boolean;
+  readonly action?: ToastAction;
+}
+
+interface ToastMessage extends ToastOptions {
   readonly message: string;
   readonly tone: ToastTone;
 }
@@ -125,6 +194,11 @@ interface PendingProjectImport {
 }
 
 export const App = () => {
+  const [initialProject] = useState(() => loadStoredProject());
+  const initialScene =
+    initialProject?.scenes.find((item) => item.id === initialProject.activeSceneId) ??
+    initialProject?.scenes[0] ??
+    ER_COMMERCE;
   const {
     scene,
     setScene,
@@ -133,14 +207,37 @@ export const App = () => {
     reset: resetHistory,
     canUndo,
     canRedo,
-  } = useSceneHistory(ER_COMMERCE);
+  } = useSceneHistory(initialScene);
   const [scenes, setScenes] = useState<SceneDocument[]>(() =>
-    STEP1_FIXTURES.map((fixture) => fixture.scene),
+    initialProject === null ? initialScenes() : [...initialProject.scenes],
   );
-  const [activeSceneId, setActiveSceneId] = useState<string>(ER_COMMERCE.id);
+  const [baselineDigest, setBaselineDigest] = useState(() =>
+    initialProject === null
+      ? projectDigest(initialScenes(), ER_COMMERCE.id)
+      : initialProject.baselineDigest,
+  );
+  const [activeSceneId, setActiveSceneId] = useState<string>(initialScene.id);
   const [sceneDialog, setSceneDialog] = useState<SceneDialogMode | null>(null);
   const [pendingProjectImport, setPendingProjectImport] =
     useState<PendingProjectImport | null>(null);
+  const [githubSession, setGithubSession] = useState<GitHubSession | null>(() =>
+    loadStoredGitHubSession(),
+  );
+  const [githubBinding, setGithubBinding] = useState<GitHubBinding | null>(() =>
+    initialProject === null ? null : initialProject.githubBinding,
+  );
+  const [assetLibrary, setAssetLibrary] = useState<Record<string, ImageAsset>>(
+    () =>
+      initialProject === null
+        ? {}
+        : pruneUnusedProjectAssets(
+            initialProject.scenes,
+            initialProject.assets,
+          ),
+  );
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false);
+  const [githubBusy, setGithubBusy] = useState<"open" | "save" | null>(null);
+  const [githubDecision, setGithubDecision] = useState<GitHubDecision | null>(null);
   const [panelVisible, setPanelVisible] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -162,6 +259,9 @@ export const App = () => {
   const [nodeFocus, setNodeFocus] = useState<NodeFocus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importTargetRef = useRef<ImportTarget>("scene");
+  const canvasStageRef = useRef<CanvasStageHandle | null>(null);
+  const manualSaveRef = useRef<() => void>(() => {});
+  const autoSaveRef = useRef<() => void>(() => {});
 
   const measurer = useMemo(() => new CanvasTextMeasurer(), [fontTick]);
 
@@ -185,10 +285,10 @@ export const App = () => {
   }, [scene]);
 
   useEffect(() => {
-    if (toast === null) return;
+    if (toast === null || toast.sticky === true) return;
     const timer = window.setTimeout(
       () => setToast(null),
-      toast.tone === "error" ? 7000 : 2600,
+      toast.tone === "error" || toast.tone === "warning" ? 7000 : 2600,
     );
     return () => window.clearTimeout(timer);
   }, [toast]);
@@ -197,6 +297,47 @@ export const App = () => {
     () => scenes.map((item) => (item.id === scene.id ? scene : item)),
     [scene, scenes],
   );
+  const currentDigest = useMemo(
+    () => projectDigest(currentScenes, scene.id),
+    [currentScenes, scene.id],
+  );
+  const projectDirty = currentDigest !== baselineDigest;
+  const githubDirty =
+    githubBinding !== null && currentDigest !== githubBinding.syncedDigest;
+  const unusedImageCount = useMemo(
+    () => unusedProjectAssets(currentScenes, assetLibrary).length,
+    [assetLibrary, currentScenes],
+  );
+  const hasUnsavedChanges =
+    githubBinding !== null ? githubDirty : projectDirty;
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent): void => {
+      event.preventDefault();
+      event.returnValue = "Changes you made may not be saved.";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    const persist = (): void => {
+      saveStoredProject({
+        scenes: currentScenes,
+        activeSceneId: scene.id,
+        baselineDigest,
+        githubBinding,
+        assets: assetLibrary,
+      });
+    };
+    const timer = window.setTimeout(persist, 250);
+    window.addEventListener("pagehide", persist);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pagehide", persist);
+    };
+  }, [assetLibrary, baselineDigest, currentScenes, githubBinding, scene.id]);
 
   const effectiveScene = useMemo(() => withNodeFrames(scene, previewFrames), [scene, previewFrames]);
   const layout = useMemo(
@@ -251,6 +392,19 @@ export const App = () => {
     [clearTransientSelection, resetHistory],
   );
 
+  const startNewProject = useCallback(
+    (next: SceneDocument) => {
+      const nextScenes = [next];
+      setScenes(nextScenes);
+      setAssetLibrary(collectProjectAssets(nextScenes));
+      activateSceneDocument(next);
+      setBaselineDigest(projectDigest(nextScenes, next.id));
+      setGithubBinding(null);
+      setGithubDecision(null);
+    },
+    [activateSceneDocument],
+  );
+
   const duplicateScene = useCallback(() => {
     const baseTitle = scene.meta.title.replace(/ \(\d+\)$/, "");
     const existing = new Set(scenes.map((item) => item.meta.title));
@@ -271,6 +425,13 @@ export const App = () => {
     activateSceneDocument(next);
   }, [activateSceneDocument, activeSceneId, scenes]);
 
+  const showToast = useCallback(
+    (message: string, tone: ToastTone = "info", options?: ToastOptions) => {
+      setToast({ message, tone, ...options });
+    },
+    [],
+  );
+
   const handleSceneDialogSubmit = useCallback(
     (
       name: string,
@@ -279,7 +440,7 @@ export const App = () => {
     ) => {
       const mode = sceneDialog;
       setSceneDialog(null);
-      if (mode === "new") {
+      if (mode === "new" || mode === "new-project") {
         const template = startMode === "template"
           ? STEP1_FIXTURES.find(
               (fixture) => fixture.scene.meta.diagramKind === diagramKind,
@@ -288,8 +449,17 @@ export const App = () => {
         const next = template === undefined
           ? createEmptyScene(diagramKind, name)
           : cloneSceneAs(template, name);
-        setScenes((current) => [...current, next]);
-        activateSceneDocument(next);
+        if (mode === "new-project") {
+          startNewProject(next);
+          showToast("New project started.");
+        } else {
+          setScenes((current) => [...current, next]);
+          setAssetLibrary((current) => ({
+            ...current,
+            ...collectProjectAssets([next]),
+          }));
+          activateSceneDocument(next);
+        }
       } else if (mode === "rename") {
         setScene((current) => ({
           ...current,
@@ -300,12 +470,8 @@ export const App = () => {
         deleteActiveScene();
       }
     },
-    [activateSceneDocument, deleteActiveScene, sceneDialog, setScene],
+    [activateSceneDocument, deleteActiveScene, sceneDialog, setScene, startNewProject, showToast],
   );
-
-  const showToast = useCallback((message: string, tone: ToastTone = "info") => {
-    setToast({ message, tone });
-  }, []);
 
   const handleExportScene = useCallback(() => {
     try {
@@ -326,7 +492,7 @@ export const App = () => {
     try {
       downloadTextFile(
         projectFileName(),
-        serializeProjectFile(currentScenes, scene.id),
+        serializeProjectFile(currentScenes, scene.id, assetLibrary),
       );
       showToast(`Project exported · ${currentScenes.length} scenes.`);
     } catch (error) {
@@ -335,7 +501,7 @@ export const App = () => {
         "error",
       );
     }
-  }, [currentScenes, scene.id, showToast]);
+  }, [assetLibrary, currentScenes, scene.id, showToast]);
 
   const requestImport = useCallback((target: ImportTarget) => {
     importTargetRef.current = target;
@@ -360,6 +526,10 @@ export const App = () => {
           const title = uniqueSceneTitle(imported.meta.title, currentScenes);
           const copy = importSceneCopy(imported, title);
           setScenes([...currentScenes, copy]);
+          setAssetLibrary((current) => ({
+            ...current,
+            ...collectProjectAssets([copy]),
+          }));
           activateSceneDocument(copy);
           showToast(`Imported scene “${title}”.`);
         } else {
@@ -388,12 +558,554 @@ export const App = () => {
       return;
     }
     setScenes([...pendingProjectImport.project.scenes]);
+    setAssetLibrary({
+      ...collectProjectAssets(pendingProjectImport.project.scenes),
+      ...pendingProjectImport.project.assets,
+    });
     activateSceneDocument(active);
+    setBaselineDigest(
+      projectDigest(pendingProjectImport.project.scenes, active.id),
+    );
+    setGithubBinding(null);
     setPendingProjectImport(null);
     showToast(
       `Imported project · ${pendingProjectImport.project.scenes.length} scenes.`,
     );
   }, [activateSceneDocument, pendingProjectImport, showToast]);
+
+  const askGitHub = useCallback((decision: GitHubDecision) => {
+    setToast(null);
+    setGithubDecision(decision);
+    setGithubDialogOpen(false);
+  }, []);
+
+  const applyRemoteProject = useCallback(
+    (
+      target: GitHubTarget,
+      remote: GitHubRemoteFile,
+      project: ImportedProject,
+    ) => {
+      const active =
+        project.scenes.find((item) => item.id === project.activeSceneId) ??
+        project.scenes[0];
+      if (active === undefined) {
+        throw new Error("The remote project does not contain any scenes.");
+      }
+      const digest = projectDigest(project.scenes, active.id);
+      setScenes([...project.scenes]);
+      setAssetLibrary({
+        ...collectProjectAssets(project.scenes),
+        ...project.assets,
+      });
+      activateSceneDocument(active);
+      setBaselineDigest(digest);
+      setGithubBinding({
+        ...target,
+        sha: remote.sha,
+        syncedDigest: digest,
+        syncedAt: new Date().toISOString(),
+        htmlUrl: remote.htmlUrl,
+      });
+      setGithubDecision(null);
+      setGithubDialogOpen(false);
+      showToast(`Opened ${target.owner}/${target.repo} · ${target.path}`);
+    },
+    [activateSceneDocument, showToast],
+  );
+
+  const commitSnapshotToGitHub = useCallback(
+    async (
+      target: GitHubTarget,
+      snapshot: ProjectSnapshot,
+      sha: string | null,
+      digest: string,
+      message: string,
+      mode: GitHubSaveMode = "manual",
+    ): Promise<void> => {
+      if (githubSession === null) {
+        throw new Error("Sign in to GitHub before saving.");
+      }
+      setGithubBusy("save");
+      try {
+        const result = await uploadProjectSnapshot(
+          githubSession,
+          target,
+          snapshot,
+          sha,
+          message,
+        );
+        setGithubBinding({
+          ...target,
+          sha: result.sha,
+          syncedDigest: digest,
+          syncedAt: new Date().toISOString(),
+          htmlUrl: result.htmlUrl,
+        });
+        setBaselineDigest(digest);
+        setGithubDecision(null);
+        setGithubDialogOpen(false);
+        showToast(
+          mode === "auto"
+            ? `Auto-saved to GitHub · ${target.path}`
+            : `Saved to GitHub · ${target.owner}/${target.repo} · ${target.path}`,
+        );
+      } finally {
+        setGithubBusy(null);
+      }
+    },
+    [githubSession, showToast],
+  );
+
+  const createBlankRemoteProject = useCallback(
+    async (target: GitHubTarget): Promise<void> => {
+      if (githubSession === null) {
+        throw new Error("Sign in to GitHub before creating a project.");
+      }
+      const scene = createEmptyScene(
+        "er",
+        projectTitleFromPath(target.path),
+      );
+      const snapshot: ProjectSnapshot = {
+        scenes: [scene],
+        activeSceneId: scene.id,
+        assets: {},
+      };
+      const digest = projectDigest(snapshot.scenes, snapshot.activeSceneId);
+      setGithubBusy("open");
+      try {
+        const result = await uploadProjectSnapshot(
+          githubSession,
+          target,
+          snapshot,
+          null,
+          "Create project from UMLer",
+        );
+        setScenes([scene]);
+        setAssetLibrary({});
+        activateSceneDocument(scene);
+        setBaselineDigest(digest);
+        setGithubBinding({
+          ...target,
+          sha: result.sha,
+          syncedDigest: digest,
+          syncedAt: new Date().toISOString(),
+          htmlUrl: result.htmlUrl,
+        });
+        setGithubDecision(null);
+        setGithubDialogOpen(false);
+        showToast(`Created ${target.owner}/${target.repo} · ${target.path}`);
+      } finally {
+        setGithubBusy(null);
+      }
+    },
+    [activateSceneDocument, githubSession, showToast],
+  );
+
+  const presentSaveConflict = useCallback(
+    (
+      target: GitHubTarget,
+      remote: GitHubRemoteFile,
+      snapshot: ProjectSnapshot,
+      digest: string,
+      mode: GitHubSaveMode = "manual",
+    ) => {
+      const warnAutoConflict = (message: string): void => {
+        showToast(message, "warning", {
+          sticky: true,
+          action: {
+            label: "Review",
+            run: () => manualSaveRef.current(),
+          },
+        });
+      };
+
+      let remoteProject: ImportedProject | null = null;
+      try {
+        remoteProject = deserializeProjectFile(remote.text);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "The remote file is invalid.";
+        if (mode === "auto") {
+          warnAutoConflict(
+            "GitHub conflict: the remote file is not a valid UMLer project. Click to review.",
+          );
+          return;
+        }
+        askGitHub({
+          title: "Remote file is not a valid project",
+          message: `${target.path} changed on GitHub, but it cannot be read as a UMLer project. Overwriting replaces it with the local project.`,
+          detail: message,
+          options: [
+            {
+              label: "Overwrite remote",
+              tone: "primary",
+              run: () =>
+                commitSnapshotToGitHub(
+                  target,
+                  snapshot,
+                  remote.sha,
+                  digest,
+                  "Overwrite project from UMLer",
+                ),
+            },
+          ],
+        });
+        return;
+      }
+
+      const remoteDigest = projectDigest(
+        remoteProject.scenes,
+        remoteProject.activeSceneId,
+      );
+      if (remoteDigest === digest) {
+        setGithubBinding({
+          ...target,
+          sha: remote.sha,
+          syncedDigest: digest,
+          syncedAt: new Date().toISOString(),
+          htmlUrl: remote.htmlUrl,
+        });
+        setBaselineDigest(digest);
+        setGithubDecision(null);
+        setGithubDialogOpen(false);
+        showToast(
+          mode === "auto"
+            ? "Auto-synced with GitHub."
+            : "Project is already up to date.",
+        );
+        return;
+      }
+
+      if (mode === "auto") {
+        warnAutoConflict(
+          `GitHub conflict: ${target.path} changed remotely. Click to review.`,
+        );
+        return;
+      }
+
+      askGitHub({
+        title: "Remote project changed",
+        message: `${target.path} has changes on GitHub. Choose which copy to keep.`,
+        detail: githubTargetLabel(target),
+        options: [
+          {
+            label: "Replace local with remote",
+            tone: "danger",
+            run: () => applyRemoteProject(target, remote, remoteProject),
+          },
+          {
+            label: "Overwrite remote",
+            tone: "primary",
+            run: () =>
+              commitSnapshotToGitHub(
+                target,
+                snapshot,
+                remote.sha,
+                digest,
+                "Overwrite project from UMLer",
+              ),
+          },
+        ],
+      });
+    },
+    [applyRemoteProject, askGitHub, commitSnapshotToGitHub, showToast],
+  );
+
+  const openFromGitHub = useCallback(
+    async (target: GitHubTarget): Promise<void> => {
+      if (githubSession === null) {
+        throw new Error("Sign in to GitHub before opening a project.");
+      }
+      if (githubBusy !== null) {
+        throw new Error("Another GitHub operation is still running.");
+      }
+      setGithubBusy("open");
+      try {
+        const remote = await getProjectFile(githubSession.token, target);
+        const snapshot: ProjectSnapshot = {
+          scenes: currentScenes,
+          activeSceneId: scene.id,
+          assets: assetLibrary,
+        };
+        const localDirty = currentDigest !== baselineDigest;
+
+        if (remote === null) {
+          if (localDirty) {
+            askGitHub({
+              title: "Create a project on GitHub?",
+              message: `No project exists at ${target.path}. Creating one replaces the current local project.`,
+              detail: githubTargetLabel(target),
+              options: [
+                {
+                  label: "Create blank project",
+                  tone: "primary",
+                  run: () => createBlankRemoteProject(target),
+                },
+                {
+                  label: "Upload current project",
+                  run: () =>
+                    commitSnapshotToGitHub(
+                      target,
+                      snapshot,
+                      null,
+                      currentDigest,
+                      "Create project from UMLer",
+                    ),
+                },
+              ],
+            });
+            return;
+          }
+          await createBlankRemoteProject(target);
+          return;
+        }
+
+        const project = deserializeProjectFile(remote.text);
+        const remoteDigest = projectDigest(project.scenes, project.activeSceneId);
+
+        if (remoteDigest === currentDigest) {
+          setGithubBinding({
+            ...target,
+            sha: remote.sha,
+            syncedDigest: currentDigest,
+            syncedAt: new Date().toISOString(),
+            htmlUrl: remote.htmlUrl,
+          });
+          setBaselineDigest(currentDigest);
+          setGithubDecision(null);
+          setGithubDialogOpen(false);
+          showToast(`Opened ${target.owner}/${target.repo} · ${target.path}`);
+          return;
+        }
+
+        if (localDirty) {
+          askGitHub({
+            title: "Replace the local project?",
+            message: `The project at ${target.path} exists and your local project has unsaved changes. Choose which copy to keep.`,
+            detail: githubTargetLabel(target),
+            options: [
+              {
+                label: "Replace local with remote",
+                tone: "danger",
+                run: () => applyRemoteProject(target, remote, project),
+              },
+              {
+                label: "Overwrite remote",
+                tone: "primary",
+                run: () =>
+                  commitSnapshotToGitHub(
+                    target,
+                    snapshot,
+                    remote.sha,
+                    currentDigest,
+                    "Overwrite project from UMLer",
+                  ),
+              },
+            ],
+          });
+          return;
+        }
+
+        applyRemoteProject(target, remote, project);
+      } finally {
+        setGithubBusy(null);
+      }
+    },
+    [
+      applyRemoteProject,
+      askGitHub,
+      baselineDigest,
+      commitSnapshotToGitHub,
+      createBlankRemoteProject,
+      currentDigest,
+      currentScenes,
+      githubBusy,
+      githubSession,
+      assetLibrary,
+      scene.id,
+      showToast,
+    ],
+  );
+
+  const saveToGitHub = useCallback(
+    async (mode: GitHubSaveMode = "manual"): Promise<void> => {
+      if (githubBinding === null) {
+        if (mode === "manual") {
+          setGithubDialogOpen(true);
+          showToast("Open a GitHub project before saving.");
+        }
+        return;
+      }
+      if (githubSession === null) {
+        if (mode === "manual") {
+          setGithubDialogOpen(true);
+          showToast("Sign in to GitHub before saving.", "error");
+        }
+        return;
+      }
+      if (currentDigest === githubBinding.syncedDigest) {
+        if (mode === "manual") showToast("Project is already synced.");
+        return;
+      }
+      if (githubBusy !== null) return;
+
+      const target = targetOf(githubBinding);
+      const snapshot: ProjectSnapshot = {
+        scenes: currentScenes,
+        activeSceneId: scene.id,
+        assets: assetLibrary,
+      };
+      const digest = currentDigest;
+      showToast(
+        mode === "auto" ? "Auto-saving to GitHub…" : "Saving to GitHub…",
+        "progress",
+        { sticky: true },
+      );
+      setGithubBusy("save");
+      try {
+        const remote = await getProjectFile(githubSession.token, target);
+        if (remote === null) {
+          if (githubBinding.sha !== null) {
+            if (mode === "auto") {
+              showToast(
+                `GitHub conflict: ${target.path} was deleted remotely. Click to review.`,
+                "warning",
+                {
+                  sticky: true,
+                  action: { label: "Review", run: () => manualSaveRef.current() },
+                },
+              );
+            } else {
+              askGitHub({
+                title: "Remote project is missing",
+                message: `${target.path} no longer exists on GitHub. Recreate it with the current local project, or cancel.`,
+                detail: githubTargetLabel(target),
+                options: [
+                  {
+                    label: "Recreate remote",
+                    tone: "primary",
+                    run: () =>
+                      commitSnapshotToGitHub(
+                        target,
+                        snapshot,
+                        null,
+                        digest,
+                        "Recreate project from UMLer",
+                      ),
+                  },
+                ],
+              });
+            }
+            return;
+          }
+          await commitSnapshotToGitHub(
+            target,
+            snapshot,
+            null,
+            digest,
+            "Save project from UMLer",
+            mode,
+          );
+          return;
+        }
+
+        if (compareRemoteFile(githubBinding.sha, remote.sha) !== "unchanged") {
+          presentSaveConflict(target, remote, snapshot, digest, mode);
+          return;
+        }
+
+        await commitSnapshotToGitHub(
+          target,
+          snapshot,
+          remote.sha,
+          digest,
+          "Save project from UMLer",
+          mode,
+        );
+      } catch (error) {
+        if (isGitHubConflict(error)) {
+          try {
+            const latest = await getProjectFile(githubSession.token, target);
+            if (latest !== null) {
+              presentSaveConflict(target, latest, snapshot, digest, mode);
+              return;
+            }
+          } catch (refreshError) {
+            const message = describeGitHubError(refreshError);
+            if (mode === "auto") {
+              showToast(`Auto-save failed: ${message}`, "warning", {
+                sticky: true,
+                action: { label: "Retry", run: () => manualSaveRef.current() },
+              });
+            } else {
+              showToast(message, "error");
+            }
+            return;
+          }
+        }
+
+        const message = describeGitHubError(error);
+        if (mode === "auto") {
+          showToast(`Auto-save failed: ${message}`, "warning", {
+            sticky: true,
+            action: { label: "Retry", run: () => manualSaveRef.current() },
+          });
+        } else {
+          showToast(message, "error");
+        }
+      } finally {
+        setGithubBusy(null);
+      }
+    },
+    [
+      askGitHub,
+      commitSnapshotToGitHub,
+      currentDigest,
+      currentScenes,
+      githubBinding,
+      githubBusy,
+      githubSession,
+      presentSaveConflict,
+      assetLibrary,
+      scene.id,
+      showToast,
+    ],
+  );
+
+  manualSaveRef.current = () => {
+    void saveToGitHub("manual");
+  };
+  autoSaveRef.current = () => {
+    if (githubBinding === null || githubSession === null) return;
+    if (githubBusy !== null) return;
+    if (githubDecision !== null || githubDialogOpen) return;
+    if (sceneDialog !== null || pendingProjectImport !== null) return;
+    if (toast?.sticky === true) return;
+    if (currentDigest === githubBinding.syncedDigest) return;
+    void saveToGitHub("auto");
+  };
+
+  useEffect(() => {
+    if (githubBinding === null || githubSession === null) return;
+    const timer = window.setInterval(() => {
+      autoSaveRef.current();
+    }, 120_000);
+    return () => window.clearInterval(timer);
+  }, [githubBinding, githubSession]);
+
+  const chooseGitHubDecision = useCallback(
+    (option: GitHubDecisionOption) => {
+      setGithubDecision(null);
+      void Promise.resolve(option.run()).catch((error: unknown) => {
+        showToast(describeGitHubError(error), "error");
+      });
+    },
+    [showToast],
+  );
+
+  const handleGitHubSession = useCallback((next: GitHubSession | null) => {
+    setGithubSession(next);
+    storeGitHubSession(next);
+  }, []);
 
   const handleUndo = useCallback(() => {
     undo();
@@ -429,6 +1141,17 @@ export const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleRedo, handleUndo]);
 
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      void saveToGitHub();
+    };
+    window.addEventListener("keydown", handleSaveShortcut);
+    return () => window.removeEventListener("keydown", handleSaveShortcut);
+  }, [saveToGitHub]);
+
   const changeGridSize = useCallback((size: number) => {
     setScene((current) => ({
       ...current,
@@ -442,7 +1165,27 @@ export const App = () => {
   }, []);
 
   const handleNodePatch = useCallback((nodeId: string, patch: Partial<SceneNode>) => {
-    setScene((current) => patchNode(current, asNodeId(nodeId), patch));
+    setScene((current) => {
+      const node = current.nodes[nodeId];
+      if (node?.kind === "image" && Object.prototype.hasOwnProperty.call(patch, "caption")) {
+        const nextNode = {
+          ...node,
+          caption: (patch as { readonly caption?: string }).caption,
+        };
+        const delta =
+          imageCaptionBlockHeight(nextNode) - imageCaptionBlockHeight(node);
+        if (Math.abs(delta) > 0.001) {
+          return patchNode(current, asNodeId(nodeId), {
+            ...patch,
+            frame: {
+              ...node.frame,
+              height: Math.max(1, node.frame.height + delta),
+            },
+          });
+        }
+      }
+      return patchNode(current, asNodeId(nodeId), patch);
+    });
   }, []);
 
   const handleRowUpdate = useCallback((nodeId: string, rowId: string, patch: Partial<TableRow>) => {
@@ -475,9 +1218,9 @@ export const App = () => {
   }, []);
 
   const handleAddObject = useCallback(
-    (templateId: ObjectTemplateId, world: Point) => {
+    (templateId: ObjectTemplateId, world: Point): SceneNode | null => {
       const created = createObjectFromTemplate(scene.meta.diagramKind, templateId, scene, world);
-      if (created === null) return;
+      if (created === null) return null;
       const node = created.node;
       setScene((current) => insertObject(current, node, created.asset));
       setSelectedNodeId(node.id);
@@ -501,6 +1244,155 @@ export const App = () => {
         token: (current?.token ?? 0) + 1,
       }));
       setLayoutNote(`Added ${node.name}. Drag from a border handle to connect it.`);
+      return node;
+    },
+    [scene],
+  );
+
+  const handleDropImageFiles = useCallback(
+    async (files: readonly File[], world: Point): Promise<void> => {
+      const accepted = files.filter(isSupportedImageFile);
+      if (accepted.length === 0) {
+        showToast("Drop a PNG, JPG or SVG image.", "error");
+        return;
+      }
+
+      let workingScene = scene;
+      let assets: Record<string, ImageAsset> = { ...assetLibrary };
+      const placed: SceneNode[] = [];
+      const errors: string[] = [];
+
+      for (const [index, file] of accepted.entries()) {
+        try {
+          const asset = await createImageAssetFromFile(file, assets);
+          assets = { ...assets, [asset.id]: asset };
+          const created = createImageObject(
+            workingScene,
+            { x: world.x + index * 28, y: world.y + index * 28 },
+            asset,
+          );
+          workingScene = insertObject(workingScene, created.node, created.asset);
+          placed.push(created.node);
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `${file.name}: could not be added.`);
+        }
+      }
+
+      if (placed.length > 0) {
+        setAssetLibrary(assets);
+        setScene(workingScene);
+        const last = placed[placed.length - 1];
+        if (last !== undefined) {
+          setSelectedNodeId(last.id);
+          setSelectedEdgeId(null);
+          setSelectedActivation(null);
+          setNodeFocus(null);
+        }
+        setLayoutNote(
+          placed.length === 1 ? "Image added. Resize it from a corner; aspect stays locked." : `${placed.length} images added.`,
+        );
+        showToast(placed.length === 1 ? "Image added." : `${placed.length} images added.`);
+      }
+      if (errors.length > 0) {
+        showToast(errors[0] ?? "The image could not be added.", "error");
+      }
+    },
+    [assetLibrary, scene, showToast],
+  );
+
+  const handleAssignImageToNode = useCallback(
+    async (nodeId: string, file: File): Promise<void> => {
+      const asset = await createImageAssetFromFile(file, assetLibrary);
+      setAssetLibrary((current) => ({ ...current, [asset.id]: asset }));
+      setScene((current) => setNodeImage(current, asNodeId(nodeId), asset));
+      setLayoutNote(`Image set: ${asset.fileName}.`);
+    },
+    [assetLibrary],
+  );
+
+  const handleUseImageAsset = useCallback(
+    (nodeId: string, assetId: string) => {
+      const asset = assetLibrary[assetId];
+      if (asset === undefined) return;
+      setScene((current) => setNodeImage(current, asNodeId(nodeId), asset));
+      setLayoutNote(`Image set: ${asset.fileName}.`);
+    },
+    [assetLibrary],
+  );
+
+  const handleRemoveImageFromNode = useCallback((nodeId: string) => {
+    setScene((current) => setNodeImage(current, asNodeId(nodeId), undefined));
+    setLayoutNote("Image removed; empty image frame restored.");
+  }, []);
+
+  const handlePurgeUnusedImages = useCallback(() => {
+    if (unusedImageCount === 0) {
+      showToast("No unused images.");
+      return;
+    }
+    setAssetLibrary((current) =>
+      pruneUnusedProjectAssets(currentScenes, current),
+    );
+    const label = unusedImageCount === 1 ? "image" : "images";
+    setLayoutNote(`Purged ${unusedImageCount} unused ${label}.`);
+    showToast(`Purged ${unusedImageCount} unused ${label}.`);
+  }, [currentScenes, showToast, unusedImageCount]);
+
+  const handleConvertToRelationAttribute = useCallback(
+    (edgeId: string, world: Point, anchor: Point) => {
+      const parent = scene.edges[edgeId];
+      const centerLabel = parent?.labels.find((label) => label.zone === "center");
+      const labelText = centerLabel?.text.trim() ?? "";
+      if (labelText.length === 0) return;
+
+      const created = createObjectFromTemplate(
+        "er",
+        "relation-attribute",
+        scene,
+        world,
+      );
+      if (created === null || created.node.kind !== "relationAttribute") return;
+      const node: SceneNode = { ...created.node, name: labelText };
+      const center = {
+        x: node.frame.x + node.frame.width / 2,
+        y: node.frame.y + node.frame.height / 2,
+      };
+      const dx = anchor.x - center.x;
+      const dy = anchor.y - center.y;
+      const side: "north" | "east" | "south" | "west" =
+        Math.abs(dx) >= Math.abs(dy)
+          ? dx >= 0 ? "east" : "west"
+          : dy >= 0 ? "south" : "north";
+      const sceneWithNode: SceneDocument = {
+        ...scene,
+        nodes: { ...scene.nodes, [node.id]: node },
+      };
+      const tether = createEdgeForDiagram(
+        sceneWithNode,
+        { nodeId: node.id, port: { kind: "perimeter", side } },
+        { edgeId: asEdgeId(edgeId), t: 0.5 },
+      );
+      if (tether === null) return;
+
+      setScene(current =>
+        insertConnectedObject(
+          current,
+          node,
+          tether,
+          { edgeId: asEdgeId(edgeId), zone: "center" },
+          created.asset,
+        ),
+      );
+      setSelectedNodeId(node.id);
+      setSelectedEdgeId(null);
+      setSelectedActivation(null);
+      setNodeFocus({ kind: "table", nodeId: node.id });
+      setFocusRequest((current) => ({
+        nodeId: node.id,
+        target: { kind: "nodeName" },
+        token: (current?.token ?? 0) + 1,
+      }));
+      setLayoutNote(`Converted “${labelText}” to a relation attribute.`);
     },
     [scene],
   );
@@ -571,6 +1463,30 @@ export const App = () => {
 
       if (nodeFocus !== null) {
         const focusedNode = scene.nodes[nodeFocus.nodeId];
+        if (nodeFocus.kind === "table" && focusedNode !== undefined) {
+          event.preventDefault();
+          setScene((current) => {
+            const node = current.nodes[nodeFocus.nodeId];
+            if (node === undefined) return current;
+            return patchNode(
+              current,
+              asNodeId(nodeFocus.nodeId),
+              node.kind === "table"
+                ? {
+                    name: "",
+                    header: {
+                      ...node.header,
+                      stereotype: undefined,
+                      keywords: [],
+                    },
+                  }
+                : { name: "" },
+            );
+          });
+          setNodeFocus(null);
+          setLayoutNote("Table header cleared. Press Delete again to remove the object.");
+          return;
+        }
         if (nodeFocus.kind === "section" && focusedNode?.kind === "table") {
           event.preventDefault();
           setScene((current) =>
@@ -631,6 +1547,13 @@ export const App = () => {
     setScene((current) => setEndpointLabel(current, asEdgeId(edgeId), zone, text));
   }, []);
 
+  const handleSetEdgeLabelStyle = useCallback(
+    (edgeId: string, zone: EdgeLabelZone, style: TextStyleOverride | undefined) => {
+      setScene((current) => setEdgeLabelTextStyle(current, asEdgeId(edgeId), zone, style));
+    },
+    [],
+  );
+
   const handleSetMarker = useCallback((edgeId: string, end: EdgeEnd, marker: EndpointMarker) => {
     setScene((current) => setMarker(current, asEdgeId(edgeId), end, marker));
   }, []);
@@ -685,6 +1608,17 @@ export const App = () => {
   const handleLayoutDirection = useCallback((direction: "TB" | "LR") => {
     setScene((current) => patchLayout(current, { direction }));
     setLayoutNote(`Layout direction: ${direction}.`);
+  }, []);
+
+  const handleLayoutSpacing = useCallback((spacing: LayoutSpacing) => {
+    setScene((current) =>
+      patchLayout(current, { spacing, ...LAYOUT_SPACING_PRESETS[spacing] }),
+    );
+    setLayoutNote(`Layout spacing: ${spacing}.`);
+  }, []);
+
+  const handleThemeChange = useCallback((theme: Theme) => {
+    setScene((current) => setSceneTheme(current, theme));
   }, []);
 
   const runAutoLayout = useCallback(() => {
@@ -822,10 +1756,16 @@ export const App = () => {
         onImportScene={() => requestImport("scene")}
         onExportProject={handleExportProject}
         onImportProject={() => requestImport("project")}
+        onNewProject={() => setSceneDialog("new-project")}
         onNewScene={() => setSceneDialog("new")}
         onRenameScene={() => setSceneDialog("rename")}
         onDuplicateScene={duplicateScene}
         onDeleteScene={() => setSceneDialog("delete")}
+        onOpenFromGitHub={() => setGithubDialogOpen(true)}
+        onSaveToGitHub={() => void saveToGitHub()}
+        canSaveToGitHub={githubBinding !== null && githubBusy === null}
+        onPurgeUnusedImages={handlePurgeUnusedImages}
+        unusedImageCount={unusedImageCount}
         zoom={zoom}
         gridVisible={gridVisible}
         snapEnabled={snapEnabled}
@@ -841,17 +1781,43 @@ export const App = () => {
       <main className={`workspace ${panelVisible ? "" : "panel-hidden"}`}>
         {panelVisible ? (
           <section className="scene-rail">
+            <button
+              type="button"
+              className="panel-add-button"
+              onClick={() => canvasStageRef.current?.openAddObjectMenu()}
+              title="Add an object to this diagram"
+              aria-haspopup="menu"
+            >
+              <svg
+                className="add-glyph"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6 1.4v9.2M1.4 6h9.2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Add object
+            </button>
+            <ThemePanel theme={scene.theme} onChange={handleThemeChange} />
             <LayoutPanel
               direction={scene.layout.direction}
+              spacing={scene.layout.spacing ?? "normal"}
               engine={scene.layout.engine}
               note={layoutNote}
               onDirectionChange={handleLayoutDirection}
+              onSpacingChange={handleLayoutSpacing}
               onRun={runAutoLayout}
             />
           </section>
         ) : null}
 
         <CanvasStage
+          ref={canvasStageRef}
           scene={effectiveScene}
           layout={layout}
           camera={camera}
@@ -860,6 +1826,14 @@ export const App = () => {
           gridSize={scene.canvas.grid.size}
           majorEvery={scene.canvas.grid.majorEvery}
           snapEnabled={snapEnabled}
+          showCompactAddButton={!panelVisible}
+          imageAssets={assetLibrary}
+          onDropImageFiles={(files, world) => {
+            void handleDropImageFiles(files, world);
+          }}
+          onAssignImageToNode={handleAssignImageToNode}
+          onUseImageAsset={handleUseImageAsset}
+          onRemoveImageFromNode={handleRemoveImageFromNode}
           selectedNodeId={selectedNodeId}
           selectedEdgeId={selectedEdgeId}
           selectedActivation={selectedActivation}
@@ -869,6 +1843,8 @@ export const App = () => {
           onSelectActivation={selectActivation}
           onSetMarker={handleSetMarker}
           onSetEdgeLabel={handleSetEdgeLabel}
+          onSetEdgeLabelStyle={handleSetEdgeLabelStyle}
+          onConvertToRelationAttribute={handleConvertToRelationAttribute}
           onSetStrokePattern={handleSetStrokePattern}
           onSetStrokeWidth={handleSetStrokeWidth}
           onSetRoutingMode={handleSetRoutingMode}
@@ -907,6 +1883,32 @@ export const App = () => {
         <span>
           revision {scene.revision} · {Object.keys(scene.nodes).length} nodes · {Object.keys(scene.edges).length} edges
         </span>
+        <span className="status-project">
+          {githubBinding === null ? (
+            <>
+              <span className={`status-dot ${projectDirty ? "dirty" : ""}`} />
+              Local project{projectDirty ? " · modified" : ""}
+            </>
+          ) : (
+            <>
+              <span className={`status-dot ${githubDirty ? "dirty" : ""}`} />
+              <span
+                className="status-path"
+                title={githubTargetLabel(githubBinding)}
+              >
+                {githubBinding.owner}/{githubBinding.repo} · {githubBinding.path}
+              </span>
+              <button
+                type="button"
+                className="status-save"
+                onClick={() => void saveToGitHub()}
+                disabled={!githubDirty || githubBusy !== null}
+              >
+                {githubBusy === "save" ? "Saving…" : githubDirty ? "Save" : "Synced"}
+              </button>
+            </>
+          )}
+        </span>
         <span className="status-spacer" />
       </footer>
 
@@ -915,7 +1917,9 @@ export const App = () => {
           mode={sceneDialog}
           sceneTitle={scene.meta.title}
           initialName={
-            sceneDialog === "new" ? "Untitled diagram" : scene.meta.title
+            sceneDialog === "new" || sceneDialog === "new-project"
+              ? "Untitled diagram"
+              : scene.meta.title
           }
           initialKind={scene.meta.diagramKind}
           onClose={() => setSceneDialog(null)}
@@ -930,6 +1934,24 @@ export const App = () => {
           importedSceneCount={pendingProjectImport.project.scenes.length}
           onCancel={() => setPendingProjectImport(null)}
           onConfirm={confirmProjectImport}
+        />
+      ) : null}
+
+      {githubDialogOpen ? (
+        <GitHubProjectDialog
+          session={githubSession}
+          initialTarget={githubBinding === null ? null : targetOf(githubBinding)}
+          onSession={handleGitHubSession}
+          onOpen={openFromGitHub}
+          onClose={() => setGithubDialogOpen(false)}
+        />
+      ) : null}
+
+      {githubDecision !== null ? (
+        <GitHubDecisionDialog
+          decision={githubDecision}
+          onDismiss={() => setGithubDecision(null)}
+          onChoose={chooseGitHubDecision}
         />
       ) : null}
 
@@ -948,7 +1970,25 @@ export const App = () => {
       />
 
       {toast !== null ? (
-        <div className={`app-toast ${toast.tone}`}>{toast.message}</div>
+        <div
+          className={`app-toast ${toast.tone}${toast.action ? " actionable" : ""}`}
+          role={toast.tone === "error" || toast.tone === "warning" ? "alert" : "status"}
+          tabIndex={toast.action ? 0 : undefined}
+          onClick={toast.action ? () => toast.action?.run() : undefined}
+          onKeyDown={
+            toast.action
+              ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toast.action?.run();
+                  }
+                }
+              : undefined
+          }
+        >
+          <span>{toast.message}</span>
+          {toast.action ? <span className="toast-action">{toast.action.label}</span> : null}
+        </div>
       ) : null}
     </div>
   );

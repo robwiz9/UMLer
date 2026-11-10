@@ -342,7 +342,7 @@ const imageNode: ImageNode = {
   caption: "Figure 1 — imported reference",
   fit: "contain",
   alt: "Placeholder brand image",
-  showBorder: true,
+  showBorder: false,
   style: DEFAULT_THEME.shape,
 };
 

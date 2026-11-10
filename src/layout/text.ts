@@ -29,7 +29,15 @@ export class CanvasTextMeasurer implements TextMeasurer {
 
   measure(text: string, style: TextStyle, maxWidth?: number): TextMeasurement {
     const font = cssFont(style);
-    const key = `${font}\u0000${maxWidth ?? ""}\u0000${text}`;
+    const key = [
+      font,
+      style.color,
+      style.underline === true ? "underline" : "",
+      style.align ?? "",
+      style.lineHeight ?? "",
+      maxWidth ?? "",
+      text,
+    ].join("\u0000");
     const cached = this.cache.get(key);
     if (cached !== undefined) return cached;
 

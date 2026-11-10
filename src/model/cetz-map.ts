@@ -9,6 +9,10 @@
  * CeTZ 0.5.3 (the version in `cetz.pdf`) is the target. Note that `ortho` is an
  * orthographic *projection*, not orthogonal edge routing. Orthogonal routes are
  * computed in TypeScript and emitted as a polyline to `line`.
+ *
+ * Editor-only overlays are not part of this mapping. In particular the lock
+ * badge rendered for `locked` objects exists only in the browser canvas and must
+ * never be emitted into the Typst/CeTZ result.
  */
 
 export const CETZ_VERSION = "0.5.3";

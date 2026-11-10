@@ -1,18 +1,26 @@
-import type { LayoutDirection, LayoutEngine } from "../model/scene.ts";
+import type {
+  LayoutDirection,
+  LayoutEngine,
+  LayoutSpacing,
+} from "../model/scene.ts";
 
 interface LayoutPanelProps {
   readonly direction: LayoutDirection;
+  readonly spacing: LayoutSpacing;
   readonly engine: LayoutEngine;
   readonly note: string | null;
   readonly onDirectionChange: (direction: LayoutDirection) => void;
+  readonly onSpacingChange: (spacing: LayoutSpacing) => void;
   readonly onRun: () => void;
 }
 
 export const LayoutPanel = ({
   direction,
+  spacing,
   engine,
   note,
   onDirectionChange,
+  onSpacingChange,
   onRun,
 }: LayoutPanelProps) => (
   <section className="panel layout-panel">
@@ -35,6 +43,19 @@ export const LayoutPanel = ({
       >
         Left → right
       </button>
+    </div>
+    <div className="layout-spacing-label">Spacing</div>
+    <div className="layout-direction layout-spacing" role="group" aria-label="Layout spacing">
+      {(["tight", "normal", "wide"] as const).map((value) => (
+        <button
+          key={value}
+          type="button"
+          className={`chip ${spacing === value ? "on" : ""}`}
+          onClick={() => onSpacingChange(value)}
+        >
+          {value === "tight" ? "Tight" : value === "normal" ? "Normal" : "Wide"}
+        </button>
+      ))}
     </div>
     <button type="button" className="primary-action" onClick={onRun}>
       Run crossing-reduction layout

@@ -3,7 +3,8 @@ import type { EdgeLayout } from "../model/layout.ts";
 import type { EdgeLabelZone, EdgeRoutingMode, SceneEdge } from "../model/edges.ts";
 import { edgeDisplayName } from "../model/edges.ts";
 import { CARDINALITY_CHIPS, markerDefinition } from "../model/markers.ts";
-import type { StrokePattern } from "../model/styles.ts";
+import type { StrokePattern, TextStyle, TextStyleOverride } from "../model/styles.ts";
+import { TextStyleControls } from "./TextStyleControls.tsx";
 
 interface EdgeInspectorProps {
   readonly edge: SceneEdge;
@@ -11,7 +12,10 @@ interface EdgeInspectorProps {
   readonly compact?: boolean;
   readonly idPrefix?: string;
   readonly focusToken?: number;
+  readonly labelTextStyle: TextStyle;
   readonly onSetLabel: (zone: EdgeLabelZone, text: string) => void;
+  readonly onSetLabelStyle: (zone: EdgeLabelZone, style: TextStyleOverride | undefined) => void;
+  readonly onConvertCenterLabel?: () => void;
   readonly onSetStrokePattern: (pattern: StrokePattern) => void;
   readonly onSetStrokeWidth: (width: number) => void;
   readonly onSetRoutingMode: (mode: EdgeRoutingMode) => void;
@@ -53,7 +57,10 @@ export const EdgeInspector = ({
   compact = false,
   idPrefix = "inspector",
   focusToken = 0,
+  labelTextStyle,
   onSetLabel,
+  onSetLabelStyle,
+  onConvertCenterLabel,
   onSetStrokePattern,
   onSetStrokeWidth,
   onSetRoutingMode,
@@ -73,20 +80,44 @@ export const EdgeInspector = ({
   }, [focusToken]);
   const labelFor = (zone: EdgeLabelZone): string =>
     edge.labels.find((label) => label.zone === zone)?.text ?? "";
-  const isSequence = edge.semantic.family === "sequence";
+  const labelStyleFor = (zone: EdgeLabelZone): TextStyleOverride | undefined =>
+    edge.labels.find((label) => label.zone === zone)?.textStyle;
   const centerField = (
-    <label className="field-label">
-      Center label
-      <input
-        ref={centerRef}
-        id={`${idPrefix}-edge-${edge.id}-center-label`}
-        name={`${idPrefix}-edge-${edge.id}-center-label`}
-        value={labelFor("center")}
-        placeholder="relationship name"
-        onChange={(event) => onSetLabel("center", event.target.value)}
-      />
-    </label>
+    <>
+      <div className="center-label-row">
+        <label className="field-label">
+          Center label
+          <input
+            ref={centerRef}
+            id={`${idPrefix}-edge-${edge.id}-center-label`}
+            name={`${idPrefix}-edge-${edge.id}-center-label`}
+            value={labelFor("center")}
+            placeholder="relationship name"
+            onChange={(event) => onSetLabel("center", event.target.value)}
+          />
+        </label>
+        {onConvertCenterLabel !== undefined && labelFor("center").trim().length > 0 ? (
+          <button
+            type="button"
+            className="square-action"
+            onClick={onConvertCenterLabel}
+            title="Convert center label to relation attribute"
+            aria-label="Convert center label to relation attribute"
+          >
+            ▦
+          </button>
+        ) : null}
+      </div>
+      {labelFor("center").length > 0 ? (
+        <TextStyleControls
+          base={labelTextStyle}
+          value={labelStyleFor("center")}
+          onChange={(style) => onSetLabelStyle("center", style)}
+        />
+      ) : null}
+    </>
   );
+  const isSequence = edge.semantic.family === "sequence";
   const lineControls = (
     <>
       <div className="line-style-row">
@@ -151,7 +182,6 @@ export const EdgeInspector = ({
   if (compact) {
     return (
       <div className="edge-inspector">
-        <div className="edge-menu-title">Line options</div>
         {centerField}
         {lineControls}
       </div>
@@ -205,6 +235,13 @@ export const EdgeInspector = ({
               ))}
             </div>
           )}
+          {labelFor(zone).length > 0 ? (
+            <TextStyleControls
+              base={labelTextStyle}
+              value={labelStyleFor(zone)}
+              onChange={(style) => onSetLabelStyle(zone, style)}
+            />
+          ) : null}
         </div>
       ))}
 

@@ -8,7 +8,7 @@
 
 import type { NodeId, RowId, SectionId, AssetId, ActivationId } from "./ids.ts";
 import type { Rect } from "./geometry.ts";
-import type { ShapeNodeStyle, TableNodeStyle } from "./styles.ts";
+import type { Color, ShapeNodeStyle, TableNodeStyle, TextStyleOverride } from "./styles.ts";
 
 export type Visibility = "+" | "-" | "#" | "~";
 export type ErConstraint = "PK" | "FK" | "NN" | "UQ";
@@ -29,6 +29,7 @@ export interface TableRow {
   readonly visibility?: Visibility;
   /** Custom literal prefix; takes precedence over `visibility`. */
   readonly prefix?: string;
+  readonly textStyle?: TextStyleOverride;
   readonly name: string;
   readonly type?: string;
   /** Operation parameters; ignored for attributes. */
@@ -45,6 +46,9 @@ export interface TableSection {
   readonly id: SectionId;
   readonly role: SectionRole;
   readonly title?: string;
+  readonly textStyle?: TextStyleOverride;
+  /** `undefined` inherits the table body; `null` is transparent. */
+  readonly backgroundColor?: Color | null;
   readonly rows: readonly TableRow[];
   readonly collapsed?: boolean;
 }
@@ -54,6 +58,9 @@ export interface TableHeader {
   readonly keywords?: readonly string[];
   readonly abstract?: boolean;
   readonly isInterface?: boolean;
+  readonly textStyle?: TextStyleOverride;
+  /** `undefined` inherits the theme tint; `null` is transparent. */
+  readonly backgroundColor?: Color | null;
 }
 
 export interface NodeBase {
@@ -70,6 +77,10 @@ export interface NodeBase {
    */
   readonly locked: boolean;
   readonly visible: boolean;
+  /** Object-level text override (name, caption, comment body, lifeline head). */
+  readonly textStyle?: TextStyleOverride;
+  /** Object-level fill override; used by comments. `null` is transparent. */
+  readonly backgroundColor?: Color | null;
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
@@ -200,7 +211,8 @@ export type ImageFit = "contain" | "cover" | "fill";
 
 export interface ImageNode extends NodeBase {
   readonly kind: "image";
-  readonly assetId: AssetId;
+  /** Empty image frames are valid until a file or existing asset is assigned. */
+  readonly assetId?: AssetId;
   readonly caption?: string;
   readonly fit: ImageFit;
   readonly alt: string;
@@ -287,9 +299,11 @@ export interface ImageAsset {
   readonly intrinsicHeight: number;
   readonly checksum: string;
   /**
-   * The document stores a reference, never a blob. The editor resolves the
-   * checksum against IndexedDB; the exporter materialises it in Typst's VFS.
+   * Scene asset records are references; project-level records carry the bytes
+   * as a data URL so they are stored once and can be referenced by several
+   * image nodes or scenes. The exporter materialises the bytes in Typst's VFS.
    */
   readonly storage: "indexeddb" | "data-url" | "project-file";
+  readonly dataUrl?: string;
   readonly exportPath?: string;
 }

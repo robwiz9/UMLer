@@ -7,4 +7,6 @@ dist/
 .tmp*
 cetz_dump.txt
 *.log
+.env.local
+.env.*.local
 .DS_Store

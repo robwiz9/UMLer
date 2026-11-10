@@ -19,7 +19,7 @@ import type { SceneNode } from "../model/nodes.ts";
 import type { SceneDocument } from "../model/scene.ts";
 import type { EdgeAttachment } from "../model/edges.ts";
 import type { Rect } from "../model/geometry.ts";
-import { rectBottom, rectRight, snap } from "../model/geometry.ts";
+import { rect, rectBottom, rectRight, snap } from "../model/geometry.ts";
 import { isSystemBoundary, useCaseContainers } from "../model/containment.ts";
 
 export interface AutoLayoutResult {
@@ -93,6 +93,44 @@ export const autoLayoutFrames = (
 
   const containers = useCaseContainers(scene);
   const childIds = new Set(containers.keys());
+  const nodeNodeIds = new Set<string>();
+  for (const edge of Object.values(scene.edges)) {
+    if (edge.source.target !== "node" || edge.target.target !== "node") continue;
+    nodeNodeIds.add(edge.source.nodeId as string);
+    nodeNodeIds.add(edge.target.nodeId as string);
+  }
+
+  /**
+   * Relation-attribute tethers point at the relationship edge, not at another
+   * node, so the layered graph used to ignore them and left the tables in rank
+   * zero where their dashed tethers could cross the real graph. Track those
+   * tables separately and place them around the relationship after the main
+   * graph has coordinates.
+   */
+  const tetherByNode = new Map<
+    string,
+    { readonly parentEdgeId: string; readonly tetherEdgeId: string }
+  >();
+  for (const edge of Object.values(scene.edges)) {
+    if (edge.source.target === "node" && edge.target.target === "edge") {
+      const node = scene.nodes[edge.source.nodeId];
+      if (node?.kind === "relationAttribute" && !nodeNodeIds.has(edge.source.nodeId)) {
+        tetherByNode.set(edge.source.nodeId, {
+          parentEdgeId: edge.target.edgeId,
+          tetherEdgeId: edge.id,
+        });
+      }
+    }
+    if (edge.target.target === "node" && edge.source.target === "edge") {
+      const node = scene.nodes[edge.target.nodeId];
+      if (node?.kind === "relationAttribute" && !nodeNodeIds.has(edge.target.nodeId)) {
+        tetherByNode.set(edge.target.nodeId, {
+          parentEdgeId: edge.source.edgeId,
+          tetherEdgeId: edge.id,
+        });
+      }
+    }
+  }
   const unhandledFrames = Object.values(scene.nodes).filter(
     (node) => node.kind === "frame" && !isSystemBoundary(node),
   );
@@ -105,7 +143,8 @@ export const autoLayoutFrames = (
 
   const nodes = Object.values(scene.nodes)
     .filter(layoutable)
-    .filter((node) => !childIds.has(node.id));
+    .filter((node) => !childIds.has(node.id))
+    .filter((node) => !tetherByNode.has(node.id));
   const byId = new Map(nodes.map((node) => [node.id as string, node]));
   if (nodes.length === 0) return { ...EMPTY, skipped: "No layoutable nodes." };
 
@@ -249,8 +288,8 @@ export const autoLayoutFrames = (
   const originX = Math.min(...allFrames.map((frame) => frame.x));
   const originY = Math.min(...allFrames.map((frame) => frame.y));
 
-  const lockedRects: Rect[] = nodes
-    .filter((node) => node.locked)
+  const lockedRects: Rect[] = Object.values(scene.nodes)
+    .filter((node) => node.locked && layoutable(node) && !childIds.has(node.id))
     .map((node) => layout.nodes[node.id]?.frame ?? node.frame);
   const occupied: Rect[] = [...lockedRects];
   const frames: Record<string, Rect> = {};
@@ -265,6 +304,48 @@ export const autoLayoutFrames = (
     }
     occupied.push(next);
     return next;
+  };
+
+  /**
+   * Relation-attribute tables must stay on their requested side of the parent
+   * relationship. Move them along the relationship axis first, then farther
+   * away from the line; never jump across it the way the generic placement
+   * cascade can.
+   */
+  const placeTetheredClear = (
+    candidate: Rect,
+    horizontal: boolean,
+    side: "above" | "below" | "left" | "right",
+    nodeId: string,
+  ): Rect => {
+    const node = scene.nodes[nodeId];
+    if (node === undefined) return placeClear(candidate);
+    const alongStep = (horizontal ? node.frame.width : node.frame.height) + gap;
+    const awayStep = (horizontal ? node.frame.height : node.frame.width) + gap;
+    const awaySign = side === "below" || side === "right" ? 1 : -1;
+    const alongOffsets = [0, 1, -1, 2, -2, 3, -3, 4, -4];
+    for (let awayIndex = 0; awayIndex < 5; awayIndex += 1) {
+      for (const alongIndex of alongOffsets) {
+        const along = alongIndex * alongStep;
+        const away = awaySign * awayIndex * awayStep;
+        const next = horizontal
+          ? {
+              ...candidate,
+              x: snap(candidate.x + along, grid),
+              y: snap(candidate.y + away, grid),
+            }
+          : {
+              ...candidate,
+              x: snap(candidate.x + away, grid),
+              y: snap(candidate.y + along, grid),
+            };
+        if (!occupied.some((rect) => intersects(next, rect))) {
+          occupied.push(next);
+          return next;
+        }
+      }
+    }
+    return placeClear(candidate);
   };
 
   if (direction === "TB") {
@@ -349,12 +430,118 @@ export const autoLayoutFrames = (
     x: frame.x + frame.width / 2,
     y: frame.y + frame.height / 2,
   });
+
+  // Relation-attribute tables orbit their parent relationship instead of being
+  // ranked as disconnected nodes. The first table keeps its current side; any
+  // additional tables alternate above/below (or left/right for vertical lines)
+  // so their tethers do not pile up on one side of the edge.
+  const tetheredByParent = new Map<string, string[]>();
+  for (const [nodeId, tether] of tetherByNode) {
+    if (scene.nodes[nodeId]?.locked) continue;
+    const list = tetheredByParent.get(tether.parentEdgeId) ?? [];
+    list.push(nodeId);
+    tetheredByParent.set(tether.parentEdgeId, list);
+  }
+  const tetherTValues = new Map<string, number>();
+  for (const [parentEdgeId, nodeIds] of tetheredByParent) {
+    const parent = scene.edges[parentEdgeId];
+    if (
+      parent === undefined ||
+      parent.source.target !== "node" ||
+      parent.target.target !== "node"
+    ) {
+      continue;
+    }
+    const sourceFrame = frameFor(parent.source.nodeId);
+    const targetFrame = frameFor(parent.target.nodeId);
+    if (sourceFrame === undefined || targetFrame === undefined) continue;
+    const sourceCenter = centerOf(sourceFrame);
+    const targetCenter = centerOf(targetFrame);
+    const parentCenter = {
+      x: (sourceCenter.x + targetCenter.x) / 2,
+      y: (sourceCenter.y + targetCenter.y) / 2,
+    };
+    const horizontal = Math.abs(targetCenter.x - sourceCenter.x) >=
+      Math.abs(targetCenter.y - sourceCenter.y);
+    const ordered = [...nodeIds].sort((a, b) => {
+      const aFrame = layout.nodes[a]?.frame ?? scene.nodes[a]?.frame;
+      const bFrame = layout.nodes[b]?.frame ?? scene.nodes[b]?.frame;
+      if (aFrame === undefined || bFrame === undefined) return a.localeCompare(b);
+      const aCenter = centerOf(aFrame);
+      const bCenter = centerOf(bFrame);
+      return horizontal
+        ? aCenter.x - bCenter.x || a.localeCompare(b)
+        : aCenter.y - bCenter.y || a.localeCompare(b);
+    });
+    const first = ordered[0];
+    const firstFrame = first === undefined
+      ? undefined
+      : layout.nodes[first]?.frame ?? scene.nodes[first]?.frame;
+    if (firstFrame === undefined) continue;
+    const firstCenter = centerOf(firstFrame);
+    const firstSide = horizontal
+      ? firstCenter.y >= parentCenter.y ? "below" : "above"
+      : firstCenter.x >= parentCenter.x ? "right" : "left";
+
+    ordered.forEach((nodeId, index) => {
+      const node = scene.nodes[nodeId];
+      if (node === undefined || node.locked) return;
+      const tether = tetherByNode.get(nodeId);
+      if (tether !== undefined) {
+        tetherTValues.set(tether.tetherEdgeId, (index + 1) / (ordered.length + 1));
+      }
+      const sameAxis = index % 2 === 0;
+      const side = sameAxis
+        ? firstSide
+        : horizontal
+          ? firstSide === "below" ? "above" : "below"
+          : firstSide === "right" ? "left" : "right";
+      const slot = Math.floor(index / 2);
+      const step = horizontal
+        ? node.frame.width + gap
+        : node.frame.height + gap;
+      const slotOffset = slot === 0
+        ? 0
+        : (slot % 2 === 1 ? 1 : -1) * Math.ceil(slot / 2) * step;
+      const away = (horizontal ? node.frame.height / 2 : node.frame.width / 2) + rankGap;
+      const center = horizontal
+        ? {
+            x: parentCenter.x + slotOffset,
+            y: parentCenter.y + (side === "below" ? away : -away),
+          }
+        : {
+            x: parentCenter.x + (side === "right" ? away : -away),
+            y: parentCenter.y + slotOffset,
+          };
+      const candidate = rect(
+        snap(center.x - node.frame.width / 2, grid),
+        snap(center.y - node.frame.height / 2, grid),
+        node.frame.width,
+        node.frame.height,
+      );
+      frames[nodeId] = placeTetheredClear(candidate, horizontal, side, nodeId);
+      moved += 1;
+    });
+  }
+
   const ellipseAngle = (usecaseFrame: Rect, otherCenter: { x: number; y: number }): number => {
     const center = centerOf(usecaseFrame);
     const rx = Math.max(1, usecaseFrame.width / 2);
     const ry = Math.max(1, usecaseFrame.height / 2);
     const theta = Math.atan2((otherCenter.y - center.y) / ry, (otherCenter.x - center.x) / rx);
     return ((theta * 180) / Math.PI + 360) % 360;
+  };
+  const facingSide = (
+    from: Rect,
+    to: Rect,
+  ): "north" | "east" | "south" | "west" => {
+    const fromCenter = centerOf(from);
+    const toCenter = centerOf(to);
+    const dx = toCenter.x - fromCenter.x;
+    const dy = toCenter.y - fromCenter.y;
+    return Math.abs(dx) >= Math.abs(dy)
+      ? dx >= 0 ? "east" : "west"
+      : dy >= 0 ? "south" : "north";
   };
 
   const edgeAttachments: Record<
@@ -380,6 +567,12 @@ export const autoLayoutFrames = (
           auto: true,
         },
       };
+    } else if (edge.source.port.kind === "perimeter") {
+      patch.source = {
+        target: "node",
+        nodeId: edge.source.nodeId,
+        port: { kind: "perimeter", side: facingSide(sourceFrame, targetFrame) },
+      };
     }
     if (targetNode?.kind === "useCase") {
       patch.target = {
@@ -391,10 +584,65 @@ export const autoLayoutFrames = (
           auto: true,
         },
       };
+    } else if (edge.target.port.kind === "perimeter") {
+      patch.target = {
+        target: "node",
+        nodeId: edge.target.nodeId,
+        port: { kind: "perimeter", side: facingSide(targetFrame, sourceFrame) },
+      };
     }
     if (patch.source !== undefined || patch.target !== undefined) {
       edgeAttachments[edge.id] = patch;
     }
+  }
+
+  for (const [nodeId, tether] of tetherByNode) {
+    const tetherEdge = scene.edges[tether.tetherEdgeId];
+    const node = scene.nodes[nodeId];
+    const parent = scene.edges[tether.parentEdgeId];
+    const nodeFrame = frameFor(nodeId);
+    if (
+      tetherEdge === undefined ||
+      node === undefined ||
+      nodeFrame === undefined ||
+      parent === undefined ||
+      parent.source.target !== "node" ||
+      parent.target.target !== "node"
+    ) {
+      continue;
+    }
+    const sourceFrame = frameFor(parent.source.nodeId);
+    const targetFrame = frameFor(parent.target.nodeId);
+    if (sourceFrame === undefined || targetFrame === undefined) continue;
+    const nodeCenter = centerOf(nodeFrame);
+    const parentCenter = {
+      x: (centerOf(sourceFrame).x + centerOf(targetFrame).x) / 2,
+      y: (centerOf(sourceFrame).y + centerOf(targetFrame).y) / 2,
+    };
+    const dx = nodeCenter.x - parentCenter.x;
+    const dy = nodeCenter.y - parentCenter.y;
+    const side: "north" | "east" | "south" | "west" =
+      Math.abs(dx) >= Math.abs(dy)
+        ? dx >= 0 ? "east" : "west"
+        : dy >= 0 ? "south" : "north";
+    const t = tetherTValues.get(tether.tetherEdgeId) ??
+      (tetherEdge.target.target === "edge" ? tetherEdge.target.t : 0.5);
+    edgeAttachments[tether.tetherEdgeId] = {
+      source: {
+        target: "node",
+        nodeId: node.id,
+        port: { kind: "perimeter", side },
+      },
+      ...(tetherEdge.target.target === "edge"
+        ? {
+            target: {
+              target: "edge" as const,
+              edgeId: tetherEdge.target.edgeId,
+              t,
+            },
+          }
+        : {}),
+    };
   }
 
   return {

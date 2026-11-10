@@ -18,10 +18,16 @@ interface ToolbarProps {
   readonly onImportScene: () => void;
   readonly onExportProject: () => void;
   readonly onImportProject: () => void;
+  readonly onNewProject: () => void;
   readonly onNewScene: () => void;
   readonly onRenameScene: () => void;
   readonly onDuplicateScene: () => void;
   readonly onDeleteScene: () => void;
+  readonly onOpenFromGitHub: () => void;
+  readonly onSaveToGitHub: () => void;
+  readonly canSaveToGitHub: boolean;
+  readonly onPurgeUnusedImages: () => void;
+  readonly unusedImageCount: number;
   readonly zoom: number;
   readonly gridVisible: boolean;
   readonly snapEnabled: boolean;
@@ -50,10 +56,16 @@ export const Toolbar = ({
   onImportScene,
   onExportProject,
   onImportProject,
+  onNewProject,
   onNewScene,
   onRenameScene,
   onDuplicateScene,
   onDeleteScene,
+  onOpenFromGitHub,
+  onSaveToGitHub,
+  canSaveToGitHub,
+  onPurgeUnusedImages,
+  unusedImageCount,
   zoom,
   gridVisible,
   snapEnabled,
@@ -76,14 +88,20 @@ export const Toolbar = ({
 
     <AppMenuBar
       canDeleteScene={canDeleteScene}
+      canSaveToGitHub={canSaveToGitHub}
       onExportScene={onExportScene}
       onImportScene={onImportScene}
       onExportProject={onExportProject}
       onImportProject={onImportProject}
+      onNewProject={onNewProject}
       onNewScene={onNewScene}
       onRenameScene={onRenameScene}
       onDuplicateScene={onDuplicateScene}
       onDeleteScene={onDeleteScene}
+      onOpenFromGitHub={onOpenFromGitHub}
+      onSaveToGitHub={onSaveToGitHub}
+      onPurgeUnusedImages={onPurgeUnusedImages}
+      unusedImageCount={unusedImageCount}
     />
 
     <div className="topbar-group scene-picker">

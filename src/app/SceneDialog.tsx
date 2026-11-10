@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DiagramKind } from "../model/scene.ts";
 import { DIAGRAM_KIND_LABELS } from "../model/scene.ts";
 
-export type SceneDialogMode = "new" | "rename" | "delete";
+export type SceneDialogMode = "new" | "new-project" | "rename" | "delete";
 export type SceneStartMode = "template" | "empty";
 
 interface SceneDialogProps {
@@ -118,7 +118,9 @@ export const SceneDialog = ({
   onSubmit,
 }: SceneDialogProps) => {
   const [name, setName] = useState(
-    mode === "new" ? defaultSceneName(initialKind) : initialName,
+    mode === "new" || mode === "new-project"
+      ? defaultSceneName(initialKind)
+      : initialName,
   );
   const [nameEdited, setNameEdited] = useState(false);
   const [diagramKind, setDiagramKind] = useState<DiagramKind>(initialKind);
@@ -143,9 +145,21 @@ export const SceneDialog = ({
   }, [onClose]);
 
   const heading =
-    mode === "new" ? "New scene" : mode === "rename" ? "Rename scene" : "Delete scene";
+    mode === "new"
+      ? "New scene"
+      : mode === "new-project"
+        ? "New project"
+        : mode === "rename"
+          ? "Rename scene"
+          : "Delete scene";
   const actionLabel =
-    mode === "new" ? "Create scene" : mode === "rename" ? "Rename" : "Delete scene";
+    mode === "new"
+      ? "Create scene"
+      : mode === "new-project"
+        ? "Create project"
+        : mode === "rename"
+          ? "Rename"
+          : "Delete scene";
 
   const chooseKind = (kind: DiagramKind): void => {
     setDiagramKind(kind);
@@ -160,7 +174,7 @@ export const SceneDialog = ({
       }}
     >
       <div
-        className={`dialog ${mode === "new" ? "scene-create-dialog" : ""}`}
+        className={`dialog ${mode === "new" || mode === "new-project" ? "scene-create-dialog" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="scene-dialog-title"
@@ -185,7 +199,13 @@ export const SceneDialog = ({
               onSubmit(trimmed, diagramKind, startMode);
             }}
           >
-            {mode === "new" ? (
+            {mode === "new-project" ? (
+              <p className="dialog-warning">
+                This starts a new project and replaces the scenes currently open.
+              </p>
+            ) : null}
+
+            {mode === "new" || mode === "new-project" ? (
               <>
                 <div className="dialog-section-label">Diagram type</div>
                 <div className="diagram-type-grid" role="group" aria-label="Diagram type">
@@ -227,7 +247,7 @@ export const SceneDialog = ({
             ) : null}
 
             <label className="field-label">
-              Scene name
+              {mode === "new-project" ? "Starting scene name" : "Scene name"}
               <input
                 ref={inputRef}
                 id="scene-dialog-name"

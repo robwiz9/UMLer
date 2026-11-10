@@ -7,6 +7,7 @@
 
 import type { SceneDocument } from "./scene.ts";
 import { withNodeFrames } from "../layout/build-layout.ts";
+import { imageFrameHeightForWidth } from "./image-geometry.ts";
 import type { Rect } from "./geometry.ts";
 import type {
   ActivationBar,
@@ -28,7 +29,7 @@ import type {
 } from "./edges.ts";
 import { asActivationId, asLabelId, asRowId, asSectionId, newId, type ActivationId, type EdgeId, type LabelId, type NodeId, type RowId, type SectionId } from "./ids.ts";
 import type { EdgeEnd, EndpointMarker } from "./markers.ts";
-import type { StrokePattern } from "./styles.ts";
+import type { StrokePattern, TextStyleOverride, Theme } from "./styles.ts";
 
 const stamp = (scene: SceneDocument, patch: Partial<SceneDocument>): SceneDocument => ({
   ...scene,
@@ -53,6 +54,52 @@ export const insertObject = (
 
 export const insertEdge = (scene: SceneDocument, edge: SceneEdge): SceneDocument =>
   stamp(scene, { edges: { ...scene.edges, [edge.id]: edge } });
+
+/**
+ * Inserts an object and its tether in one revision, optionally removing an
+ * existing label from the edge it was derived from.
+ */
+export const insertConnectedObject = (
+  scene: SceneDocument,
+  node: SceneNode,
+  edge: SceneEdge,
+  removeLabel?: { readonly edgeId: EdgeId; readonly zone: EdgeLabelZone },
+  asset?: ImageAsset,
+): SceneDocument => {
+  const edges = { ...scene.edges, [edge.id]: edge };
+  if (removeLabel !== undefined) {
+    const parent = edges[removeLabel.edgeId];
+    if (parent !== undefined) {
+      edges[removeLabel.edgeId] = {
+        ...parent,
+        labels: parent.labels.filter((label) => label.zone !== removeLabel.zone),
+      };
+    }
+  }
+  return stamp(scene, {
+    nodes: { ...scene.nodes, [node.id]: node },
+    edges,
+    ...(asset === undefined ? {} : { assets: { ...scene.assets, [asset.id]: asset } }),
+  });
+};
+
+/**
+ * Applies theme defaults to the scene and every existing object. Per-object
+ * text overrides live outside `node.style`, so they keep winning over the new
+ * defaults after this pass.
+ */
+export const setSceneTheme = (scene: SceneDocument, theme: Theme): SceneDocument =>
+  stamp(scene, {
+    theme,
+    nodes: Object.fromEntries(
+      Object.entries(scene.nodes).map(([id, node]) => [
+        id,
+        node.kind === "table" || node.kind === "relationAttribute"
+          ? { ...node, style: theme.table }
+          : { ...node, style: theme.shape },
+      ]),
+    ),
+  });
 
 /**
  * Removes a node and every connector whose endpoint references it. Connectors
@@ -84,7 +131,62 @@ export const deleteNode = (scene: SceneDocument, nodeId: NodeId): SceneDocument 
   const edges = Object.fromEntries(
     Object.entries(scene.edges).filter(([id]) => !removedEdges.has(id)),
   );
-  return stamp(scene, { nodes, edges });
+  const usedAssetIds = new Set<string>(
+    Object.values(nodes).flatMap((node) =>
+      node.kind === "image" && node.assetId !== undefined
+        ? [String(node.assetId)]
+        : [],
+    ),
+  );
+  const assets = Object.fromEntries(
+    Object.entries(scene.assets).filter(([id]) => usedAssetIds.has(id)),
+  );
+  return stamp(scene, { nodes, edges, assets });
+};
+
+/** Attach project image bytes to an image node, or revert it to an empty frame. */
+export const setNodeImage = (
+  scene: SceneDocument,
+  nodeId: NodeId,
+  asset: ImageAsset | undefined,
+): SceneDocument => {
+  const node = scene.nodes[nodeId];
+  if (node === undefined || node.kind !== "image") return scene;
+
+  if (asset === undefined) {
+    const nodes = {
+      ...scene.nodes,
+      [nodeId]: { ...node, assetId: undefined },
+    };
+    const usedAssetIds = new Set<string>(
+      Object.values(nodes).flatMap((candidate) =>
+        candidate.kind === "image" && candidate.assetId !== undefined
+          ? [String(candidate.assetId)]
+          : [],
+      ),
+    );
+    const assets = Object.fromEntries(
+      Object.entries(scene.assets).filter(([id]) => usedAssetIds.has(id)),
+    );
+    return stamp(scene, { nodes, assets });
+  }
+
+  const aspect = asset.intrinsicWidth / Math.max(1, asset.intrinsicHeight);
+  const nodes = {
+    ...scene.nodes,
+    [nodeId]: {
+      ...node,
+      assetId: asset.id,
+      frame: {
+        ...node.frame,
+        height: imageFrameHeightForWidth(node, node.frame.width, aspect),
+      },
+    },
+  };
+  return stamp(scene, {
+    nodes,
+    assets: { ...scene.assets, [asset.id]: asset },
+  });
 };
 
 /** Appends an execution specification to a lifeline at a frame-relative top. */
@@ -379,6 +481,7 @@ export const setEndpointLabel = (
       locked: existing?.locked ?? false,
       visible: existing?.visible ?? true,
       maxWidth: existing?.maxWidth,
+      textStyle: existing?.textStyle,
     };
     return {
       ...edge,
@@ -400,6 +503,19 @@ export const setEdgeLabelOffset = (
     ...edge,
     labels: edge.labels.map((label) =>
       label.id === labelId ? { ...label, offset, locked: true } : label,
+    ),
+  }));
+
+export const setEdgeLabelTextStyle = (
+  scene: SceneDocument,
+  edgeId: EdgeId,
+  zone: EdgeLabelZone,
+  textStyle: TextStyleOverride | undefined,
+): SceneDocument =>
+  updateEdge(scene, edgeId, (edge) => ({
+    ...edge,
+    labels: edge.labels.map((label) =>
+      label.zone === zone ? { ...label, textStyle } : label,
     ),
   }));
 

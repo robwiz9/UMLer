@@ -173,7 +173,11 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
       }
     }
 
-    if (node.kind === "image" && assets[node.assetId] === undefined) {
+    if (
+      node.kind === "image" &&
+      node.assetId !== undefined &&
+      assets[node.assetId] === undefined
+    ) {
       error("image/missing-asset", `${path}.assetId`, `asset "${node.assetId}" is not present in assets`);
     }
   }

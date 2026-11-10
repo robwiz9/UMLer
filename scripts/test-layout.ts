@@ -3,23 +3,39 @@ import { ER_COMMERCE, STEP1_FIXTURES, UML_CLASS_PAYMENTS, UML_COMMUNICATION_CHEC
 import { buildLayoutSnapshot, withNodeFrames } from "../src/layout/build-layout.ts";
 import { autoLayoutFrames } from "../src/layout/auto-layout.ts";
 import { FixedTextMeasurer } from "../src/layout/text.ts";
-import { createEmptyScene, type SceneDocument } from "../src/model/scene.ts";
-import { DEFAULT_THEME } from "../src/model/styles.ts";
+import {
+  createEmptyScene,
+  DEFAULT_LAYOUT,
+  LAYOUT_SPACING_PRESETS,
+  type SceneDocument,
+} from "../src/model/scene.ts";
+import { DEFAULT_THEME, MONO_FONT } from "../src/model/styles.ts";
 import { rect } from "../src/model/geometry.ts";
 import { asActivationId, asEdgeId, asNodeId } from "../src/model/ids.ts";
 import { NO_MARKER } from "../src/model/edges.ts";
-import { nearestPort, snapMovingFrame, snapResizedFrame } from "../src/layout/snap.ts";
+import {
+  nearestPort,
+  resizeFrameFromCorner,
+  snapMovingFrame,
+  snapResizedFrame,
+} from "../src/layout/snap.ts";
 import { validateScene } from "../src/model/validate.ts";
 import { createEdgeForDiagram } from "../src/model/edge-create.ts";
+import { createObjectFromTemplate } from "../src/model/object-catalog.ts";
 import {
   addActivation,
   commitAutoLayout,
+  insertConnectedObject,
   insertEdge,
   moveSequenceEdge,
   setEdgeAttachment,
+  setEdgeLabelTextStyle,
+  setEndpointLabel,
+  setSceneTheme,
+  updateRow,
   updateActivation,
 } from "../src/model/edits.ts";
-import type { Point } from "../src/model/geometry.ts";
+import type { Point, Rect } from "../src/model/geometry.ts";
 
 const measurer = new FixedTextMeasurer();
 const layout = buildLayoutSnapshot(ER_COMMERCE, measurer);
@@ -120,7 +136,7 @@ assert.equal(leftPort.ref.kind, "row");
 
 const customersPorts = Object.values(layout.ports).filter((port) => port.nodeId === "customers");
 const perimeter = customersPorts.filter((port) => port.ref.kind === "perimeter");
-assert.equal(perimeter.length, 8);
+assert.equal(perimeter.length, 4);
 for (const port of perimeter) {
   const onVertical = Math.abs(port.point.x - customers.frame.x) < 1e-6 ||
     Math.abs(port.point.x - (customers.frame.x + customers.frame.width)) < 1e-6;
@@ -128,6 +144,12 @@ for (const port of perimeter) {
     Math.abs(port.point.y - (customers.frame.y + customers.frame.height)) < 1e-6;
   assert.ok(onVertical || onHorizontal, "perimeter port must be on the frame border");
 }
+const eastPerimeter = perimeter.find((port) => port.ref.kind === "perimeter" && port.ref.side === "east");
+assert.ok(eastPerimeter !== undefined);
+assert.ok(
+  Math.abs(eastPerimeter.point.y - (customers.header.frame.y + customers.header.frame.height / 2)) < 1e-6,
+  "table side handles must sit at the header centre",
+);
 
 const places = layout.edges.edge_places;
 const orderLine = layout.edges.edge_order_line;
@@ -330,6 +352,73 @@ assert.equal(snapped.frame.y, 9);
 const resized = snapResizedFrame({ x: 9, y: 9, width: 20, height: 20 }, 9, true);
 assert.equal(resized.width, 18);
 assert.equal(resized.height, 18);
+
+const nwResize = resizeFrameFromCorner(
+  { x: 90, y: 90, width: 180, height: 90 },
+  "nw",
+  { x: -45, y: -27 },
+  9,
+  true,
+);
+assert.deepEqual(nwResize, { x: 45, y: 63, width: 225, height: 117 });
+const seResize = resizeFrameFromCorner(
+  { x: 90, y: 90, width: 180, height: 90 },
+  "se",
+  { x: 45, y: 27 },
+  9,
+  true,
+);
+assert.deepEqual(seResize, { x: 90, y: 90, width: 225, height: 117 });
+const neResize = resizeFrameFromCorner(
+  { x: 90, y: 90, width: 180, height: 90 },
+  "ne",
+  { x: 45, y: -27 },
+  9,
+  true,
+);
+assert.deepEqual(neResize, { x: 90, y: 63, width: 225, height: 117 });
+
+const lockedAspect = resizeFrameFromCorner(
+  { x: 100, y: 100, width: 200, height: 100 },
+  "se",
+  { x: 100, y: 3 },
+  9,
+  true,
+  2,
+);
+assert.equal(lockedAspect.x, 100);
+assert.equal(lockedAspect.y, 100);
+assert.ok(Math.abs(lockedAspect.width / lockedAspect.height - 2) < 0.001);
+const lockedAspectFromHeight = resizeFrameFromCorner(
+  { x: 100, y: 100, width: 200, height: 100 },
+  "nw",
+  { x: -3, y: -100 },
+  9,
+  true,
+  2,
+);
+assert.equal(lockedAspectFromHeight.x + lockedAspectFromHeight.width, 300);
+assert.equal(lockedAspectFromHeight.y + lockedAspectFromHeight.height, 200);
+assert.ok(
+  Math.abs(lockedAspectFromHeight.width / lockedAspectFromHeight.height - 2) < 0.001,
+);
+
+const captionLocked = resizeFrameFromCorner(
+  { x: 0, y: 0, width: 144, height: 113.65 },
+  "se",
+  { x: 81, y: 10 },
+  9,
+  true,
+  1.5,
+  17.65,
+);
+assert.ok(Math.abs(captionLocked.width - 225) < 0.001);
+assert.ok(Math.abs(captionLocked.height - 167.65) < 0.001);
+assert.ok(
+  Math.abs(
+    captionLocked.width / (captionLocked.height - 17.65) - 1.5,
+  ) < 0.001,
+);
 
 const near = nearestPort(layout.ports, leftPort.point, 1);
 assert.equal(near?.id, leftPort.id);
@@ -565,6 +654,179 @@ assert.notEqual(
   "parallel reverse edges must not share the same corridor",
 );
 assert.equal(lrLayout.diagnostics.routeCollisions, 0);
+
+const customersNode = ER_COMMERCE.nodes.customers;
+assert.ok(customersNode?.kind === "table");
+const firstCustomerRow = customersNode.sections[0]?.rows[0];
+assert.ok(firstCustomerRow !== undefined);
+const styledScene = updateRow(ER_COMMERCE, asNodeId("customers"), firstCustomerRow.id, {
+  textStyle: {
+    bold: true,
+    italic: true,
+    monospace: true,
+    fontSize: 14,
+    color: "#cc0000",
+  },
+});
+const tintedTheme = {
+  ...DEFAULT_THEME,
+  table: {
+    ...DEFAULT_THEME.table,
+    fill: { color: null },
+    headerFill: { color: "#ffd166" },
+    text: { ...DEFAULT_THEME.table.text, fontSize: 12, color: "#003366" },
+  },
+};
+const themedScene = setSceneTheme(styledScene, tintedTheme);
+assert.equal(themedScene.theme.table.headerFill.color, "#ffd166");
+assert.equal(themedScene.nodes.customers?.style.fill.color, null);
+const styledLayout = buildLayoutSnapshot(themedScene, measurer);
+const styledCustomers = styledLayout.nodes.customers;
+assert.ok(styledCustomers?.kind === "table");
+const styledRow = styledCustomers.sections[0]?.rows[0];
+assert.ok(styledRow !== undefined);
+assert.equal(styledRow.text.style.fontSize, 14, "row override must beat the theme size");
+assert.equal(styledRow.text.style.fontFamily, MONO_FONT);
+assert.equal(styledRow.text.style.weight, 700);
+assert.equal(styledRow.text.style.italic, true);
+assert.equal(styledRow.text.style.color, "#cc0000");
+
+const themedObject = createObjectFromTemplate(
+  "er",
+  "entity-table",
+  themedScene,
+  { x: 900, y: 450 },
+);
+assert.ok(themedObject !== null);
+assert.equal(themedObject.node.style.fill.color, null);
+assert.equal(themedObject.node.style.text.fontSize, 12);
+
+const compactUseCase = createObjectFromTemplate(
+  "uml-use-case",
+  "use-case",
+  UML_USE_CASE_SHOP,
+  { x: 900, y: 450 },
+);
+assert.ok(compactUseCase !== null);
+assert.equal(compactUseCase.node.frame.width, 138);
+assert.equal(compactUseCase.node.frame.height, 45);
+
+assert.equal(DEFAULT_LAYOUT.spacing, "normal");
+assert.ok(LAYOUT_SPACING_PRESETS.tight.nodeGap < LAYOUT_SPACING_PRESETS.normal.nodeGap);
+assert.ok(LAYOUT_SPACING_PRESETS.normal.nodeGap < LAYOUT_SPACING_PRESETS.wide.nodeGap);
+
+const relationAttr = createObjectFromTemplate(
+  "er",
+  "relation-attribute",
+  ER_COMMERCE,
+  { x: 360, y: 450 },
+);
+assert.ok(relationAttr !== null && relationAttr.node.kind === "relationAttribute");
+const namedRelationAttr = { ...relationAttr.node, name: "places" };
+const relationScene = {
+  ...ER_COMMERCE,
+  nodes: { ...ER_COMMERCE.nodes, [namedRelationAttr.id]: namedRelationAttr },
+};
+const tether = createEdgeForDiagram(
+  relationScene,
+  { nodeId: namedRelationAttr.id, port: { kind: "perimeter", side: "north" } },
+  { edgeId: asEdgeId("edge_places"), t: 0.5 },
+);
+assert.ok(tether !== null);
+const converted = insertConnectedObject(
+  ER_COMMERCE,
+  namedRelationAttr,
+  tether,
+  { edgeId: asEdgeId("edge_places"), zone: "center" },
+  relationAttr.asset,
+);
+assert.equal(Object.keys(converted.nodes).length, Object.keys(ER_COMMERCE.nodes).length + 1);
+assert.equal(Object.keys(converted.edges).length, Object.keys(ER_COMMERCE.edges).length + 1);
+assert.equal(
+  converted.edges.edge_places?.labels.some((label) => label.zone === "center"),
+  false,
+);
+assert.equal(converted.nodes[namedRelationAttr.id]?.name, "places");
+const convertedLayout = buildLayoutSnapshot(converted, measurer);
+const convertedAuto = autoLayoutFrames(converted, convertedLayout);
+const placedConverted = convertedAuto.frames[namedRelationAttr.id];
+const placedExistingAttribute = convertedAuto.frames.order_line;
+const placedCustomers = convertedAuto.frames.customers;
+const placedOrders = convertedAuto.frames.orders;
+assert.ok(
+  placedConverted !== undefined &&
+  placedExistingAttribute !== undefined &&
+  placedCustomers !== undefined &&
+  placedOrders !== undefined,
+);
+const overlaps = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.width - 0.001 &&
+  a.x + a.width > b.x + 0.001 &&
+  a.y < b.y + b.height - 0.001 &&
+  a.y + a.height > b.y + 0.001;
+assert.equal(overlaps(placedConverted, placedCustomers), false);
+assert.equal(overlaps(placedConverted, placedOrders), false);
+assert.equal(overlaps(placedExistingAttribute, placedCustomers), false);
+assert.equal(overlaps(placedExistingAttribute, placedOrders), false);
+const parentCenterX =
+  (placedCustomers.x + placedCustomers.width / 2 +
+    placedOrders.x + placedOrders.width / 2) / 2;
+const convertedCenterX = placedConverted.x + placedConverted.width / 2;
+const existingCenterX = placedExistingAttribute.x + placedExistingAttribute.width / 2;
+assert.notEqual(
+  Math.sign(convertedCenterX - parentCenterX),
+  Math.sign(existingCenterX - parentCenterX),
+  "relation-attribute tables should occupy opposite sides of their relationship",
+);
+const placedTetherTarget = convertedAuto.edgeAttachments[tether.id]?.target;
+const existingTetherTarget = convertedAuto.edgeAttachments.edge_order_line?.target;
+if (
+  placedTetherTarget?.target !== "edge" ||
+  existingTetherTarget?.target !== "edge"
+) {
+  throw new Error("relation-attribute tethers should remain attached to the relationship edge");
+}
+assert.notEqual(
+  placedTetherTarget.t,
+  existingTetherTarget.t,
+  "multiple relation-attribute tethers should anchor at distinct points on the relationship",
+);
+const parentEdgePatch = convertedAuto.edgeAttachments.edge_places;
+if (
+  parentEdgePatch?.source?.target !== "node" ||
+  parentEdgePatch.source.port.kind !== "perimeter" ||
+  parentEdgePatch.target?.target !== "node" ||
+  parentEdgePatch.target.port.kind !== "perimeter"
+) {
+  throw new Error("TB layout should re-anchor rectangular relationship endpoints");
+}
+assert.equal(parentEdgePatch.source.port.side, "south");
+assert.equal(parentEdgePatch.target.port.side, "north");
+for (const tetherId of [tether.id, "edge_order_line"]) {
+  const tetherPatch = convertedAuto.edgeAttachments[tetherId];
+  if (
+    tetherPatch?.source?.target !== "node" ||
+    tetherPatch.source.port.kind !== "perimeter"
+  ) {
+    throw new Error("relation-attribute tether should expose a facing perimeter side");
+  }
+  assert.ok(["east", "west"].includes(tetherPatch.source.port.side));
+}
+
+const labelEdgeId = asEdgeId("edge_places");
+const labelStyle = { bold: true, monospace: true, fontSize: 12, color: "#aa0000" };
+const edgeStyledScene = setEdgeLabelTextStyle(ER_COMMERCE, labelEdgeId, "center", labelStyle);
+const edgeStyledLayout = buildLayoutSnapshot(edgeStyledScene, measurer);
+const styledLabel = edgeStyledLayout.edges.edge_places?.labels.find((label) => label.zone === "center");
+assert.ok(styledLabel !== undefined);
+assert.equal(styledLabel.text.style.fontSize, 12);
+assert.equal(styledLabel.text.style.color, "#aa0000");
+const relabeled = setEndpointLabel(edgeStyledScene, labelEdgeId, "center", "renamed");
+assert.deepEqual(
+  relabeled.edges.edge_places?.labels.find((label) => label.zone === "center")?.textStyle,
+  labelStyle,
+  "renaming a label must keep its typography overrides",
+);
 
 console.log("layout: OK");
 console.log(`  fixtures: ${STEP1_FIXTURES.length}`);

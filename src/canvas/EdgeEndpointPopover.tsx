@@ -3,6 +3,8 @@ import type { SceneEdge } from "../model/edges.ts";
 import { NO_MARKER } from "../model/edges.ts";
 import type { DiagramKind } from "../model/scene.ts";
 import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
+import type { TextStyle, TextStyleOverride } from "../model/styles.ts";
+import { TextStyleControls } from "../app/TextStyleControls.tsx";
 import {
   CARDINALITY_CHIPS,
   ER_MARKER_OPTIONS,
@@ -16,8 +18,10 @@ interface EdgeEndpointPopoverProps {
   readonly end: EdgeEnd;
   readonly diagramKind: DiagramKind;
   readonly focusToken?: number;
+  readonly labelTextStyle: TextStyle;
   readonly onSetMarker: (marker: EndpointMarker) => void;
   readonly onSetLabel: (text: string) => void;
+  readonly onSetLabelStyle: (style: TextStyleOverride | undefined) => void;
   readonly onClose: () => void;
 }
 
@@ -26,8 +30,10 @@ export const EdgeEndpointPopover = ({
   end,
   diagramKind,
   focusToken = 0,
+  labelTextStyle,
   onSetMarker,
   onSetLabel,
+  onSetLabelStyle,
   onClose,
 }: EdgeEndpointPopoverProps) => {
   const textRef = useRef<HTMLInputElement | null>(null);
@@ -44,6 +50,7 @@ export const EdgeEndpointPopover = ({
   }, [focusToken]);
   const marker = edge.markers[end];
   const label = edge.labels.find((entry) => entry.zone === end)?.text ?? "";
+  const labelStyle = edge.labels.find((entry) => entry.zone === end)?.textStyle;
   const isEr = diagramKind === "er" || edge.semantic.family === "er";
   const family = edge.semantic.family;
   const showUml = family === "uml" || diagramKind === "uml-class" || diagramKind === "uml-use-case";
@@ -108,6 +115,13 @@ export const EdgeEndpointPopover = ({
             </button>
           ))}
         </div>
+        {label.length > 0 ? (
+          <TextStyleControls
+            base={labelTextStyle}
+            value={labelStyle}
+            onChange={onSetLabelStyle}
+          />
+        ) : null}
       </div>
 
       <div className="popover-section">

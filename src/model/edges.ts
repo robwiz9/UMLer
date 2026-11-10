@@ -8,7 +8,7 @@
 
 import type { EdgeId, LabelId, NodeId, RowId, WaypointId } from "./ids.ts";
 import type { CompassSide, Direction, HorizontalSide, Point } from "./geometry.ts";
-import type { EdgeStyle } from "./styles.ts";
+import type { EdgeStyle, TextStyleOverride } from "./styles.ts";
 import type {
   EndpointMarker,
   UmlRelationshipKind,
@@ -106,6 +106,7 @@ export interface EdgeLabel {
   readonly locked: boolean;
   readonly visible: boolean;
   readonly maxWidth?: number;
+  readonly textStyle?: TextStyleOverride;
 }
 
 export type SequenceMessageKind = "sync" | "async" | "reply" | "create" | "delete";

@@ -1,12 +1,13 @@
 import type React from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { SceneDocument } from "../model/scene.ts";
 import type { EdgeLabelLayout, EdgeLayout, LayoutSnapshot, NodeLayout, PortGeometry } from "../model/layout.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
-import type { SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
 import type { ActivationId, RowId, SectionId } from "../model/ids.ts";
 import { NodeFocusMenu } from "./NodeFocusMenu.tsx";
+import { DraggablePanel } from "./DraggablePanel.tsx";
 import type { Point, Rect } from "../model/geometry.ts";
 import { rectContainsPoint, snap, sub } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
@@ -20,17 +21,19 @@ import { NodeSkeleton } from "./NodeSkeleton.tsx";
 import { EdgeLabelView, EdgeLayer, edgeLayerItem, edgeLinePoints } from "./Edges.tsx";
 import { EdgeEndpointPopover } from "./EdgeEndpointPopover.tsx";
 import { EdgeInspector } from "../app/EdgeInspector.tsx";
+import { isSupportedImageFile } from "../app/image-assets.ts";
 import { PortHandles } from "./PortHandles.tsx";
 import type { EdgeEnd } from "../model/markers.ts";
 import type { EdgeLabelZone, EdgeRoutingMode } from "../model/edges.ts";
 import type { EndpointMarker } from "../model/markers.ts";
-import type { StrokePattern } from "../model/styles.ts";
+import type { StrokePattern, TextStyleOverride } from "../model/styles.ts";
 import {
   nearestPort,
+  resizeFrameFromCorner,
   screenToWorld,
   snapHandlesForNode,
   snapMovingFrame,
-  snapResizedFrame,
+  type ResizeCorner,
   type SnapGuide,
 } from "../layout/snap.ts";
 
@@ -43,6 +46,12 @@ interface CanvasStageProps {
   readonly gridSize: number;
   readonly majorEvery: number;
   readonly snapEnabled: boolean;
+  readonly showCompactAddButton: boolean;
+  readonly imageAssets: Readonly<Record<string, ImageAsset>>;
+  readonly onDropImageFiles: (files: readonly File[], world: Point) => void;
+  readonly onAssignImageToNode: (nodeId: string, file: File) => Promise<void>;
+  readonly onUseImageAsset: (nodeId: string, assetId: string) => void;
+  readonly onRemoveImageFromNode: (nodeId: string) => void;
   readonly selectedNodeId: string | null;
   readonly selectedEdgeId: string | null;
   readonly selectedActivation: {
@@ -57,6 +66,16 @@ interface CanvasStageProps {
   ) => void;
   readonly onSetMarker: (edgeId: string, end: EdgeEnd, marker: EndpointMarker) => void;
   readonly onSetEdgeLabel: (edgeId: string, zone: EdgeLabelZone, text: string) => void;
+  readonly onSetEdgeLabelStyle: (
+    edgeId: string,
+    zone: EdgeLabelZone,
+    style: TextStyleOverride | undefined,
+  ) => void;
+  readonly onConvertToRelationAttribute: (
+    edgeId: string,
+    world: Point,
+    anchor: Point,
+  ) => void;
   readonly onSetStrokePattern: (edgeId: string, pattern: StrokePattern) => void;
   readonly onSetStrokeWidth: (edgeId: string, width: number) => void;
   readonly onSetRoutingMode: (edgeId: string, mode: EdgeRoutingMode) => void;
@@ -84,7 +103,7 @@ interface CanvasStageProps {
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
-  readonly onAddObject: (templateId: ObjectTemplateId, world: Point) => void;
+  readonly onAddObject: (templateId: ObjectTemplateId, world: Point) => SceneNode | null;
   readonly onAddActivation: (nodeId: string, worldY: number) => void;
   readonly onUpdateActivation: (
     nodeId: string,
@@ -101,6 +120,10 @@ interface CanvasStageProps {
   readonly onPreviewFrames: (frames: Readonly<Record<string, Rect>>) => void;
   readonly onCommitFrames: (frames: Readonly<Record<string, Rect>>) => void;
   readonly onViewport: (viewport: ViewportSize) => void;
+}
+
+export interface CanvasStageHandle {
+  readonly openAddObjectMenu: () => void;
 }
 
 type Interaction =
@@ -126,6 +149,7 @@ type Interaction =
       readonly kind: "resize";
       readonly pointerId: number;
       readonly nodeId: string;
+      readonly corner: ResizeCorner;
       readonly startWorld: Point;
       readonly startFrame: Rect;
       captured: boolean;
@@ -483,7 +507,7 @@ const TerminalHitLayer = ({
 );
 
 
-export const CanvasStage = ({
+export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(function CanvasStage({
   scene,
   layout,
   camera,
@@ -492,6 +516,12 @@ export const CanvasStage = ({
   gridSize,
   majorEvery,
   snapEnabled,
+  showCompactAddButton,
+  imageAssets,
+  onDropImageFiles,
+  onAssignImageToNode,
+  onUseImageAsset,
+  onRemoveImageFromNode,
   selectedNodeId,
   selectedEdgeId,
   selectedActivation,
@@ -501,6 +531,8 @@ export const CanvasStage = ({
   onSelectActivation,
   onSetMarker,
   onSetEdgeLabel,
+  onSetEdgeLabelStyle,
+  onConvertToRelationAttribute,
   onSetStrokePattern,
   onSetStrokeWidth,
   onSetRoutingMode,
@@ -529,15 +561,20 @@ export const CanvasStage = ({
   onPreviewFrames,
   onCommitFrames,
   onViewport,
-}: CanvasStageProps) => {
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const openAddMenuRef = useRef<((origin: "panel" | "canvas") => void) | null>(null);
   const interactionRef = useRef<Interaction | null>(null);
   const layoutRef = useRef(layout);
   const cameraRef = useRef(camera);
   const zoomRef = useRef(zoom);
   const onViewChangeRef = useRef(onViewChange);
   const onViewportRef = useRef(onViewport);
+
+  useImperativeHandle(ref, () => ({
+    openAddObjectMenu: () => openAddMenuRef.current?.("panel"),
+  }), []);
 
   layoutRef.current = layout;
   cameraRef.current = camera;
@@ -558,6 +595,7 @@ export const CanvasStage = ({
     readonly left: number;
     readonly top: number;
     readonly world: Point;
+    readonly source: "button" | "context";
   } | null>(null);
   const [draftEdge, setDraftEdge] = useState<DraftEdge | null>(null);
   const draftTargetRef = useRef<DrawTarget | null>(null);
@@ -594,13 +632,44 @@ export const CanvasStage = ({
   }, [scene.id]);
 
   useEffect(() => {
-    if (addMenu === null) return;
-    const handleEscape = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") setAddMenu(null);
+    const anyMenuOpen =
+      addMenu !== null ||
+      activeEndpoint !== null ||
+      linePopover !== null ||
+      nodeFocus !== null;
+    if (!anyMenuOpen) return;
+
+    const closeTopMenu = (): void => {
+      if (addMenu !== null) {
+        setAddMenu(null);
+      } else if (activeEndpoint !== null) {
+        setActiveEndpoint(null);
+      } else if (linePopover !== null) {
+        setLinePopover(null);
+      } else if (nodeFocus !== null) {
+        onClearNodeFocus();
+      }
     };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [addMenu]);
+
+    const handleMenuKey = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeTopMenu();
+        return;
+      }
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      // Single-line fields commit on Enter; multiline notes and pickers do not.
+      if (!(event.target instanceof HTMLInputElement)) return;
+      if (!["text", "search", "number", "email", "url", "tel", "password"].includes(event.target.type)) {
+        return;
+      }
+      event.preventDefault();
+      closeTopMenu();
+    };
+
+    window.addEventListener("keydown", handleMenuKey);
+    return () => window.removeEventListener("keydown", handleMenuKey);
+  }, [activeEndpoint, addMenu, linePopover, nodeFocus, onClearNodeFocus]);
 
   useEffect(() => {
     if (selectedEdgeId === null) {
@@ -989,6 +1058,7 @@ export const CanvasStage = ({
       left: clampValue(screen.x + 8, 10, Math.max(10, viewport.width - 318)),
       top: clampValue(screen.y + 8, 10, Math.max(10, viewport.height - 474)),
       world,
+      source: "context",
     });
     setActiveEndpoint(null);
     setLinePopover(null);
@@ -1120,7 +1190,41 @@ export const CanvasStage = ({
     if (focusField) setLineFocusToken((value) => value + 1);
   };
 
-  const openAddMenuFromButton = (): void => {
+  const revealFrame = (frame: Rect): void => {
+    const z = zoomRef.current;
+    const cameraValue = cameraRef.current;
+    const margin = 48;
+    const left = frame.x * z + cameraValue.x;
+    const top = frame.y * z + cameraValue.y;
+    const right = (frame.x + frame.width) * z + cameraValue.x;
+    const bottom = (frame.y + frame.height) * z + cameraValue.y;
+    let x = cameraValue.x;
+    let y = cameraValue.y;
+
+    if (right - left > viewport.width - margin * 2) {
+      x = margin - frame.x * z;
+    } else if (left < margin) {
+      x += margin - left;
+    } else if (right > viewport.width - margin) {
+      x -= right - (viewport.width - margin);
+    }
+
+    if (bottom - top > viewport.height - margin * 2) {
+      // Tall objects (a lifeline lane) cannot fit; keep the head/top edge
+      // visible instead of centring the frame and hiding it above the viewport.
+      y = margin - frame.y * z;
+    } else if (top < margin) {
+      y += margin - top;
+    } else if (bottom > viewport.height - margin) {
+      y -= bottom - (viewport.height - margin);
+    }
+
+    if (Math.abs(x - cameraValue.x) > 0.5 || Math.abs(y - cameraValue.y) > 0.5) {
+      onViewChangeRef.current({ x, y }, z);
+    }
+  };
+
+  const openAddMenuFromButton = (origin: "panel" | "canvas" = "canvas"): void => {
     // Prefer the lower half of the viewport: fitted scenes usually leave room
     // there, while the centre is often occupied by an existing object.
     const world = screenToWorld(
@@ -1128,10 +1232,12 @@ export const CanvasStage = ({
       cameraRef.current,
       zoomRef.current,
     );
+    const preferredLeft = origin === "panel" ? 12 : 54;
     setAddMenu({
-      left: Math.max(10, viewport.width - 318),
-      top: 52,
+      left: Math.max(10, Math.min(preferredLeft, viewport.width - 310)),
+      top: 12,
       world,
+      source: "button",
     });
     setActiveEndpoint(null);
     setLinePopover(null);
@@ -1139,8 +1245,29 @@ export const CanvasStage = ({
     onSelectEdge(null);
     onSelectNode(null);
   };
+  openAddMenuRef.current = openAddMenuFromButton;
 
-  const handleResizePointerDown = (event: React.PointerEvent<SVGRectElement>): void => {
+  const handleImageDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  };
+
+  const handleImageDrop = (event: React.DragEvent<HTMLDivElement>): void => {
+    const allFiles = [...event.dataTransfer.files];
+    if (allFiles.length === 0 || svgRef.current === null) return;
+    event.preventDefault();
+    setAddMenu(null);
+    const files = allFiles.filter(isSupportedImageFile);
+    const screen = pointFromEvent(event, svgRef.current);
+    const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    onDropImageFiles(files.length > 0 ? files : allFiles, world);
+  };
+
+  const handleResizePointerDown = (
+    corner: ResizeCorner,
+    event: React.PointerEvent<SVGRectElement>,
+  ): void => {
     if (event.button !== 0 || selectedNodeId === null) return;
     const svg = svgRef.current;
     const nodeLayout = layout.nodes[selectedNodeId];
@@ -1151,6 +1278,7 @@ export const CanvasStage = ({
       kind: "resize",
       pointerId: event.pointerId,
       nodeId: selectedNodeId,
+      corner,
       startWorld: world,
       startFrame: nodeLayout.frame,
       captured: true,
@@ -1589,12 +1717,26 @@ export const CanvasStage = ({
       return;
     }
 
-    const candidate = {
-      ...interaction.startFrame,
-      width: Math.max(gridSize, interaction.startFrame.width + delta.x),
-      height: Math.max(gridSize, interaction.startFrame.height + delta.y),
-    };
-    const snapped = snapResizedFrame(candidate, gridSize, snapEnabled);
+    const resizedNode = scene.nodes[interaction.nodeId];
+    const imageLayout =
+      resizedNode?.kind === "image" ? layout.nodes[interaction.nodeId] : undefined;
+    const aspectRatio =
+      imageLayout?.kind === "image"
+        ? imageLayout.imageFrame.width / Math.max(1, imageLayout.imageFrame.height)
+        : undefined;
+    const extraHeight =
+      imageLayout?.kind === "image"
+        ? imageLayout.frame.height - imageLayout.imageFrame.height
+        : 0;
+    const snapped = resizeFrameFromCorner(
+      interaction.startFrame,
+      interaction.corner,
+      delta,
+      gridSize,
+      snapEnabled,
+      aspectRatio,
+      extraHeight,
+    );
     interaction.lastFrame = snapped;
     setGuides([]);
     onPreviewFrames({ [interaction.nodeId]: snapped });
@@ -1666,6 +1808,29 @@ export const CanvasStage = ({
   });
   const selectedEdge = selectedEdgeId === null ? undefined : scene.edges[selectedEdgeId];
   const selectedEdgeLayout = selectedEdgeId === null ? undefined : layout.edges[selectedEdgeId];
+  const centerLabel = selectedEdgeLayout?.labels.find((label) => label.zone === "center");
+  const canConvertCenterLabel =
+    scene.meta.diagramKind === "er" &&
+    selectedEdge !== undefined &&
+    selectedEdgeLayout !== undefined &&
+    selectedEdge.semantic.family === "er" &&
+    selectedEdge.source.target !== "edge" &&
+    selectedEdge.target.target !== "edge" &&
+    centerLabel !== undefined &&
+    centerLabel.text.text.trim().length > 0;
+  const convertCenterLabel = (): void => {
+    if (!canConvertCenterLabel || selectedEdge === undefined || centerLabel === undefined) return;
+    const anchor = {
+      x: centerLabel.frame.x + centerLabel.frame.width / 2,
+      y: centerLabel.frame.y + centerLabel.frame.height / 2,
+    };
+    onConvertToRelationAttribute(
+      selectedEdge.id,
+      { x: anchor.x, y: anchor.y + 108 },
+      anchor,
+    );
+    setLinePopover(null);
+  };
   const focusNode = nodeFocus === null ? undefined : scene.nodes[nodeFocus.nodeId];
   const focusLayout = nodeFocus === null ? undefined : layout.nodes[nodeFocus.nodeId];
   const focusFrame = (() => {
@@ -1785,6 +1950,8 @@ export const CanvasStage = ({
       ref={containerRef}
       className="canvas-stage"
       style={{ cursor: panning ? "grabbing" : undefined }}
+      onDragOver={handleImageDragOver}
+      onDrop={handleImageDrop}
     >
       <svg
         ref={svgRef}
@@ -1851,6 +2018,11 @@ export const CanvasStage = ({
                 theme={scene.theme}
                 selected={node.id === selectedNodeId}
                 skeleton={false}
+                imageAsset={
+                  node.kind === "image" && node.assetId !== undefined
+                    ? imageAssets[node.assetId]
+                    : undefined
+                }
                 onPointerDown={(event) => handleNodePointerDown(event, node.id)}
                 onTextDoubleClick={(target) => onTextDoubleClick(node.id, target)}
                 onPartClick={onNodePartClick}
@@ -2048,19 +2220,45 @@ export const CanvasStage = ({
             />
           ) : null}
           {selectedLayout !== undefined && selectedActivation === null ? (
-            <rect
-              data-resize-handle="true"
-              x={selectedLayout.frame.x + selectedLayout.frame.width - 5 / zoom}
-              y={selectedLayout.frame.y + selectedLayout.frame.height - 5 / zoom}
-              width={10 / zoom}
-              height={10 / zoom}
-              rx={2 / zoom}
-              fill={scene.theme.colors.selection}
-              stroke="white"
-              strokeWidth={1 / zoom}
-              style={{ cursor: "nwse-resize" }}
-              onPointerDown={handleResizePointerDown}
-            />
+            <>
+              {([
+                { corner: "nw", x: selectedLayout.frame.x, y: selectedLayout.frame.y, cursor: "nwse-resize" },
+                {
+                  corner: "ne",
+                  x: selectedLayout.frame.x + selectedLayout.frame.width,
+                  y: selectedLayout.frame.y,
+                  cursor: "nesw-resize",
+                },
+                {
+                  corner: "sw",
+                  x: selectedLayout.frame.x,
+                  y: selectedLayout.frame.y + selectedLayout.frame.height,
+                  cursor: "nesw-resize",
+                },
+                {
+                  corner: "se",
+                  x: selectedLayout.frame.x + selectedLayout.frame.width,
+                  y: selectedLayout.frame.y + selectedLayout.frame.height,
+                  cursor: "nwse-resize",
+                },
+              ] as const).map((handle) => (
+                <rect
+                  key={`resize-${handle.corner}`}
+                  data-resize-handle="true"
+                  data-resize-corner={handle.corner}
+                  x={handle.x - 5 / zoom}
+                  y={handle.y - 5 / zoom}
+                  width={10 / zoom}
+                  height={10 / zoom}
+                  rx={2 / zoom}
+                  fill={scene.theme.colors.selection}
+                  stroke="white"
+                  strokeWidth={1 / zoom}
+                  style={{ cursor: handle.cursor }}
+                  onPointerDown={(event) => handleResizePointerDown(handle.corner, event)}
+                />
+              ))}
+            </>
           ) : null}
           {guides.map((guide) => (
             <line
@@ -2080,9 +2278,20 @@ export const CanvasStage = ({
       </svg>
 
       {nodeFocus !== null && focusNode !== undefined && focusLayout !== undefined && focusMenuPosition !== null ? (
-        <div
+        <DraggablePanel
           className="node-focus-position"
-          style={{ left: focusMenuPosition.left, top: focusMenuPosition.top }}
+          left={focusMenuPosition.left}
+          top={focusMenuPosition.top}
+          bounds={viewport}
+          resetKey={`${focusNode.id}:${nodeFocus.kind}:${
+            nodeFocus.kind === "section"
+              ? nodeFocus.sectionId
+              : nodeFocus.kind === "row"
+                ? nodeFocus.rowId
+                : nodeFocus.kind === "lifelineSpine"
+                  ? nodeFocus.y
+                  : ""
+          }`}
         >
           <NodeFocusMenu
             node={focusNode}
@@ -2097,52 +2306,70 @@ export const CanvasStage = ({
             onDeleteSection={onDeleteSection}
             onDeleteNode={onDeleteNode}
             onAddActivation={onAddActivation}
+            imageAssets={imageAssets}
+            onAssignImage={onAssignImageToNode}
+            onUseImageAsset={onUseImageAsset}
+            onRemoveImage={onRemoveImageFromNode}
             onClose={onClearNodeFocus}
           />
-        </div>
+        </DraggablePanel>
       ) : null}
 
       {activeEndpoint !== null && selectedEdge !== undefined && terminalPlacement !== null ? (
-        <div
+        <DraggablePanel
           className="endpoint-popover-position"
-          style={{ left: terminalPlacement.left, top: terminalPlacement.top }}
+          left={terminalPlacement.left}
+          top={terminalPlacement.top}
+          bounds={viewport}
+          resetKey={`${selectedEdge.id}:${activeEndpoint}`}
         >
           <EdgeEndpointPopover
             edge={selectedEdge}
             end={activeEndpoint}
             diagramKind={scene.meta.diagramKind}
             focusToken={terminalFocusToken}
+            labelTextStyle={scene.theme.edge.labelText}
             onSetMarker={(marker) => onSetMarker(selectedEdge.id, activeEndpoint, marker)}
             onSetLabel={(text) => onSetEdgeLabel(selectedEdge.id, activeEndpoint, text)}
+            onSetLabelStyle={(style) => onSetEdgeLabelStyle(selectedEdge.id, activeEndpoint, style)}
             onClose={() => setActiveEndpoint(null)}
           />
-        </div>
+        </DraggablePanel>
       ) : null}
 
       {linePopover !== null && selectedEdge !== undefined && selectedEdgeLayout !== undefined ? (
-        <div
+        <DraggablePanel
           className="line-popover-position"
-          style={{
-            left: Math.max(10, Math.min(linePopover.x, Math.max(10, viewport.width - 330))),
-            top: Math.max(10, Math.min(linePopover.y, Math.max(10, viewport.height - 430))),
-          }}
+          left={Math.max(10, Math.min(linePopover.x, Math.max(10, viewport.width - 330)))}
+          top={Math.max(10, Math.min(linePopover.y, Math.max(10, viewport.height - 430)))}
+          bounds={viewport}
+          resetKey={`${linePopover.edgeId}:${linePopover.x}:${linePopover.y}`}
         >
           <div className="line-popover">
-            <button
-              type="button"
-              className="line-popover-close"
-              onClick={() => setLinePopover(null)}
-              title="Close line menu"
-            >
-              ×
-            </button>
+            <div className="popover-head">
+              <div>
+                <strong>Connector</strong>
+                <span>Line options</span>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setLinePopover(null)}
+                title="Close line menu"
+              >
+                ×
+              </button>
+            </div>
             <EdgeInspector
               edge={selectedEdge}
               layout={selectedEdgeLayout}
               compact
               idPrefix="canvas"
               focusToken={lineFocusToken}
+              labelTextStyle={scene.theme.edge.labelText}
               onSetLabel={(zone, text) => onSetEdgeLabel(selectedEdge.id, zone, text)}
+              onSetLabelStyle={(zone, style) => onSetEdgeLabelStyle(selectedEdge.id, zone, style)}
+              onConvertCenterLabel={canConvertCenterLabel ? convertCenterLabel : undefined}
               onSetStrokePattern={(pattern) => onSetStrokePattern(selectedEdge.id, pattern)}
               onSetStrokeWidth={(width) => onSetStrokeWidth(selectedEdge.id, width)}
               onSetRoutingMode={(mode) =>
@@ -2150,19 +2377,34 @@ export const CanvasStage = ({
               onReroute={() => onRerouteEdge(selectedEdge.id)}
             />
           </div>
-        </div>
+        </DraggablePanel>
       ) : null}
 
-      <button
-        type="button"
-        className="canvas-add-button"
-        onClick={openAddMenuFromButton}
-        title="Add an object to this diagram"
-        aria-haspopup="menu"
-        aria-expanded={addMenu !== null}
-      >
-        <span aria-hidden="true">+</span> Add object
-      </button>
+      {showCompactAddButton ? (
+        <button
+          type="button"
+          className="canvas-add-compact"
+          onClick={() => openAddMenuFromButton("canvas")}
+          title="Add an object to this diagram"
+          aria-label="Add object"
+          aria-haspopup="menu"
+          aria-expanded={addMenu !== null}
+        >
+          <svg
+            className="add-glyph"
+            viewBox="0 0 12 12"
+            aria-hidden="true"
+          >
+            <path
+              d="M6 1.4v9.2M1.4 6h9.2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      ) : null}
 
       {addMenu !== null ? (
         <>
@@ -2174,19 +2416,25 @@ export const CanvasStage = ({
               setAddMenu(null);
             }}
           />
-          <div
+          <DraggablePanel
             className="add-object-position"
-            style={{ left: addMenu.left, top: addMenu.top }}
+            left={addMenu.left}
+            top={addMenu.top}
+            bounds={viewport}
+            resetKey="add-object"
           >
             <AddObjectMenu
               diagramKind={scene.meta.diagramKind}
               onPick={(templateId) => {
-                onAddObject(templateId, addMenu.world);
+                const created = onAddObject(templateId, addMenu.world);
+                if (created !== null && addMenu.source === "button") {
+                  revealFrame(created.frame);
+                }
                 setAddMenu(null);
               }}
               onClose={() => setAddMenu(null)}
             />
-          </div>
+          </DraggablePanel>
         </>
       ) : null}
 
@@ -2203,4 +2451,4 @@ export const CanvasStage = ({
       </div>
     </div>
   );
-};
+});

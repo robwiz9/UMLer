@@ -13,6 +13,8 @@
 
 import type { SceneDocument } from "./scene.ts";
 import { DIAGRAM_KIND_LABELS } from "./scene.ts";
+import type { ImageAsset } from "./nodes.ts";
+import { assetMetadataOnly, collectProjectAssets, pruneUnusedProjectAssets, type ProjectAssets } from "./assets.ts";
 import { validateScene, type Diagnostic } from "./validate.ts";
 
 export const SCENE_FILE_FORMAT = "umler.scene";
@@ -32,11 +34,14 @@ export interface ProjectFile {
   readonly exportedAt: string;
   readonly activeSceneId: string;
   readonly scenes: readonly SceneDocument[];
+  /** Project-wide image bytes; scenes reference these by asset id. */
+  readonly assets: Readonly<Record<string, ImageAsset>>;
 }
 
 export interface ImportedProject {
   readonly scenes: readonly SceneDocument[];
   readonly activeSceneId: string;
+  readonly assets: ProjectAssets;
 }
 
 export class FileFormatError extends Error {
@@ -65,6 +70,49 @@ const requireString = (value: unknown, label: string): string => {
   return value;
 };
 
+const requireFiniteNumber = (value: unknown, label: string): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new FileFormatError(`${label} must be a finite number.`);
+  }
+  return value;
+};
+
+const readProjectAssets = (value: unknown, label: string): ProjectAssets => {
+  if (value === undefined) return {};
+  const record = requireRecord(value, label);
+  const assets: Record<string, ImageAsset> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    const path = `${label}.${key}`;
+    const asset = requireRecord(entry, path);
+    requireString(asset.id, `${path}.id`);
+    const kind = requireString(asset.kind, `${path}.kind`);
+    if (kind !== "raster" && kind !== "vector") {
+      throw new FileFormatError(`${path}.kind must be "raster" or "vector".`);
+    }
+    requireString(asset.fileName, `${path}.fileName`);
+    requireString(asset.mimeType, `${path}.mimeType`);
+    requireFiniteNumber(asset.byteLength, `${path}.byteLength`);
+    const width = requireFiniteNumber(asset.intrinsicWidth, `${path}.intrinsicWidth`);
+    const height = requireFiniteNumber(asset.intrinsicHeight, `${path}.intrinsicHeight`);
+    if (width <= 0 || height <= 0) {
+      throw new FileFormatError(`${path} must have positive intrinsic dimensions.`);
+    }
+    requireString(asset.checksum, `${path}.checksum`);
+    const storage = requireString(asset.storage, `${path}.storage`);
+    if (storage !== "indexeddb" && storage !== "data-url" && storage !== "project-file") {
+      throw new FileFormatError(`${path}.storage has an unsupported value.`);
+    }
+    if (asset.dataUrl !== undefined && typeof asset.dataUrl !== "string") {
+      throw new FileFormatError(`${path}.dataUrl must be a string when present.`);
+    }
+    if (asset.exportPath !== undefined && typeof asset.exportPath !== "string") {
+      throw new FileFormatError(`${path}.exportPath must be a string when present.`);
+    }
+    assets[key] = asset as unknown as ImageAsset;
+  }
+  return assets;
+};
+
 const parseJson = (text: string): unknown => {
   const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   try {
@@ -84,7 +132,11 @@ const formatDiagnostics = (diagnostics: readonly Diagnostic[]): string => {
   return `${messages.join("; ")}${remainder}`;
 };
 
-const readScene = (value: unknown, label: string): SceneDocument => {
+const readScene = (
+  value: unknown,
+  label: string,
+  externalAssets: ProjectAssets = {},
+): SceneDocument => {
   const scene = requireRecord(value, label);
   if (scene.schemaVersion !== "umler.scene/1") {
     throw new FileFormatError(
@@ -113,11 +165,26 @@ const readScene = (value: unknown, label: string): SceneDocument => {
   requireRecord(canvas.grid, `${label}.canvas.grid`);
   requireRecord(scene.layout, `${label}.layout`);
   requireRecord(scene.theme, `${label}.theme`);
-  requireRecord(scene.nodes, `${label}.nodes`);
+  const nodes = requireRecord(scene.nodes, `${label}.nodes`);
   requireRecord(scene.edges, `${label}.edges`);
-  requireRecord(scene.assets, `${label}.assets`);
+  const sceneAssets = requireRecord(scene.assets, `${label}.assets`);
 
-  const candidate = scene as unknown as SceneDocument;
+  const mergedAssets: Record<string, unknown> = { ...sceneAssets };
+  for (const node of Object.values(nodes)) {
+    if (
+      isRecord(node) &&
+      node.kind === "image" &&
+      typeof node.assetId === "string" &&
+      externalAssets[node.assetId] !== undefined
+    ) {
+      mergedAssets[node.assetId] = externalAssets[node.assetId];
+    }
+  }
+
+  const candidate = {
+    ...scene,
+    assets: mergedAssets,
+  } as unknown as SceneDocument;
   let diagnostics: readonly Diagnostic[];
   try {
     diagnostics = validateScene(candidate);
@@ -157,6 +224,7 @@ export const serializeSceneFile = (scene: SceneDocument): string =>
 export const serializeProjectFile = (
   scenes: readonly SceneDocument[],
   activeSceneId: string,
+  assets?: ProjectAssets,
 ): string => {
   if (scenes.length === 0) {
     throw new FileFormatError("A project must contain at least one scene.");
@@ -171,13 +239,34 @@ export const serializeProjectFile = (
   if (!ids.has(activeSceneId)) {
     throw new FileFormatError("The active scene is not part of the project.");
   }
+  const projectAssets = pruneUnusedProjectAssets(
+    scenes,
+    assets ?? collectProjectAssets(scenes),
+  );
+  const projectScenes = scenes.map((scene) => {
+    const referenced = new Set<string>();
+    for (const node of Object.values(scene.nodes)) {
+      if (node.kind === "image" && node.assetId !== undefined) {
+        referenced.add(String(node.assetId));
+      }
+    }
+    return {
+      ...scene,
+      assets: Object.fromEntries(
+        Object.entries(scene.assets)
+          .filter(([id]) => referenced.has(id))
+          .map(([id, asset]) => [id, assetMetadataOnly(asset)]),
+      ),
+    };
+  });
   return `${JSON.stringify(
     {
       format: PROJECT_FILE_FORMAT,
       version: FILE_FORMAT_VERSION,
       exportedAt: new Date().toISOString(),
       activeSceneId,
-      scenes,
+      scenes: projectScenes,
+      assets: projectAssets,
     } satisfies ProjectFile,
     null,
     2,
@@ -209,8 +298,9 @@ export const deserializeProjectFile = (text: string): ImportedProject => {
     throw new FileFormatError("The project does not contain any scenes.");
   }
 
+  const assets = readProjectAssets(root.assets, "Project assets");
   const scenes = root.scenes.map((scene, index) =>
-    readScene(scene, `Scene ${index + 1}`),
+    readScene(scene, `Scene ${index + 1}`, assets),
   );
   const ids = new Set<string>();
   for (const scene of scenes) {
@@ -230,7 +320,7 @@ export const deserializeProjectFile = (text: string): ImportedProject => {
     ? requestedActive
     : firstScene.id;
 
-  return { scenes, activeSceneId };
+  return { scenes, activeSceneId, assets };
 };
 
 /** Readable, filesystem-safe download names. */

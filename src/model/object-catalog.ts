@@ -29,7 +29,6 @@ import { DEFAULT_THEME } from "./styles.ts";
 import type { Point, Rect } from "./geometry.ts";
 import { rect, rectBottom, rectRight, snap } from "./geometry.ts";
 import {
-  asAssetId,
   asNodeId,
   asRowId,
   asSectionId,
@@ -76,7 +75,7 @@ const COMMON_TEMPLATES: readonly ObjectTemplate[] = [
   {
     id: "image",
     label: "Image",
-    hint: "Placeholder frame for a future asset",
+    hint: "Drop a PNG/JPG/SVG, or add a placeholder frame",
     icon: "▨",
     group: "annotation",
   },
@@ -413,38 +412,47 @@ const commentNode = (frame: Rect): CommentNode => ({
   body: "Comment",
 });
 
-const imageNode = (frame: Rect): { node: ImageNode; asset: ImageAsset } => {
-  const assetId = asAssetId(newId("asset"));
-  const asset: ImageAsset = {
-    id: assetId,
-    kind: "raster",
-    fileName: `${assetId}.png`,
-    mimeType: "image/png",
-    byteLength: 0,
-    intrinsicWidth: 320,
-    intrinsicHeight: 180,
-    checksum: `sha256:placeholder-${assetId}`,
-    storage: "project-file",
-    exportPath: `assets/${assetId}.png`,
-  };
-  return {
-    node: {
-      ...shapeBase(asNodeId(newId("image")), "Image", frame),
-      kind: "image",
-      assetId,
-      caption: "Image",
-      fit: "contain",
-      alt: "Image placeholder",
-      showBorder: true,
-    },
-    asset,
-  };
-};
+const imageNode = (frame: Rect): ImageNode => ({
+  ...shapeBase(asNodeId(newId("image")), "Image", frame),
+  kind: "image",
+  caption: "Image",
+  fit: "contain",
+  alt: "Empty image frame",
+  showBorder: false,
+});
 
 export interface CreatedObject {
   readonly node: SceneNode;
   readonly asset?: ImageAsset;
 }
+
+/**
+ * Creates an image object sized to the dropped asset's intrinsic ratio. The
+ * frame is aspect-locked by the canvas resize path.
+ */
+export const createImageObject = (
+  scene: SceneDocument,
+  center: Point,
+  asset: ImageAsset,
+): CreatedObject => {
+  const maxWidth = 240;
+  const maxHeight = 180;
+  const scale = Math.min(maxWidth / asset.intrinsicWidth, maxHeight / asset.intrinsicHeight);
+  const width = Math.max(36, Math.round(asset.intrinsicWidth * scale));
+  const height = Math.max(36, Math.round(asset.intrinsicHeight * scale));
+  const frame = placeObjectFrame(scene, center, width, height);
+  const node: ImageNode = {
+    ...shapeBase(asNodeId(newId("image")), asset.fileName, frame),
+    kind: "image",
+    z: 3,
+    assetId: asset.id,
+    fit: "contain",
+    alt: asset.fileName,
+    showBorder: false,
+    style: scene.theme.shape,
+  };
+  return { node, asset };
+};
 
 
 
@@ -461,51 +469,58 @@ export const createObjectFromTemplate = (
   const template = objectTemplate(diagramKind, templateId);
   if (template === undefined) return null;
 
+  const withSceneTheme = (node: SceneNode): SceneNode =>
+    node.kind === "table" || node.kind === "relationAttribute"
+      ? { ...node, style: scene.theme.table }
+      : { ...node, style: scene.theme.shape };
+  const created = (node: SceneNode, asset?: ImageAsset): CreatedObject =>
+    asset === undefined
+      ? { node: withSceneTheme(node) }
+      : { node: withSceneTheme(node), asset };
+
   switch (templateId) {
     case "entity-table":
-      return { node: entityTable(placeObjectFrame(scene, center, 225, 90)) };
+      return created(entityTable(placeObjectFrame(scene, center, 225, 90)));
     case "associative-table":
-      return { node: associativeTable(placeObjectFrame(scene, center, 225, 72)) };
+      return created(associativeTable(placeObjectFrame(scene, center, 225, 72)));
     case "relation-attribute":
-      return { node: relationAttribute(placeObjectFrame(scene, center, 198, 72)) };
+      return created(relationAttribute(placeObjectFrame(scene, center, 198, 72)));
     case "class":
-      return { node: classTable(placeObjectFrame(scene, center, 225, 108)) };
+      return created(classTable(placeObjectFrame(scene, center, 225, 108)));
     case "state":
-      return { node: stateNode(placeObjectFrame(scene, center, 180, 54)) };
+      return created(stateNode(placeObjectFrame(scene, center, 180, 54)));
     case "initial-state":
-      return { node: pseudostateNode(placeObjectFrame(scene, center, 18, 18), "initial") };
+      return created(pseudostateNode(placeObjectFrame(scene, center, 18, 18), "initial"));
     case "final-state":
-      return { node: pseudostateNode(placeObjectFrame(scene, center, 18, 18), "final") };
+      return created(pseudostateNode(placeObjectFrame(scene, center, 18, 18), "final"));
     case "choice":
-      return { node: pseudostateNode(placeObjectFrame(scene, center, 18, 18), "choice") };
+      return created(pseudostateNode(placeObjectFrame(scene, center, 18, 18), "choice"));
     case "communication-object":
-      return { node: communicationObject(placeObjectFrame(scene, center, 180, 45)) };
+      return created(communicationObject(placeObjectFrame(scene, center, 180, 45)));
     case "lifeline": {
       // A new lane belongs to the right of the existing lanes, aligned with
       // their heads. Dropping it at the cursor would make a 630pt lifeline
       // jump a whole height downward or land before the first lane.
       const lanes = Object.values(scene.nodes).filter((node) => node.kind === "lifeline");
       if (lanes.length === 0) {
-        return { node: lifelineNode(placeObjectFrame(scene, center, 108, 630)) };
+        return created(lifelineNode(placeObjectFrame(scene, center, 108, 630)));
       }
       const right = Math.max(...lanes.map((lane) => rectRight(lane.frame)));
       const top = Math.min(...lanes.map((lane) => lane.frame.y));
       const laneCenter = { x: right + 27 + 54, y: top + 315 };
-      return { node: lifelineNode(placeObjectFrame(scene, laneCenter, 108, 630)) };
+      return created(lifelineNode(placeObjectFrame(scene, laneCenter, 108, 630)));
     }
     case "actor":
-      return { node: actorNode(placeObjectFrame(scene, center, 72, 126)) };
+      return created(actorNode(placeObjectFrame(scene, center, 72, 126)));
     case "use-case":
-      return { node: useCaseNode(placeObjectFrame(scene, center, 162, 54)) };
+      return created(useCaseNode(placeObjectFrame(scene, center, 138, 45)));
     case "system-boundary":
-      return { node: boundaryFrame(placeObjectFrame(scene, center, 450, 270)) };
+      return created(boundaryFrame(placeObjectFrame(scene, center, 450, 270)));
     case "interaction-frame":
-      return { node: interactionFrame(placeObjectFrame(scene, center, 360, 180)) };
+      return created(interactionFrame(placeObjectFrame(scene, center, 360, 180)));
     case "comment":
-      return { node: commentNode(placeObjectFrame(scene, center, 180, 72)) };
-    case "image": {
-      const created = imageNode(placeObjectFrame(scene, center, 144, 90));
-      return { node: created.node, asset: created.asset };
-    }
+      return created(commentNode(placeObjectFrame(scene, center, 180, 72)));
+    case "image":
+      return created(imageNode(placeObjectFrame(scene, center, 144, 90)));
   }
 };

@@ -1,9 +1,12 @@
 import { useEffect } from "react";
-import type { SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import type { ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { CanvasTextFocusRequest } from "../model/text-targets.ts";
 import type { RowId, SectionId } from "../model/ids.ts";
 import { asSectionId } from "../model/ids.ts";
+import { TextStyleControls } from "../app/TextStyleControls.tsx";
+import { BackgroundControl } from "../app/BackgroundControl.tsx";
+import { ImageAssetControls } from "./ImageAssetControls.tsx";
 
 interface NodeFocusMenuProps {
   readonly node: SceneNode;
@@ -18,10 +21,38 @@ interface NodeFocusMenuProps {
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
   readonly onDeleteNode: (nodeId: string) => void;
   readonly onAddActivation: (nodeId: string, worldY: number) => void;
+  readonly imageAssets: Readonly<Record<string, ImageAsset>>;
+  readonly onAssignImage: (nodeId: string, file: File) => Promise<void>;
+  readonly onUseImageAsset: (nodeId: string, assetId: string) => void;
+  readonly onRemoveImage: (nodeId: string) => void;
   readonly onClose: () => void;
 }
 
 const CONSTRAINTS = ["PK", "FK", "NN", "UQ"] as const;
+const VISIBILITIES: readonly Visibility[] = ["+", "-", "#", "~"];
+
+const LockIcon = ({ locked }: { readonly locked: boolean }) => (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+    <path
+      d="M5.2 7V4.8a2.8 2.8 0 0 1 5.6 0V7"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+    />
+    <rect
+      x="3.2"
+      y="7"
+      width="9.6"
+      height="6.3"
+      rx="1.5"
+      fill={locked ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.3"
+    />
+    {locked ? <circle cx="8" cy="10.15" r="1" fill="white" /> : null}
+  </svg>
+);
 
 const focusElementId = (request: CanvasTextFocusRequest): string | null => {
   const target = request.target;
@@ -58,6 +89,10 @@ export const NodeFocusMenu = ({
   onDeleteSection,
   onDeleteNode,
   onAddActivation,
+  imageAssets,
+  onAssignImage,
+  onUseImageAsset,
+  onRemoveImage,
   onClose,
 }: NodeFocusMenuProps) => {
   useEffect(() => {
@@ -88,15 +123,34 @@ export const NodeFocusMenu = ({
       image: "Image",
       comment: "Comment",
     };
+    const lockButton = (
+      <button
+        type="button"
+        className={`icon-button lock-button ${node.locked ? "on" : ""}`}
+        onClick={() => onUpdateNode(node.id, { locked: !node.locked })}
+        title={node.locked ? "Unlock object from auto-layout" : "Lock object against auto-layout"}
+        aria-label={node.locked ? "Unlock object" : "Lock object"}
+        aria-pressed={node.locked}
+      >
+        <LockIcon locked={node.locked} />
+      </button>
+    );
     const head = (
       <div className="popover-head">
         <div>
           <strong>{kindTitle[node.kind] ?? node.kind}</strong>
           <span>{node.kind === "comment" ? "note" : node.name}</span>
         </div>
-        <button type="button" className="icon-button" onClick={onClose} title="Close object menu">×</button>
+        {focus.kind === "lifelineSpine" ? (
+          <button type="button" className="icon-button" onClick={onClose} title="Close object menu">×</button>
+        ) : (
+          lockButton
+        )}
       </div>
     );
+    const objectTextBase = node.kind === "frame" || node.kind === "lifeline"
+      ? { ...node.style.text, weight: 600 as const }
+      : node.style.text;
 
     if (focus.kind === "lifelineSpine" && node.kind === "lifeline") {
       return (
@@ -151,6 +205,16 @@ export const NodeFocusMenu = ({
               onChange={(event) => onUpdateNode(node.id, { body: event.target.value })}
             />
           </label>
+          <BackgroundControl
+            value={node.backgroundColor}
+            fallback="#fffdf2"
+            onChange={(backgroundColor) => onUpdateNode(node.id, { backgroundColor })}
+          />
+          <TextStyleControls
+            base={node.style.text}
+            value={node.textStyle}
+            onChange={(textStyle) => onUpdateNode(node.id, { textStyle })}
+          />
           <div className="focus-actions">
             <button
               type="button"
@@ -190,10 +254,24 @@ export const NodeFocusMenu = ({
     return (
       <div className="node-focus-menu">
         {head}
+        {node.kind === "image" ? (
+          <ImageAssetControls
+            node={node}
+            imageAssets={imageAssets}
+            onAssign={(file) => onAssignImage(node.id, file)}
+            onUseAsset={(assetId) => onUseImageAsset(node.id, assetId)}
+            onRemove={() => onRemoveImage(node.id)}
+          />
+        ) : null}
         <label className="field-label">
           {label}
           <input id={id} name={id} value={value} onChange={(event) => update(event.target.value)} />
         </label>
+        <TextStyleControls
+          base={objectTextBase}
+          value={node.textStyle}
+          onChange={(textStyle) => onUpdateNode(node.id, { textStyle })}
+        />
         <div className="focus-actions">
           <button
             type="button"
@@ -235,7 +313,16 @@ export const NodeFocusMenu = ({
             <strong>Table header</strong>
             <span>{node.name}</span>
           </div>
-          <button type="button" className="icon-button" onClick={onClose} title="Close object menu">×</button>
+          <button
+            type="button"
+            className={`icon-button lock-button ${node.locked ? "on" : ""}`}
+            onClick={() => onUpdateNode(node.id, { locked: !node.locked })}
+            title={node.locked ? "Unlock object from auto-layout" : "Lock object against auto-layout"}
+            aria-label={node.locked ? "Unlock object" : "Lock object"}
+            aria-pressed={node.locked}
+          >
+            <LockIcon locked={node.locked} />
+          </button>
         </div>
         <label className="field-label">
           Entity table name
@@ -259,6 +346,32 @@ export const NodeFocusMenu = ({
             />
           </label>
         ) : null}
+        <BackgroundControl
+          value={node.kind === "table" ? node.header.backgroundColor : undefined}
+          fallback={node.style.headerFill.color ?? "#f3f1eb"}
+          onChange={(backgroundColor) => {
+            if (node.kind === "table") {
+              onUpdateNode(node.id, {
+                header: { ...node.header, backgroundColor },
+              });
+            } else {
+              onUpdateNode(node.id, { backgroundColor });
+            }
+          }}
+        />
+        <TextStyleControls
+          base={node.style.headerText}
+          value={node.kind === "table" ? node.header.textStyle : node.textStyle}
+          onChange={(textStyle) => {
+            if (node.kind === "table") {
+              onUpdateNode(node.id, {
+                header: { ...node.header, textStyle },
+              });
+            } else {
+              onUpdateNode(node.id, { textStyle });
+            }
+          }}
+        />
         <div className="focus-actions">
           <button type="button" className="editor-add" onClick={() => onAddRow(node.id, sections[0]?.id)}>
             + Add row
@@ -304,6 +417,18 @@ export const NodeFocusMenu = ({
             />
           </label>
         ) : null}
+        {node.kind === "table" ? (
+          <BackgroundControl
+            value={section.backgroundColor}
+            fallback={node.style.fill.color ?? "#ffffff"}
+            onChange={(backgroundColor) => onUpdateSection(node.id, section.id, { backgroundColor })}
+          />
+        ) : null}
+        <TextStyleControls
+          base={{ ...node.style.text, weight: 600 }}
+          value={section.textStyle}
+          onChange={(textStyle) => onUpdateSection(node.id, section.id, { textStyle })}
+        />
         <div className="focus-actions">
           <button type="button" className="editor-add" onClick={() => onAddRow(node.id, section.id)}>
             + Add row
@@ -340,6 +465,8 @@ export const NodeFocusMenu = ({
       });
     };
     const isMethod = row.kind === "method";
+    const isClassRow = node.kind === "table" && node.tableKind === "class";
+    const prefixValue = row.prefix ?? row.visibility ?? "";
     return (
       <div className="node-focus-menu">
         <div className="popover-head">
@@ -370,18 +497,65 @@ export const NodeFocusMenu = ({
                 : { type: event.target.value || undefined })}
           />
         </label>
-        <div className="chip-row compact">
-          {CONSTRAINTS.map((constraint) => (
-            <button
-              key={constraint}
-              type="button"
-              className={`chip ${(row.constraints ?? []).includes(constraint) ? "on" : ""}`}
-              onClick={() => toggleConstraint(constraint)}
-            >
-              {constraint}
-            </button>
-          ))}
-        </div>
+        {isClassRow ? (
+          <>
+            <div className="field-label">
+              <span>Visibility prefix</span>
+              <div className="chip-row compact" role="group" aria-label="Visibility prefix">
+                <button
+                  type="button"
+                  className={`chip ${prefixValue === "" ? "on" : ""}`}
+                  onClick={() =>
+                    onUpdateRow(node.id, row.id, { visibility: undefined, prefix: undefined })}
+                  title="No visibility prefix"
+                >
+                  none
+                </button>
+                {VISIBILITIES.map((visibility) => (
+                  <button
+                    key={visibility}
+                    type="button"
+                    className={`chip ${prefixValue === visibility ? "on" : ""}`}
+                    onClick={() => onUpdateRow(node.id, row.id, { visibility, prefix: undefined })}
+                    title={`UML ${visibility} visibility`}
+                  >
+                    {visibility}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className="field-label">
+              Custom prefix
+              <input
+                id={`row-${row.id}-prefix`}
+                name={`row-${row.id}-prefix`}
+                placeholder="e.g. static"
+                value={row.prefix ?? ""}
+                onChange={(event) =>
+                  onUpdateRow(node.id, row.id, { prefix: event.target.value || undefined })}
+              />
+            </label>
+          </>
+        ) : null}
+        {!isClassRow ? (
+          <div className="chip-row compact">
+            {CONSTRAINTS.map((constraint) => (
+              <button
+                key={constraint}
+                type="button"
+                className={`chip ${(row.constraints ?? []).includes(constraint) ? "on" : ""}`}
+                onClick={() => toggleConstraint(constraint)}
+              >
+                {constraint}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <TextStyleControls
+          base={node.style.text}
+          value={row.textStyle}
+          onChange={(textStyle) => onUpdateRow(node.id, row.id, { textStyle })}
+        />
         <div className="focus-actions">
           <button type="button" className="editor-add" onClick={() => onAddRow(node.id, rowSection?.id)}>
             + Add row

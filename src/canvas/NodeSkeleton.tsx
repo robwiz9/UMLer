@@ -1,6 +1,6 @@
 import type React from "react";
 import type { CommentNodeLayout, NodeLayout, RowBand, SectionBand, ShapeNodeLayout, TableNodeLayout } from "../model/layout.ts";
-import type { SceneNode } from "../model/nodes.ts";
+import type { ImageAsset, SceneNode } from "../model/nodes.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { CanvasTextTarget } from "../model/text-targets.ts";
 import { rectBottom, rectCenter, rectRight, type Point, type Rect } from "../model/geometry.ts";
@@ -12,6 +12,7 @@ interface NodeSkeletonProps {
   readonly theme: Theme;
   readonly selected: boolean;
   readonly skeleton: boolean;
+  readonly imageAsset?: ImageAsset;
   readonly onPointerDown: (event: React.PointerEvent<SVGGElement>) => void;
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
@@ -65,6 +66,8 @@ const TableBody = ({
   theme,
   skeleton,
   nodeId,
+  headerBackground,
+  sectionBackgrounds,
   onTextDoubleClick,
   onPartClick,
 }: {
@@ -72,6 +75,8 @@ const TableBody = ({
   readonly theme: Theme;
   readonly skeleton: boolean;
   readonly nodeId: SceneNode["id"];
+  readonly headerBackground?: string | null;
+  readonly sectionBackgrounds: Readonly<Record<string, string | null | undefined>>;
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
 }) => {
@@ -99,22 +104,13 @@ const TableBody = ({
         y={layout.frame.y}
         width={layout.frame.width}
         height={layout.header.frame.height}
-        fill={style.headerFill.color ?? "none"}
+        fill={headerBackground === undefined
+          ? style.headerFill.color ?? "none"
+          : headerBackground ?? "none"}
         onClick={(event) => {
           event.stopPropagation();
           onPartClick?.({ kind: "table", nodeId });
         }}
-      />
-      {/* Stroke after the header fill so the fill cannot cover half the border. */}
-      <rect
-        x={layout.frame.x}
-        y={layout.frame.y}
-        width={layout.frame.width}
-        height={layout.frame.height}
-        fill="none"
-        stroke={style.stroke.color}
-        strokeWidth={style.stroke.width}
-        strokeDasharray={dashArray(style.stroke.pattern)}
       />
       <text
         x={layout.header.textFrame.x + layout.header.textFrame.width / 2}
@@ -153,6 +149,20 @@ const TableBody = ({
           {stereotype.text}
         </text>
       ) : null}
+      {layout.sections.map((section) => {
+        const background = sectionBackgrounds[section.sectionId];
+        return typeof background === "string" ? (
+          <rect
+            key={`section-bg-${section.sectionId}`}
+            x={section.frame.x}
+            y={section.frame.y}
+            width={section.frame.width}
+            height={section.frame.height}
+            fill={background}
+            pointerEvents="none"
+          />
+        ) : null;
+      })}
       <line
         x1={layout.frame.x}
         y1={rectBottom(layout.header.frame)}
@@ -174,6 +184,18 @@ const TableBody = ({
           onPartClick={onPartClick}
         />
       ))}
+      {/* Stroke last so section/header fills cannot cover half the border. */}
+      <rect
+        x={layout.frame.x}
+        y={layout.frame.y}
+        width={layout.frame.width}
+        height={layout.frame.height}
+        fill="none"
+        stroke={style.stroke.color}
+        strokeWidth={style.stroke.width}
+        strokeDasharray={dashArray(style.stroke.pattern)}
+        pointerEvents="none"
+      />
     </>
   );
 };
@@ -341,19 +363,19 @@ const RowBody = ({
             width={badge.frame.width}
             height={badge.frame.height}
             rx={2}
-            fill="#efece4"
-            stroke="#d8d2c4"
-            strokeWidth={0.4}
+            fill={theme.table.headerFill.color ?? "none"}
+            stroke={theme.table.divider.color}
+            strokeWidth={0.45}
           />
           <text
             x={badge.frame.x + badge.frame.width / 2}
             y={badge.frame.y + badge.frame.height / 2}
             textAnchor="middle"
-            dominantBaseline="middle"
+            dominantBaseline="central"
             fontFamily={theme.table.text.fontFamily}
-            fontSize={6.5}
+            fontSize={Math.max(7, theme.table.text.fontSize - 3.3)}
             fontWeight={600}
-            fill={theme.colors.muted}
+            fill={theme.table.text.color}
           >
             {badge.label}
           </text>
@@ -740,11 +762,13 @@ const ShapeText = ({
 const CommentBody = ({
   layout,
   theme,
+  background,
   onTextDoubleClick,
   onPartClick,
 }: {
   readonly layout: CommentNodeLayout;
   readonly theme: Theme;
+  readonly background?: string | null;
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
 }) => {
@@ -757,7 +781,7 @@ const CommentBody = ({
     <>
       <polygon
         points={`${frame.x},${frame.y} ${right - fold},${frame.y} ${right},${frame.y + fold} ${right},${bottom} ${frame.x},${bottom}`}
-        fill="#fffdf2"
+        fill={background === undefined ? "#fffdf2" : background ?? "none"}
         stroke={theme.shape.stroke.color}
         strokeWidth={theme.shape.stroke.width}
       />
@@ -795,24 +819,58 @@ const ImageBody = ({
   layout,
   theme,
   skeleton,
+  asset,
+  fit,
   onTextDoubleClick,
   onPartClick,
 }: {
   readonly layout: Extract<NodeLayout, { kind: "image" }>;
   readonly theme: Theme;
   readonly skeleton: boolean;
+  readonly asset?: ImageAsset;
+  readonly fit: "contain" | "cover" | "fill";
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
 }) => {
   const { imageFrame } = layout;
+  const preserveAspectRatio =
+    fit === "cover" ? "xMidYMid slice" : fit === "fill" ? "none" : "xMidYMid meet";
   return (
     <>
-      <rect x={imageFrame.x} y={imageFrame.y} width={imageFrame.width} height={imageFrame.height} fill="#f0ede5" stroke={theme.shape.stroke.color} strokeWidth={theme.shape.stroke.width} />
-      <line x1={imageFrame.x} y1={imageFrame.y} x2={rectRight(imageFrame)} y2={rectBottom(imageFrame)} stroke={theme.colors.gridMajor} strokeWidth={0.6} />
-      <line x1={rectRight(imageFrame)} y1={imageFrame.y} x2={imageFrame.x} y2={rectBottom(imageFrame)} stroke={theme.colors.gridMajor} strokeWidth={0.6} />
-      <text x={imageFrame.x + imageFrame.width / 2} y={imageFrame.y + imageFrame.height / 2} textAnchor="middle" dominantBaseline="middle" fontFamily={theme.shape.text.fontFamily} fontSize={8} fill={theme.colors.muted} onClick={(event) => { event.stopPropagation(); onPartClick?.({ kind: "object", nodeId: layout.nodeId }); }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); onTextDoubleClick?.({ kind: "caption" }); }}>
-        IMAGE
-      </text>
+      <rect
+        x={imageFrame.x}
+        y={imageFrame.y}
+        width={imageFrame.width}
+        height={imageFrame.height}
+        fill="#f0ede5"
+      />
+      {asset?.dataUrl !== undefined ? (
+        <image
+          href={asset.dataUrl}
+          x={imageFrame.x}
+          y={imageFrame.y}
+          width={imageFrame.width}
+          height={imageFrame.height}
+          preserveAspectRatio={preserveAspectRatio}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPartClick?.({ kind: "object", nodeId: layout.nodeId });
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onTextDoubleClick?.({ kind: "caption" });
+          }}
+        />
+      ) : (
+        <>
+          <line x1={imageFrame.x} y1={imageFrame.y} x2={rectRight(imageFrame)} y2={rectBottom(imageFrame)} stroke={theme.colors.gridMajor} strokeWidth={0.6} />
+          <line x1={rectRight(imageFrame)} y1={imageFrame.y} x2={imageFrame.x} y2={rectBottom(imageFrame)} stroke={theme.colors.gridMajor} strokeWidth={0.6} />
+          <text x={imageFrame.x + imageFrame.width / 2} y={imageFrame.y + imageFrame.height / 2} textAnchor="middle" dominantBaseline="middle" fontFamily={theme.shape.text.fontFamily} fontSize={8} fill={theme.colors.muted} onClick={(event) => { event.stopPropagation(); onPartClick?.({ kind: "object", nodeId: layout.nodeId }); }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); onTextDoubleClick?.({ kind: "caption" }); }}>
+            IMAGE
+          </text>
+        </>
+      )}
       {!skeleton && layout.caption !== undefined && layout.captionFrame !== undefined ? (
         <text
           x={layout.captionFrame.x + layout.captionFrame.width / 2}
@@ -842,17 +900,37 @@ export const NodeSkeleton = ({
   theme,
   selected,
   skeleton,
+  imageAsset,
   onPointerDown,
   onTextDoubleClick,
   onPartClick,
   activationDraft,
   onActivationPointerDown,
 }: NodeSkeletonProps) => {
+  const headerBackground = node.kind === "table"
+    ? node.header.backgroundColor
+    : node.kind === "relationAttribute"
+      ? node.backgroundColor
+      : undefined;
+  const sectionBackgrounds = node.kind === "table"
+    ? Object.fromEntries(node.sections.map((section) => [section.id, section.backgroundColor]))
+    : {};
   let body: React.ReactNode;
   switch (layout.kind) {
     case "table":
     case "relationAttribute":
-      body = <TableBody layout={layout} theme={theme} skeleton={skeleton} nodeId={node.id} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
+      body = (
+        <TableBody
+          layout={layout}
+          theme={theme}
+          skeleton={skeleton}
+          nodeId={node.id}
+          headerBackground={headerBackground}
+          sectionBackgrounds={sectionBackgrounds}
+          onTextDoubleClick={onTextDoubleClick}
+          onPartClick={onPartClick}
+        />
+      );
       break;
     case "lifeline":
       body = (
@@ -868,10 +946,28 @@ export const NodeSkeleton = ({
       );
       break;
     case "image":
-      body = <ImageBody layout={layout} theme={theme} skeleton={skeleton} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
+      body = (
+        <ImageBody
+          layout={layout}
+          theme={theme}
+          skeleton={skeleton}
+          asset={imageAsset}
+          fit={node.kind === "image" ? node.fit : "contain"}
+          onTextDoubleClick={onTextDoubleClick}
+          onPartClick={onPartClick}
+        />
+      );
       break;
     case "comment":
-      body = <CommentBody layout={layout} theme={theme} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
+      body = (
+        <CommentBody
+          layout={layout}
+          theme={theme}
+          background={node.backgroundColor}
+          onTextDoubleClick={onTextDoubleClick}
+          onPartClick={onPartClick}
+        />
+      );
       break;
     default:
       body = <ShapeBody layout={layout} node={node} theme={theme} skeleton={skeleton} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
@@ -971,9 +1067,37 @@ export const NodeSkeleton = ({
         )
       ) : null}
       {node.locked ? (
-        <g pointerEvents="none">
-          <rect x={rectRight(layout.frame) - 16} y={layout.frame.y + 5} width={11} height={8} rx={1.5} fill="white" stroke={theme.colors.muted} strokeWidth={0.6} />
-          <path d={`M ${rectRight(layout.frame) - 13.5} ${layout.frame.y + 8} v -1.5 a 2 2 0 0 1 4 0 v 1.5`} fill="none" stroke={theme.colors.muted} strokeWidth={0.7} />
+        // Editor-only overlay. The Typst/CeTZ serializer must never draw this
+        // lock badge; lock state belongs to the layout engine, not the document.
+        <g
+          data-editor-only="lock-badge"
+          pointerEvents="none"
+          transform={`translate(${rectRight(layout.frame) - 17} ${layout.frame.y + 4})`}
+        >
+          <rect
+            x="0"
+            y="0"
+            width="14"
+            height="14"
+            rx="3.5"
+            fill={theme.colors.canvas}
+            opacity="0.94"
+          />
+          <path
+            d="M4.4 6.2V4.6a2.6 2.6 0 0 1 5.2 0v1.6"
+            fill="none"
+            stroke={theme.colors.muted}
+            strokeWidth="1"
+            strokeLinecap="round"
+          />
+          <rect
+            x="3.6"
+            y="6.2"
+            width="6.8"
+            height="4.8"
+            rx="1"
+            fill={theme.colors.muted}
+          />
         </g>
       ) : null}
     </g>

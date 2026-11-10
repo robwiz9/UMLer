@@ -123,6 +123,51 @@ export const snapResizedFrame = (
   return { ...frame, width, height };
 };
 
+export type ResizeCorner = "nw" | "ne" | "sw" | "se";
+
+/**
+ * Resizes from any corner while keeping the opposite corner fixed. The moving
+ * edges snap to the grid, so a west/north resize also moves the frame origin.
+ */
+export const resizeFrameFromCorner = (
+  start: Rect,
+  corner: ResizeCorner,
+  delta: Point,
+  gridSize: number,
+  gridEnabled: boolean,
+  aspectRatio?: number,
+  extraHeight = 0,
+): Rect => {
+  const min = gridSize > 0 ? gridSize : 1;
+  const east = corner === "ne" || corner === "se";
+  const south = corner === "se" || corner === "sw";
+  const rawWidth = Math.max(min, start.width + (east ? delta.x : -delta.x));
+  const rawHeight = Math.max(min, start.height + (south ? delta.y : -delta.y));
+
+  let width = Math.max(min, gridEnabled ? snap(rawWidth, gridSize) : rawWidth);
+  let height = Math.max(min, gridEnabled ? snap(rawHeight, gridSize) : rawHeight);
+
+  if (aspectRatio !== undefined && aspectRatio > 0) {
+    const widthDriven =
+      Math.abs(rawWidth / Math.max(1, start.width) - 1) >=
+      Math.abs(rawHeight / Math.max(1, start.height) - 1);
+    if (widthDriven) {
+      height = Math.max(min, width / aspectRatio) + extraHeight;
+    } else {
+      const imageHeight = Math.max(min, height - extraHeight);
+      width = Math.max(min, imageHeight * aspectRatio);
+      height = imageHeight + extraHeight;
+    }
+  }
+
+  return {
+    x: east ? start.x : start.x + start.width - width,
+    y: south ? start.y : start.y + start.height - height,
+    width,
+    height,
+  };
+};
+
 /** Ports that should be shown as snap handles for a selected/hovered node. */
 export const snapHandlesForNode = (
   ports: Readonly<Record<string, PortGeometry>>,

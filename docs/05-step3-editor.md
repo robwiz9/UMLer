@@ -10,8 +10,9 @@ a sparse orthogonal A* router, and a layered crossing-reduction layout with lock
 
 ### Application menu, scenes and panel
 
-The top bar is the only scene switcher. Its **File** menu exports and imports scene and project JSON files.
-The **Scene** menu provides:
+The top bar is the only scene switcher. Its **File** menu starts a new project, opens/saves GitHub projects,
+and exports and imports scene and project JSON files. The
+**Scene** menu provides:
 
 - **New scene…** — dialog with six square diagram-type icon buttons (ER, class, use case, sequence,
   communication, state), a **Template / Empty** start choice (Template is the default and uses that type’s
@@ -21,13 +22,16 @@ The **Scene** menu provides:
 - **Duplicate scene** — clones the active document with a unique ` (2)`, ` (3)`, … suffix;
 - **Delete this scene…** — warning dialog; disabled when only one scene remains.
 
+**New project** uses the same diagram type, Template/Empty and name picker, but replaces the entire project
+with the one new scene and clears any GitHub binding. It warns that the current scenes are replaced.
+
 Scene operations reset the undo history after switching/creating/deleting and fit the canvas to the new scene.
 The layout panel can be hidden with the **Panel** toolbar toggle; the workspace then becomes a single canvas
 column and the canvas refits to the larger area.
 
 ### Scene and project files
 
-The **File** menu has four actions:
+The **File** menu’s scene/project file actions are:
 
 - **Export scene…** downloads the active scene as `<scene title>.scene.json`. The wrapped document contains a
   format marker, version, export timestamp and one `SceneDocument`.
@@ -37,19 +41,114 @@ The **File** menu has four actions:
 - **Export project…** downloads `umler-project.json` with every scene and the active scene id.
 - **Import project…** validates all scenes, asks for confirmation, replaces the in-session project with the
   file’s scenes and restores its active scene. It is a project open, not a merge.
+- **Purge unused images** removes uploaded image assets that no image node references from the browser library;
+  it is disabled when nothing is unused.
 
 Both formats carry a top-level `format`/`version` envelope. Scene imports also accept a bare
 `umler.scene/1` document, which keeps the existing `examples/*.json` files usable. Import runs
 `validateScene`; any structural errors reject the file before it reaches the canvas. Unknown versions and
 duplicate project scene ids are rejected. Project imports reset the undo history to the active imported scene.
 
-Image assets are exported as metadata records only; binary image bytes and the real asset store are Step 4.
+Image bytes are part of the project document. Project JSON keeps a top-level `assets` map with each image’s data
+URL exactly once; scene copies carry only the asset metadata and image nodes reference the asset id. A standalone
+`.scene.json` still embeds its assets so the scene remains self-contained.
+
+### GitHub projects
+
+**File → Open from GitHub…** signs in with GitHub’s OAuth **device flow**. The browser requests a device code
+through a tiny same-origin relay in the Vite dev/preview server (`/github/oauth/*`), because GitHub’s OAuth
+endpoints do not send CORS headers. No client secret is needed or stored. Create an OAuth App, enable
+**Device flow**, and either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` or paste the public client id once in
+the dialog’s **Set up GitHub OAuth** field (stored in this browser). A personal access token with `repo` scope
+is available as a fallback and is kept in memory only.
+
+The picker selects a repository, branch, folder and project file name. A debounced contents lookup reports
+whether the path contains an existing UMLer project. On open:
+
+- an existing file is validated and loaded, restoring its active scene;
+- a missing file creates a blank ER project at that path;
+- if the local project has unsaved changes, the user chooses **Create blank project** / **Upload current
+  project**, or for an existing remote, **Replace local with remote** / **Overwrite remote**.
+
+A bound project records the remote blob SHA and a project digest. The status bar shows the repository path and
+**Save** / **Synced** state; **Save to GitHub** and `Ctrl/Cmd+S` write all scenes plus the active scene. Save
+first checks the remote SHA. If the remote changed, was deleted, or the PUT returns a conflict, UMLer does not
+auto-merge: it offers **Replace local with remote**, **Overwrite remote** / **Recreate remote**, or **Cancel**.
+A remote file that fails `deserializeProjectFile` is rejected before it can touch the local canvas, and image
+bytes remain metadata-only like project-file exports.
+
+The open project (all scenes, active scene, GitHub binding, sync baseline) is autosaved to browser storage and
+restored on refresh, so reopening the app does not reset to the demo. The GitHub session token is stored in
+`sessionStorage`: it survives a page refresh but is cleared when the tab closes. Signing out removes it. The
+path and SHA restore with the project, so **Open from GitHub** starts at the previously bound repository, branch,
+folder and file.
+
+A bound project auto-saves to GitHub every two minutes when its project digest differs from the last sync. The
+status bar shows **Saving…**, and a sticky progress toast stays visible until the request resolves. Manual
+saves use the same progress toast. If an auto-save finds a remote change, a deleted file, an invalid remote
+project or an API conflict, it raises a sticky warning toast with **Review**; it never opens the blocking conflict
+dialog by itself. Clicking the toast runs a manual save and opens the usual **Replace local with remote /
+Overwrite remote / Recreate remote** choices.
+
+While changes are unsaved, the window’s `beforeunload` guard asks for browser confirmation before a reload,
+navigation or tab close. For a local project this tracks the project digest since it was created/imported; for a
+GitHub-bound project it tracks the digest since the last successful load/save. A successful manual or automatic
+save removes the guard because the project digest becomes the new baseline.
+
+### Diagram typography and theme
+
+The diagram uses bundled **Latin Modern Roman** and **Latin Modern Mono** faces from `src/res/LatinModern`
+(regular, bold, italic and bold-italic), with a white paper background and Computer Modern-style serif labels.
+Default diagram sizes increased to 10.5 pt for table/shape text, 11.5 pt for table headers and 9.5 pt for edge
+labels; UI text was also raised by one pixel across the shell (the chrome stays sans-serif). The canvas measurer
+waits for `document.fonts.ready`, so text frames, row bands and label collisions use the loaded Latin Modern
+metrics.
+Contract badges use the same tint fill and font colour as table headers and are centred with a central baseline.
+
+The side rail starts with a **Theme** card above **Layout**. Its defaults apply to new objects and to existing
+objects that do not carry their own text overrides:
+
+- **Tint** — header background and attribute-chip fill, with a **Transparent tint** toggle;
+- **Background** — entity/class/shape background, with a **Transparent object background** toggle;
+- **Text** — default diagram font colour;
+- **Size** — scales table/shape text, header text and edge-label text together;
+- **Transparent line-label background** — removes the white plate behind connector labels;
+- **Reset theme** restores the built-in token set.
+
+Theme changes restyle existing nodes and new objects adopt `scene.theme` at creation. Per-object typography
+overrides are stored separately, so they continue to win after a theme change. Colour pickers keep their drag
+preview local and commit once the pointer pauses, so continuously dragging a colour selector does not rebuild
+the canvas on every input event.
+
+Individual **Background** overrides are available in the table-header menu, every section menu and the comment
+menu. They support a colour, transparent, or reset-to-theme state and are stored on the scene document. Section
+backgrounds are painted beneath all section content, while the table border is repainted last so fills cannot
+clip it.
+
+### Text overrides
+
+The floating object, table-header, section, row, comment and connector-label menus include a compact **Text
+style** row:
+
+- **B**, **I** and **M** toggles for bold, italic and Latin Modern Mono;
+- a compact numeric font-size override (5–48 pt);
+- a font-colour override;
+- **Reset** to remove all overrides for that text target.
+
+Colour overrides use the same deferred-commit color input as the theme card, keeping the menu responsive while
+the colour wheel is dragged. The text measurement cache keys include the resolved colour (as well as the font
+and line metrics), so a colour-only override updates immediately without needing a bold/italic/mono/size change.
+
+Table header overrides live on the header, row overrides on the row, section overrides on the section, object
+overrides on the node, and connector-label overrides on that specific source/center/target label. Overrides are
+part of the scene document and survive save/import round trips.
 
 ### Adding objects
 
 Two entry points open the same catalogue:
 
-- the **+ Add object** button in the canvas top-right opens it under the button;
+- the full-width **+ Add object** button at the top of the left panel opens it just inside the canvas; when the
+  panel is collapsed, the filled rounded **+** square in the canvas top-left opens the same menu;
 - **single right-click on empty canvas space** opens it at the pointer. Right-drag still pans; a right-drag
   never opens the catalogue. Right-clicking an object or connector is consumed and does not add anything.
 
@@ -72,33 +171,66 @@ menu: they are drawn by dragging from the border, row or spine handles of a sele
 different object creates an edge whose semantic family and default terminals match the diagram type.
 
 New objects are grid-aligned, placed near the requested point without overlapping an existing object, selected
-immediately and given their floating focus menu. A new sequence lifeline is added as a new lane to the right of
-the existing lanes, aligned with their heads. Images get a placeholder asset record until Step 4 replaces it
-with the real asset pipeline.
+immediately and given their floating focus menu. When adding from the panel or compact **+ Add object** button, the
+canvas pans minimally if the placement search lands outside the viewport; tall objects such as a new sequence
+lifeline reveal their head/top edge rather than being centred out of view. A new sequence lifeline is added as a
+new lane to the right of the existing lanes, aligned with their heads. The palette’s Image item creates a
+placeholder frame; dropping an actual image file creates a filled image object instead.
+
+### Dropping images
+
+Drag one or more **PNG**, **JPEG** or **SVG** files onto the canvas. Each file is read into a project-level image
+asset (SHA-256 checksum, intrinsic dimensions, data URL) and an image object is placed at the drop point. Dropping
+the same bytes again reuses the existing asset id, so several image nodes or scenes reference one stored copy.
+The object renders the actual image inside its frame, supports the normal move and Delete interactions, and uses
+an aspect-locked corner resize. Assets are capped at 10 MB each. The project JSON keeps the bytes once in the
+top-level `assets` map; scene records keep metadata only and reference the asset id.
+
+Uploaded assets that are not currently referenced stay in the browser library so they can be selected again. The
+project exporter and GitHub save serialize **only referenced assets**, so orphaned bytes do not enter the project
+file. The browser library is pruned on page reload, or immediately via **File → Purge unused images**.
+
+The floating image menu shows a **Use uploaded image** dropdown and a click-or-drop file zone while the object is
+empty. Selecting an uploaded asset or dropping a new file fills the frame and replaces those controls with
+**Remove image**, which clears the reference and returns an empty image frame. Image borders are not drawn; the
+caption sits below the image with a small gap, and adding/removing a caption grows/shrinks the frame height
+without changing the image area’s aspect ratio.
 
 ### Floating object focus menus
 
 Object properties are no longer edited in the side inspector. The side inspector is read-only; editing controls
-appear beside the focused object, like the connector menus.
+appear beside the focused object, like the connector menus. Every floating menu (object, terminal, line and
+add-object) can be moved by dragging its header. Its close/lock buttons do not start a drag. **Escape** closes
+the topmost menu; **Enter** commits and closes it while focus is in a single-line text field. Multiline comment
+fields keep their newline behaviour.
 
 ![Floating table header controls](./assets/step3-object-menu.png)
 
 Focus granularity for tables/classes:
 
 - **Table header focus** — first click a header. Controls: entity/table name, class stereotype (classes),
-  Add row, Add section. Double-clicking the header starts editing the table name.
+  Add row, Add section, and the **lock** toggle. The lock button replaces the former close button: it freezes
+  this object's frame during auto-layout and shows the small padlock marker on the object. The padlock is an
+  editor-only overlay and must **not** be emitted by the Typst/CeTZ serializer. Double-clicking the
+  header starts editing the table name.
 - **Section focus** — first click a section (header, empty section area, or the top border/divider line above
   its rows). Controls: section header text, Add row, Add section, Remove this section. A second click on that
   section's header focuses the header input. The divider above the rows is a dedicated hit strip, so an
   untitled section remains selectable even when its header text is empty.
 - **Row focus** — click anywhere in a row. Controls: attribute/operation name, data type or return type,
-  `PK`/`FK`/`NN`/`UQ` toggles, Add row, Delete row. Double-clicking the name or type text focuses that field.
+  Add row, Delete row. On class tables this also includes the UML **visibility prefix** chips
+  (`+`, `-`, `#`, `~`, none) and a custom-prefix override; ER rows keep the `PK`/`FK`/`NN`/`UQ` toggles.
+  Double-clicking the name or type text focuses that field.
 
 Other diagram objects get an object focus menu with their displayed text field: actor/use-case/state/object/
 relationship/frame name, lifeline head label, image caption, or a multi-line comment body. Shape bodies are
 clickable so blank areas also focus the object. An empty lifeline head label is stored as an empty label and is
 rendered blank; it does not fall back to the node name. Header and object menus have a **Delete object** action,
-which also removes every connector attached to that object.
+which also removes every connector attached to that object. Each of these text targets also gets the Text style
+row described above.
+
+New use cases use a tighter default frame (`138 × 45`) so one-to-three-word labels do not float in a large
+ellipse; all new shapes use the reduced shape padding, while existing frames remain user-resizable.
 
 ### Undo / redo
 
@@ -139,20 +271,28 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
 `Delete` / `Backspace` applies the least destructive removal for the current focus, unless focus is in an input,
 textarea, select or content-editable element:
 
-1. focused **section** → delete that section (for a table);
-2. focused **row** → delete that row;
-3. selected **activation bar** → delete that activation only;
-4. selected **connector** → delete the connector;
-5. selected **object** → delete the object and all attached connectors.
+1. focused **table header** → clear the header name, stereotype and keywords (the object stays selected);
+2. focused **section** → delete that section (for a table);
+3. focused **row** → delete that row;
+4. selected **activation bar** → delete that activation only;
+5. selected **connector** → delete the connector;
+6. selected **object** → delete the object and all attached connectors.
 
 Pressing Delete once on a section therefore leaves the table header intact; pressing it again with the table
-selected removes the table. Deleting a connector also removes connectors attached to it.
+selected removes the table. Delete on the header clears only the header content; a second press with the table
+still selected removes the object. Deleting a connector also removes connectors attached to it.
 
 Every edit goes through a pure `SceneDocument` helper in `src/model/edits.ts`, increments the revision once,
 and re-runs the same Phase 1 measurement pass. Frame geometry is persisted separately; row bands, ports,
 headers and badges are always derived.
 
 ### Connectors
+
+Selected objects expose four **corner resize handles** on the surrounding focus rectangle, with live
+grid-snapped resizing from any corner. Corner connection ports were removed so they do not compete with those
+resize handles. Rectangular objects keep north/east/south/west connection ports; on tables and classes the
+east/west handles sit at the centre of the header, clear of the per-row arrow handles. Row-level connectors keep
+their own handles on both sides of every row.
 
 Dragging from a selected object's border/row/spine handle draws a connector. Releasing over another object
 creates it with the diagram's default family: ER one-to-many, UML association, sequence sync message,
@@ -221,6 +361,18 @@ Mixed endpoints are first-class: a crow’s foot on the source and a cardinality
 two independent endpoint records in `markers` + `labels`. Visible connector geometry is shortened at terminal
 glyphs, so a crow’s-foot fork or an arrow does not have the line drawn through it to the entity border.
 
+**ER relationship-label conversion.** The line menu places a square `▦` action beside the center label of an
+ER relationship (not on an already-tethered relation-attribute connector). Clicking it:
+
+- creates a relation-attribute table near the relationship;
+- names the new table from the center label text;
+- attaches a dashed, marker-free relation-attribute connector to the relationship line at its midpoint;
+- removes the original center label in the same revision;
+- selects the new table and opens its table-header menu.
+
+The source/target cardinalities remain on the relationship, so only the relationship name moves into the new
+attribute table.
+
 ## 2. Sparse orthogonal A* router
 
 `src/layout/router.ts` implements a deterministic orthogonal router on a **Hanan grid**:
@@ -276,10 +428,36 @@ skeleton.
 5. assign TB or LR coordinates rank by rank, preserving node sizes;
 6. keep locked frames exactly where they are and treat them as placement obstacles;
 7. snap unlocked positions to the document grid;
-8. return the frame map; the caller commits one revision.
+8. place relation-attribute tables around their parent relationship rather than ranking them as disconnected nodes;
+9. return the frame map; the caller commits one revision.
 
-The layout panel reports moved nodes, layer count and approximate crossings before/after. The synthetic
-two-layer test in `scripts/test-layout.ts` starts with one crossing and ends with zero.
+Relation-attribute nodes are connected to a relationship **edge**, not to another node, so including them in the
+layered graph used to strand them in rank zero and let their dashed tethers cross real graph edges. Auto-layout
+now removes those tables from the rank graph, lays out the main entity graph, then orbits the tables around the
+parent relationship midpoint. The first table keeps its current side; additional tables alternate sides. A
+side-preserving search moves them along the relationship axis before moving farther away from the line, so a
+placement collision never flips a table across the relationship or through another table. Their tether anchors
+are also redistributed along the parent edge (`1/3`, `2/3` for two tables) so the dashed tethers do not merge
+into one line at the midpoint.
+
+Rectangular perimeter endings are re-anchored to the **side facing the partner** after each layout pass. This
+is what makes TB layouts clean: an edge manually attached on `east`/`west` is moved to `south`/`north` when the
+nodes stack vertically, instead of being forced to leave from the old horizontal side and route around the
+node. Use-case ellipses keep the automatic angle-anchor logic instead. Tether source ports are re-anchored the
+same way, so relation attributes leave the side facing their relationship.
+
+The layout panel reports moved nodes, layer count and approximate crossings before/after. It also exposes
+three spacing presets above the run button:
+
+| Preset | Rank gap | Node gap | Edge gap |
+|---|---:|---:|---:|
+| Tight | 63 | 36 | 24 |
+| **Normal** (default) | **90** | **54** | **36** |
+| Wide | 126 | 72 | 48 |
+
+Changing the preset patches the scene’s layout gaps in one revision; the next auto-layout run uses them. Normal
+is the default for new scenes, while imported scenes retain their stored numeric gaps. The synthetic two-layer
+test in `scripts/test-layout.ts` starts with one crossing and ends with zero.
 
 ### Use-case system boundaries
 
@@ -385,6 +563,15 @@ existing text is visibly selected.
 | `src/canvas/NodeFocusMenu.tsx` | Floating table, section, row and object control menu |
 | `src/model/text-targets.ts` | Semantic canvas-text targets + focus-request token |
 | `src/canvas/NodeSkeleton.tsx` | SVG text rendering and double-click target mapping |
+| `src/canvas/PortHandles.tsx` | Connection-port handle rendering |
+| `src/canvas/DraggablePanel.tsx` | Header-drag support and viewport clamping for floating menus |
+| `src/app/ThemePanel.tsx` | Scene theme defaults: tint, object background, font colour and size |
+| `src/app/TextStyleControls.tsx` | Shared bold/italic/mono/size/colour overrides |
+| `src/app/BackgroundControl.tsx` | Header/section/comment background overrides |
+| `src/app/DeferredColorInput.tsx` | Local colour-drag preview with deferred commits |
+| `src/model/styles.ts` | Theme tokens, Latin Modern families, override resolution |
+| `src/layout/snap.ts` | Grid/alignment snapping and all-corner resize math |
+| `src/res/LatinModern/` | Bundled Latin Modern Roman/Mono font faces |
 | `src/app/EdgeInspector.tsx` | Connector labels, route mode, stroke and reroute; reused as the line popover |
 | `src/app/LayoutPanel.tsx` | Direction choice, auto-layout action, result note |
 | `src/app/Inspector.tsx` | Read-only selection/geometry inspector |
@@ -403,10 +590,26 @@ npm run check
     locked-node auto-layout assertion
     synthetic crossing reduction 1 → 0
     LR communication reverse edges separated by one grid step
-  test:persistence: 29 assertions
+    four cardinal perimeter ports; table side handles at header centre
+    NW / NE / SE corner resize geometry
+    theme defaults + per-row text override precedence
+    new objects inherit the active scene theme
+    connector-label typography survives renaming
+    relationship-label conversion creates one object + tether and removes the label
+    normal/tight/wide spacing presets are ordered
+    relation-attribute tables avoid parent frames and occupy opposite sides
+    TB layout re-anchors rectangular endpoints to facing sides
+    relation-attribute tethers re-anchor their source side and parent t
+  test:persistence: 38 assertions
     scene + bare-scene + BOM round trips
     project round trip and active-scene fallback
     malformed/duplicate/invalid imports rejected
+  test:github: 30 assertions
+    path normalization/traversal rejection, stable project digests
+    remote SHA conflict classification, device-flow error messages
+  test:storage: 16 assertions
+    project + GitHub binding recovery round trip
+    corrupt recovery data cleared; session token restore/sign-out
 ```
 
 `npm run build` passes.
@@ -416,17 +619,60 @@ Browser checks:
 - edit table name/rows; revision increments and derived bands re-measure;
 - click a table header, section and row; confirm the correct floating menu appears beside the object and the
   side inspector stays read-only;
+- confirm the table/object header shows a lock toggle instead of a close button; toggle it, verify the clean
+  padlock marker and that auto-layout preserves the frame; confirm the marker carries the editor-only data
+  attribute and is absent from the Typst/CeTZ serializer contract;
+- change the Theme card’s tint, object background, font colour and font size; confirm existing objects and new
+  objects use the defaults, toggling **Transparent tint** and **Transparent object background** removes the
+  respective fills, and **Reset theme** restores the built-in colours and sizes;
+- drag a theme colour picker continuously and confirm the canvas updates only after the drag pauses rather than
+  rebuilding the layout on every frame;
+- toggle **Transparent line-label background** and confirm connector label plates disappear without removing
+  their text;
+- override only an attribute row’s font colour (leaving bold/italic/mono/size at their defaults) and confirm the
+  new colour is applied; create a new entity and confirm its header text uses the current default black rather
+  than a stale cached colour;
+- click a table header, move focus off the name field, press Delete and confirm the header is cleared but the
+  object and its connectors remain; press Delete again with the table selected and confirm the object is removed;
+- set a header background, a section background and a comment background; confirm each override is scoped to its
+  target, transparent/reset behave as expected, and the table border is not clipped by section fills;
+- use the Text style row on a table header, class row, section, comment and connector label; toggle B/I/M and
+  change size/colour, then reset and confirm the theme defaults return; confirm the size field stays compact and
+  a per-row override survives a later theme change;
+- inspect the PK/FK/NN/UQ chips and confirm their text is vertically centred in the chip rectangle;
+- add a new use case and confirm the tighter `138 × 45` ellipse does not leave excessive empty space around a
+  short label;
+- drag each floating menu by its header and confirm it moves within the canvas; press Escape and confirm it
+  closes; focus a single-line field, press Enter and confirm it closes; keep Shift+Enter/newlines usable in a
+  multi-line comment;
+- select a class row and confirm the visibility-prefix chips (`+`, `-`, `#`, `~`, none) and custom-prefix field
+  update the rendered row; confirm ER rows keep the PK/FK/NN/UQ controls;
+- select a table and confirm resize handles at all four corners and no corner connection arrows; confirm
+  north/south ports are at the edge midpoints and east/west ports at the header centre, while every row keeps
+  its own side arrows; resize from the NW and SE corners and confirm the opposite corner stays fixed;
 - double-click table header, section header, row name, data type, constraint badge and other object text;
   confirm the matching field is focused and selected;
 - add a table row from the floating menu and confirm the table/revision update;
 - open **+ Add object** and confirm the catalogue matches the active diagram (ER / class / use case /
-  sequence / communication / state), with Comment and Image in every catalogue;
+  sequence / communication / state), with Comment and Image in every catalogue; confirm the button is the
+  full-width filled control at the top of the left panel, and that collapsing the panel replaces it with the
+  filled rounded **+** square at the canvas top-left; both open the same draggable palette;
 - right-click empty canvas space and confirm the same catalogue opens at the pointer; right-drag to pan and
   confirm no catalogue opens on release; right-click a node and confirm no catalogue opens;
 - add an entity table, state, communication object and lifeline; confirm each is selected, placed on-screen and
-  opens its floating focus menu;
+  opens its floating focus menu; add a new sequence lifeline from the panel button and confirm the canvas
+  pans enough to reveal its head instead of leaving it above/outside the viewport;
+- confirm diagram text renders in the bundled Latin Modern Roman serif face and that row/header text remains
+  readable on the white canvas;
 - add a comment, enter two lines and resize it; confirm the note renders both lines and truncates overflow;
-- add an image and edit its caption; confirm the placeholder frame and caption frame update together;
+- add an image and edit its caption; confirm the empty image menu shows the uploaded-image dropdown and
+  click/drop file zone, assigning a file replaces those fields with **Remove image**, and removing returns an
+  empty frame while keeping the uploaded asset available in the dropdown; confirm the image has no border, the
+  caption gap and frame height adjust on add/remove, and the image area keeps its aspect; drag an SVG onto the
+  canvas and confirm it renders the real image, a second drop of identical bytes reuses the same asset id, and
+  corner resizing keeps the ratio locked, including with a caption (PNG/JPEG use the same path); confirm project
+  export/save omits the unused asset, page reload prunes it, and **File → Purge unused images** removes it
+  immediately;
 - drag from a selected object's port to another object and confirm a connector is created with the diagram's
   defaults; drag to empty space and confirm no connector is created;
 - drag from a relationship-attribute table to an existing relationship line and confirm a dashed,
@@ -472,9 +718,32 @@ Browser checks:
   `Untitled <type> diagram` until edited, Template starts from the built-in example and Empty has 0 nodes;
   duplicate (unique number suffix), rename, delete through the warning dialog, and confirm the top-bar scene
   switcher follows each change;
+- select an ER relationship center label and click the square **Convert to relation attribute** button; confirm
+  a new table named after the label appears, is connected to the relationship with a dashed tether, the old
+  center label disappears, and cardinality labels remain;
+- run auto-layout with one or more relation-attribute tables; confirm the tables are placed around their
+  relationship on opposite sides where needed, their dashed tethers do not cross through each other or the
+  parent entities, and the relationship-label conversion table stays attached;
+- run both TB and LR on the same converted scene; confirm TB flips rectangular endpoints to south/north and
+  LR uses east/west, with the relation-attribute tethers leaving the side facing the parent relationship;
+- switch the Layout spacing between Tight, Normal and Wide and run layout; confirm Normal is selected by
+  default, the gaps grow from Tight to Wide, and the positions change in one revision;
 - use File → Export scene / Import scene and confirm the scene round-trips and imports under a unique title;
   use File → Export project / Import project and confirm all scenes and the active scene are restored, then
   import broken JSON and confirm the error toast;
+- use **File → New project…**; confirm it replaces all open scenes with one new scene,
+  clears the GitHub path, and warns before discarding the project;
+- with mocked GitHub REST responses, create `models/umler-project.json`, edit the grid, save, reload, and confirm
+  the project and repository path return instead of the demo; reopen the path and confirm a non-empty ER project
+  loads with its nodes; exercise both **Replace local with remote** and **Overwrite remote** on load/save
+  conflicts and **Recreate remote** after a deletion;
+- confirm the GitHub token survives a refresh but is removed on sign-out (tab-scoped session storage); confirm the
+  client-id setup can be reopened and forgotten without losing the current project;
+- accelerate the two-minute auto-save timer and confirm a dirty bound project saves; make the remote file differ
+  and confirm auto-save shows a sticky **Review** warning toast without opening a dialog until the toast is
+  clicked; confirm a delayed save shows the **Saving to GitHub…** progress toast and then the success toast;
+- edit a project and reload: confirm the browser asks for confirmation, **Cancel** aborts the reload, and
+  **Reload** restores the recovery snapshot; confirm a successful save removes the confirmation;
 - hide and restore the layout panel and confirm the canvas widens/refits;
 - click a terminal glyph and its cardinality label; both open the terminal-only menu;
 - click the line away from its ends; the line-only menu opens with center label, line type, width and routing;
@@ -495,5 +764,5 @@ Browser checks:
 - Label dragging/pinning and automatic word wrapping are deferred; current labels are moved by the collision
   pass. Comments support explicit newlines, with per-line truncation and a resizable frame.
 - Terminal menus use SVG marker glyph previews; the CeTZ renderer’s own glyph preview remains Step 4.
-- Autosave, recent-file history and embedding real image bytes in project files are deferred.
+- Recent-file history is deferred; image bytes live in the project JSON rather than a binary sidecar.
 - Typst/CeTZ serialization and WASM compilation are Step 4.

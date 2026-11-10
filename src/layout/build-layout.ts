@@ -35,6 +35,8 @@ import type {
 } from "../model/edges.ts";
 import { portKey } from "../model/edges.ts";
 import { markerExtent } from "../model/markers.ts";
+import { resolveTextStyle } from "../model/styles.ts";
+import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
 import type {
   EdgeLabelLayout,
   EdgeLayout,
@@ -146,13 +148,31 @@ const PERIMETER: readonly {
   { side: "north-west" },
 ];
 
+const RECT_SIDES: readonly {
+  side: "north" | "east" | "south" | "west";
+}[] = [
+  { side: "north" },
+  { side: "east" },
+  { side: "south" },
+  { side: "west" },
+];
+
+/**
+ * Corner ports are deliberately omitted: the four corners are reserved for
+ * resize handles. On table-like nodes the side handles sit at the middle of the
+ * header so they do not collide with the per-row connector handles.
+ */
 const addRectPerimeterPorts = (
   ports: Map<PortId, PortGeometry>,
   nodeId: NodeId,
   frame: Rect,
+  options: { readonly sideY?: number } = {},
 ): readonly PortGeometry[] =>
-  PERIMETER.map(({ side }) => {
-    const p = compassPoint(frame, side);
+  RECT_SIDES.map(({ side }) => {
+    const p =
+      options.sideY !== undefined && (side === "east" || side === "west")
+        ? point(side === "west" ? frame.x : rectRight(frame), options.sideY)
+        : compassPoint(frame, side);
     return addPort(ports, nodeId, { kind: "perimeter", side }, p, compassNormal(side), side);
   });
 
@@ -186,18 +206,21 @@ const headerText = (
   measurer: TextMeasurer,
   node: TableNode | RelationAttributeNode,
 ): { text: TextMeasurement; stereotype?: TextMeasurement } => {
-  const style = node.style.headerText;
+  const override = node.kind === "table"
+    ? node.header.textStyle ?? node.textStyle
+    : node.textStyle;
+  const style = resolveTextStyle(node.style.headerText, override);
   const maxWidth = node.frame.width - node.style.paddingX * 2;
   return {
     text: measurer.measure(node.name, style, maxWidth),
     stereotype:
       node.kind === "table" && node.header.stereotype
-        ? measurer.measure(`«${node.header.stereotype}»`, {
+        ? measurer.measure(`«${node.header.stereotype}»`, resolveTextStyle({
             ...style,
             fontSize: Math.max(7, style.fontSize - 2),
             weight: 400,
             italic: true,
-          }, maxWidth)
+          }, override), maxWidth)
         : undefined,
   };
 };
@@ -258,7 +281,7 @@ const measureTable = (
     if (section.title !== undefined) {
       const sectionText = measurer.measure(
         section.title,
-        { ...style.text, weight: 600 },
+        resolveTextStyle({ ...style.text, weight: 600 }, section.textStyle),
         frame.width - style.paddingX * 2,
       );
       const titleFrame = rect(frame.x, cursor, frame.width, titleHeight);
@@ -276,9 +299,10 @@ const measureTable = (
       const badges = badgeLayout(row, style, frame, cursor, rowHeight, measurer);
       const badgeWidth = badges.reduce((sum, badge) => sum + badge.frame.width + 3, 0);
       const displayText = formatRow(row, false);
+      const rowStyle = resolveTextStyle(style.text, row.textStyle);
       const rowText = measurer.measure(
         displayText,
-        style.text,
+        rowStyle,
         Math.max(8, frame.width - style.paddingX * 2 - badgeWidth - 4),
       );
       const textFrame = rect(
@@ -293,19 +317,19 @@ const measureTable = (
       const typeStart = typeLabel === undefined
         ? -1
         : displayText.lastIndexOf(`: ${typeLabel}`, displayText.length);
-      const prefixWidth = measurer.measure(prefix, style.text).width;
+      const prefixWidth = measurer.measure(prefix, rowStyle).width;
       const nameText = displayText.slice(
         prefix.length,
         typeStart > prefix.length ? typeStart : displayText.length,
       );
-      const nameWidth = measurer.measure(nameText, style.text).width;
+      const nameWidth = measurer.measure(nameText, rowStyle).width;
       const nameFrame = rect(textFrame.x + prefixWidth, textFrame.y, nameWidth, textFrame.height);
       const typeFrame = typeLabel === undefined || typeStart < 0
         ? undefined
         : rect(
-            textFrame.x + prefixWidth + nameWidth + measurer.measure(": ", style.text).width,
+            textFrame.x + prefixWidth + nameWidth + measurer.measure(": ", rowStyle).width,
             textFrame.y,
-            measurer.measure(typeLabel, style.text).width,
+            measurer.measure(typeLabel, rowStyle).width,
             textFrame.height,
           );
       const left = addPort(
@@ -350,7 +374,9 @@ const measureTable = (
     });
   }
 
-  addRectPerimeterPorts(ports, node.id, frame);
+  addRectPerimeterPorts(ports, node.id, frame, {
+    sideY: headerFrame.y + headerFrame.height / 2,
+  });
 
   const layout: NodeLayout = {
     nodeId: node.id,
@@ -380,14 +406,18 @@ const badgeLayout = (
 ): RowBand["badgeFrames"] => {
   const constraints = row.constraints ?? [];
   if (constraints.length === 0) return [];
-  const badgeStyle = { ...style.text, fontSize: 6.5, weight: 600 as const };
-  const badgeHeight = 10;
+  const badgeStyle = {
+    ...style.text,
+    fontSize: Math.max(7, style.text.fontSize - 3.3),
+    weight: 600 as const,
+  };
+  const badgeHeight = 11;
   const reversed = [...constraints].reverse();
   const result: { label: string; frame: Rect }[] = [];
   let right = rectRight(frame) - style.paddingX;
   for (const constraint of reversed) {
     const measurement = measurer.measure(constraint, badgeStyle);
-    const width = measurement.width + 4;
+    const width = measurement.width + 5;
     const badgeFrame = rect(right - width, top + (rowHeight - badgeHeight) / 2, width, badgeHeight);
     result.unshift({ label: constraint, frame: badgeFrame });
     right -= width + 3;
@@ -405,7 +435,10 @@ const measureShape = (
   const padding = style.padding;
   const maxWidth = Math.max(8, frame.width - padding * 2);
 
-  const textStyle = style.text;
+  const baseTextStyle = node.kind === "frame"
+    ? { ...style.text, weight: 600 as const }
+    : style.text;
+  const textStyle = resolveTextStyle(baseTextStyle, node.textStyle);
   let textFrame: Rect;
   let text: TextMeasurement;
 
@@ -413,7 +446,7 @@ const measureShape = (
     text = measurer.measure(node.name, textStyle, maxWidth);
     textFrame = rect(frame.x, rectBottom(frame) - text.height - 4, frame.width, text.height);
   } else if (node.kind === "frame") {
-    text = measurer.measure(node.name, { ...textStyle, weight: 600 }, maxWidth);
+    text = measurer.measure(node.name, textStyle, maxWidth);
     textFrame = rect(frame.x + padding, frame.y + padding, maxWidth, text.height);
   } else if (node.kind === "pseudostate") {
     text = measurer.measure("", textStyle, maxWidth);
@@ -455,16 +488,18 @@ const measureLifeline = (
 ): LifelineNodeLayout => {
   const frame = node.frame;
   const headFrame = rect(frame.x, frame.y, frame.width, Math.min(node.headHeight, frame.height));
-  const headText = measurer.measure(node.head.label ?? node.name, {
+  const headText = measurer.measure(node.head.label ?? node.name, resolveTextStyle({
     ...node.style.text,
     weight: 600,
-  }, frame.width - 12);
+  }, node.textStyle), frame.width - 12);
 
   const centerX = frame.x + frame.width / 2;
   const spineFrom = point(centerX, rectBottom(headFrame));
   const spineTo = point(centerX, rectBottom(frame));
 
-  addRectPerimeterPorts(ports, node.id, headFrame);
+  addRectPerimeterPorts(ports, node.id, headFrame, {
+    sideY: headFrame.y + headFrame.height / 2,
+  });
   addPort(ports, node.id, { kind: "spine", t: 0 }, spineFrom, point(1, 0), "spine top");
   addPort(ports, node.id, { kind: "spine", t: 1 }, spineTo, point(1, 0), "spine bottom");
 
@@ -546,10 +581,19 @@ const measureImage = (
   ports: Map<PortId, PortGeometry>,
 ): NodeLayout => {
   const frame = node.frame;
-  const captionHeight = node.caption ? Math.max(12, node.style.text.fontSize * 1.3) : 0;
-  const imageFrame = rect(frame.x, frame.y, frame.width, Math.max(1, frame.height - captionHeight));
+  const captionBlockHeight = imageCaptionBlockHeight(node);
+  const imageFrame = rect(
+    frame.x,
+    frame.y,
+    frame.width,
+    Math.max(1, frame.height - captionBlockHeight),
+  );
   const caption = node.caption
-    ? measurer.measure(node.caption, node.style.text, frame.width - node.style.padding * 2)
+    ? measurer.measure(
+        node.caption,
+        resolveTextStyle(node.style.text, node.textStyle),
+        frame.width - node.style.padding * 2,
+      )
     : undefined;
   const captionFrame = caption
     ? rect(frame.x + node.style.padding, rectBottom(frame) - caption.height, frame.width - node.style.padding * 2, caption.height)
@@ -578,7 +622,8 @@ const measureComment = (
   const style = node.style;
   const padding = Math.max(6, style.padding);
   const maxWidth = Math.max(8, frame.width - padding * 2);
-  const lineHeight = style.text.fontSize * 1.35;
+  const commentStyle = resolveTextStyle(style.text, node.textStyle);
+  const lineHeight = commentStyle.fontSize * 1.35;
   const availableLines = Math.max(1, Math.floor((frame.height - padding * 2) / lineHeight));
   const sourceLines = (node.body.length > 0 ? node.body : "Comment").split(/\r?\n/);
   const visibleLines = sourceLines.slice(0, availableLines);
@@ -586,7 +631,7 @@ const measureComment = (
     visibleLines[visibleLines.length - 1] = `${visibleLines[visibleLines.length - 1]}…`;
   }
   const lines = visibleLines.map((line) =>
-    measurer.measure(line.length > 0 ? line : " ", style.text, maxWidth),
+    measurer.measure(line.length > 0 ? line : " ", commentStyle, maxWidth),
   );
 
   addRectPerimeterPorts(ports, node.id, frame);
@@ -1255,7 +1300,7 @@ const measureLabel = (
     ? pointOnPolyline(edgePoints, label.anchor.end === "source" ? 0 : 1)
     : pointOnPolyline(edgePoints, label.anchor.t);
   const anchor = anchorHit.point;
-  const style = scene.theme.edge.labelText;
+  const style = resolveTextStyle(scene.theme.edge.labelText, label.textStyle);
   const text = measurer.measure(label.text, style, label.maxWidth);
   const padding = scene.theme.edge.labelPadding;
   const width = text.width + padding * 2;

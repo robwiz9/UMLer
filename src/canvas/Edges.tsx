@@ -33,7 +33,7 @@ export const EdgeLabelView = ({
       width={label.frame.width}
       height={label.frame.height}
       rx={2}
-      fill={theme.edge.labelFill.color ?? theme.colors.canvas}
+      fill={theme.edge.labelFill.color ?? "none"}
       stroke="none"
     />
     <text

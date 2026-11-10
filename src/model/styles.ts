@@ -38,6 +38,52 @@ export interface TextStyle {
   readonly lineHeight?: number;
 }
 
+/**
+ * Per-text overrides. Undefined fields inherit the current scene theme, while
+ * explicit `false` values let the user force normal weight/roman/upright text
+ * even when the base style is bold or italic.
+ */
+export interface TextStyleOverride {
+  readonly bold?: boolean;
+  readonly italic?: boolean;
+  readonly monospace?: boolean;
+  readonly fontSize?: number;
+  readonly color?: Color;
+}
+
+export const DIAGRAM_FONT = "Latin Modern Roman";
+export const MONO_FONT = "Latin Modern Mono";
+export const DEFAULT_DIAGRAM_FONT_SIZE = 10.5;
+
+export const resolveTextStyle = (
+  base: TextStyle,
+  override?: TextStyleOverride,
+): TextStyle => {
+  if (override === undefined) return base;
+  return {
+    ...base,
+    fontFamily:
+      override.monospace === true
+        ? MONO_FONT
+        : override.monospace === false
+          ? DIAGRAM_FONT
+          : base.fontFamily,
+    fontSize: override.fontSize ?? base.fontSize,
+    color: override.color ?? base.color,
+    weight: override.bold === undefined ? base.weight : override.bold ? 700 : 400,
+    italic: override.italic === undefined ? base.italic : override.italic,
+  };
+};
+
+export const hasTextStyleOverride = (override: TextStyleOverride | undefined): boolean =>
+  override !== undefined &&
+  (override.bold !== undefined ||
+    override.italic !== undefined ||
+    override.monospace !== undefined ||
+    override.fontSize !== undefined ||
+    override.color !== undefined);
+
+
 export interface TableNodeStyle {
   readonly fill: FillStyle;
   readonly stroke: StrokeStyle;
@@ -90,16 +136,16 @@ export interface Theme {
   readonly edge: EdgeStyle;
 }
 
-const INK = "#1f2933";
-const MUTED = "#6b7280";
-const CANVAS = "#fbfaf7";
-const GRID = "#e6e2d9";
-const GRID_MAJOR = "#d4cec1";
+const INK = "#111111";
+const MUTED = "#555555";
+const CANVAS = "#ffffff";
+const GRID = "#e8e5df";
+const GRID_MAJOR = "#d7d2c8";
 const SELECTION = "#2563eb";
 const PORT = "#0f766e";
 const PORT_ACTIVE = "#0d9488";
 const WARNING = "#b45309";
-const FONT = "Arial";
+const FONT = DIAGRAM_FONT;
 
 export const DEFAULT_THEME: Theme = {
   colors: {
@@ -116,27 +162,27 @@ export const DEFAULT_THEME: Theme = {
   table: {
     fill: { color: "#ffffff" },
     stroke: { color: INK, width: 0.75, pattern: "solid" },
-    text: { fontFamily: FONT, fontSize: 9, color: INK, weight: 400 },
+    text: { fontFamily: FONT, fontSize: 10.5, color: INK, weight: 400 },
     headerFill: { color: "#f3f1eb" },
-    headerText: { fontFamily: FONT, fontSize: 10, color: INK, weight: 600 },
+    headerText: { fontFamily: FONT, fontSize: 11.5, color: INK, weight: 700 },
     divider: { color: INK, width: 0.5, pattern: "solid" },
     cornerRadius: 0,
     paddingX: 7,
-    headerHeight: 28,
-    rowHeight: 18,
+    headerHeight: 29,
+    rowHeight: 20,
     rowPaddingY: 2,
     sectionGap: 2,
   },
   shape: {
     fill: { color: "#ffffff" },
     stroke: { color: INK, width: 0.75, pattern: "solid" },
-    text: { fontFamily: FONT, fontSize: 9, color: INK, weight: 400 },
+    text: { fontFamily: FONT, fontSize: 10.5, color: INK, weight: 400 },
     cornerRadius: 0,
-    padding: 8,
+    padding: 6,
   },
   edge: {
     stroke: { color: INK, width: 0.75, pattern: "solid" },
-    labelText: { fontFamily: FONT, fontSize: 8, color: INK, weight: 400 },
+    labelText: { fontFamily: FONT, fontSize: 9.5, color: INK, weight: 400 },
     labelFill: { color: CANVAS },
     labelPadding: 2,
     labelInset: 18,

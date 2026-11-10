@@ -3,7 +3,7 @@
 A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequence, Communication and State Machine
 — with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
 
-> **Current checkpoint: Step 3 complete — editing, routing and auto-layout.**
+> **Current checkpoint: Step 3 complete — editing, routing, auto-layout and GitHub project sync.**
 > The repository contains the notation research and scene schema (Step 1), the SVG grid canvas and
 > measurement/snap pipeline (Step 2), and the Step 3 editor layer: sparse orthogonal A* routing with
 > point-and-double-click reroute, layered crossing-reduction layout with lock constraints, table content
@@ -15,10 +15,15 @@ A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequenc
 
 ```bash
 npm install
+cp .env.example .env.local   # optional: add a GitHub OAuth App client id
 npm run dev      # http://127.0.0.1:5173/
-npm run check    # typecheck + scene validation + layout tests
+npm run check    # typecheck + scene validation + layout/persistence/GitHub/storage tests
 npm run build
 ```
+
+GitHub features work in `npm run dev` and `npm run preview`. OAuth uses the device flow, so no
+client secret is stored or shipped; set `GITHUB_OAUTH_CLIENT_ID` (or paste the public client id
+in the dialog once) after enabling **Device flow** on a GitHub OAuth App.
 
 The Vite config uses `--configLoader native`. Vite's bundled config loader spawns a helper process that the
 current Windows sandbox blocks with `spawn EPERM`; the native loader is a supported Vite option and the app
@@ -41,9 +46,10 @@ builds and runs normally.
 src/model/        framework-agnostic scene graph + derived layout types + validation + edits + file formats
 src/layout/       text measurer, Phase 1 layout pass, A* router, auto-layout, snap/index helpers
 src/canvas/       SVG grid, node/edge skeleton renderers, endpoint popover, camera and port handles
-src/app/          React shell, layout panel, history, table and edge editors
+src/app/          React shell, theme/text-style panels, history, table and edge editors
+src/res/          bundled Latin Modern Roman and Mono font assets
 src/fixtures/     six example scenes (ER, class, sequence, use case, state, communication)
-scripts/          fixture validator, layout tests, Typst bootstrap
+scripts/          fixture validator, layout/persistence/GitHub/storage tests, Typst bootstrap
 docs/             research, mapping, architecture, Step 1/2/3 specifications
 docs/assets/      CeTZ notation proof + app screenshots
 examples/         generated JSON example for the ER fixture
@@ -55,8 +61,11 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
 - Infinite pan/zoom SVG canvas with fit (max 150% for small diagrams); pan on right- or middle-drag.
 - Configurable 9 pt grid (3–72 pt), major lines every 4 cells.
 - Grid snapping and node-to-node alignment guides.
-- Node drag, corner resize and live commit/revision handling.
-- **Diagram-aware object palette** via the canvas **+ Add object** button or a single right-click on empty
+- Node drag, **four-corner resize** and live commit/revision handling. The corners of the selection frame are
+  resize handles; corner connection arrows are gone, and table/class east-west ports sit at the header centre
+  above the row-level arrows.
+- **Diagram-aware object palette** via the full-width **+ Add object** button at the top of the left panel, the
+  filled **+** square in the canvas top-left when the panel is collapsed, or a single right-click on empty
   canvas space. The menu only offers valid objects for the active diagram:
   - ER: entity table, associative table, relationship attribute;
   - UML class: class;
@@ -68,21 +77,61 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   Connectors are absent from the palette: drag from a selected object's border/row/spine handle to another
   object (or onto an existing line, for a dashed edge-to-edge relation-attribute attachment) to create a
   family-appropriate connector. New objects are grid-aligned, placed clear of existing objects, selected and
-  focused; new lifelines become a lane to the right of the existing lanes.
-- Comments are multi-line notes with a folded corner and a focused textarea; images use a placeholder asset
-  frame with an editable caption. Both are available in every diagram type.
+  focused; adding from the panel button pans just enough to reveal an object whose collision-free placement
+  lands outside the viewport. New lifelines become a lane to the right of the existing lanes.
+- **LaTeX typography**: diagram text uses bundled **Latin Modern Roman** and **Latin Modern Mono** faces on a
+  white canvas with Computer Modern-style strokes. Default sizes are larger (10.5 pt body, 11.5 pt table
+  headers, 9.5 pt edge labels), UI text was raised by one pixel, and contract chips use a centred baseline.
+  New use-case frames are tighter (`138 × 45`) to avoid excessive space around short labels.
+- **Theme card** above Layout sets the defaults for new objects and un-overridden text: **tint** (header and
+  attribute-chip fill, with a transparent option), **object background** (with a transparent toggle), **font
+  colour**, **font size**, and an optional **transparent line-label background**. Theme changes restyle existing
+  nodes; new objects inherit the active scene theme; **Reset theme** restores the built-in tokens.
+- **Background overrides** for table headers, individual sections and comments, each with colour, transparent
+  and reset-to-theme states. Section fills paint beneath content and the table border is repainted last.
+- **Text-style overrides** on table headers, sections, rows, other objects, comments and individual connector
+  labels: bold, italic, Latin Modern Mono, a compact font-size field and font colour, with a reset. Overrides
+  survive theme changes and save/import round trips. Colour pickers preview locally and commit after the drag
+  pauses, avoiding a full canvas rebuild on every colour event; colour-only overrides apply immediately because
+  the measurement cache keys the resolved colour.
+- Comments are multi-line notes with a folded corner and a focused textarea. Images can be dragged onto the
+  canvas as PNG, JPEG or SVG files; the dropped frame matches the image ratio, resizes with aspect locked, can be
+  moved or deleted, and renders the actual bytes. Image bytes are stored once in a project-level asset map, so
+  repeated drops of the same file (and multiple nodes/scenes) reference one asset. Only assets referenced by at
+  least one image node are serialized into project files; unused uploads remain in the browser library for reuse
+  until page reload or **File → Purge unused images** removes them. The palette still creates a placeholder image
+  frame for diagrams that need one before a file is available.
 - Measurement pass for tables, classes, actors, use cases, states, objects, lifelines, frames, images, comments
   and ER diamonds; class title + stereotype headers stay vertically centred.
 - Row-level and perimeter ports for tables, plus spine/activation ports for sequence diagrams.
 - Sparse orthogonal **A\*** routing with bend penalty, obstacle inflation, equal-length/fewer-bend
   preference, dynamic non-row perimeter anchors and double-click reroute.
+- **ER relationship-label conversion**: the line menu shows a square `▦` action beside an ER relationship’s
+  center label. It creates a relation-attribute table named after the label, tethers it to the relationship
+  line, removes the old center label and selects the new table in one revision.
 - **Layered crossing-reduction auto-layout** (TB/LR) with locked frames preserved exactly; dynamic perimeter
-  anchors keep separate-side and reverse edges on distinct corridors.
+  anchors keep separate-side and reverse edges on distinct corridors. The layout panel offers **Tight**,
+  **Normal** (default) and **Wide** spacing presets that set the rank/node/edge gaps used by the next run.
+  Relation-attribute tables are excluded from the rank graph and orbited around their parent relationship,
+  alternating sides and distinct tether anchor points so dashed tethers do not cross or merge through the graph.
+  Rectangular perimeter endpoints are re-anchored to the side facing the partner after each pass, so TB layouts
+  do not keep stale east/west attachment sides.
+- **Local recovery across refresh**: the open project (all scenes plus active scene), its GitHub binding and
+  sync baseline are autosaved to browser storage; the GitHub session token is kept in `sessionStorage`, so a
+  refresh keeps you signed in but closing the tab clears the token. **New project** clears the GitHub binding.
+- **GitHub autosave**: a bound project saves every 2 minutes when it has changes. Saving shows a progress toast;
+  an auto-save conflict raises a clickable warning toast instead of a blocking dialog, and only opens the conflict
+  chooser when that toast is clicked.
+- **Unsaved-change guard**: reloading or closing the page triggers the browser’s confirmation dialog while the
+  local project has unsaved changes, or while a GitHub-bound project differs from its last sync. A successful
+  manual or automatic save clears the guard.
 - **Undo / redo** with 100 whole-document snapshots, toolbar buttons (`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z` or
   `Ctrl+Y`), and 350 ms typing coalescing. History resets when switching scenes and shortcuts defer to native
   editing inside text fields.
-- **File / Scene menus** in the top bar. File exports/imports a single scene (`.scene.json`) or the whole
-  project (`umler-project.json`, all scenes plus the active scene); imports are validated, scene imports get a
+- **File / Scene menus** in the top bar. File can start a **New project**,
+  open from GitHub, save to GitHub (`Ctrl/Cmd+S`), purge unused image uploads, export/import a single scene
+  (`.scene.json`) or the whole project (`umler-project.json`, all scenes plus the active scene); imports are
+  validated, scene imports get a
   fresh id and unique title, and a project import asks for confirmation before replacing the in-session scenes.
   Scene can create a scene with
   square diagram-type icons, an auto-generated `Untitled <type> diagram` name until edited, and a Template
@@ -90,12 +139,18 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   delete with a warning. The top-bar scene switcher is the only scene list.
 - **Layout panel toggle**: hide the left panel to let the canvas fill the workspace.
 - **Floating object focus menus**: click a table header, section, row or other object and its editing controls
-  appear beside the object; the side inspector is removed.
-  - header: table name, stereotype for classes, Add row, Add section;
-  - section: header text, Add row, Add section, Delete section; the divider above the rows is a dedicated hit
-    strip so an untitled section remains selectable;
-  - row: attribute/operation name, data type/return type, PK/FK/NN/UQ, Add row, Delete row;
-  - other objects: their displayed text (name, lifeline label, image caption, or multi-line comment body);
+  appear beside the object; the side inspector is removed. Menus drag by their header, Escape closes them, and
+  Enter closes them from a single-line field. The top-level object/table header has a **lock** toggle in place
+  of the close button; class row menus expose visibility-prefix chips and a custom prefix. The lock badge is an
+  editor-only canvas overlay and must **not** be emitted by the Typst/CeTZ exporter.
+  - header: table name, stereotype for classes, **lock**, Text style, Add row, Add section;
+  - section: header text, Text style, Add row, Add section, Delete section; the divider above the rows is a
+    dedicated hit strip so an untitled section remains selectable;
+  - row: attribute/operation name, data type/return type, class visibility prefix or ER PK/FK/NN/UQ,
+    Text style, Add row, Delete row;
+  - image: choose an uploaded asset, pick/drop a new file, or **Remove image**, plus caption and Text style;
+  - other objects: their displayed text (name, lifeline label, image caption, or multi-line comment body), plus
+    Text style;
   - header/object menus also delete the object and its attached connectors.
 - **Lifelines only hit-test on the head and thin time axis**, so arrows, frames and notes crossing the lane stay
   selectable. The focus overlay follows the same head + axis geometry.
@@ -106,9 +161,9 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   is selected, the resize handles sit just outside its ends, and the selected blue axis is hidden under the bar.
   Hovering the body shows a move cursor; hovering the top/bottom border bands shows a vertical-resize cursor
   and starts a resize.
-- **Scope-aware Delete/Backspace**: focused section → section, focused row → row, selected activation bar →
-  activation, selected connector → connector, selected object → object plus attached connectors. Inputs/selects/
-  content-editable elements keep native Delete behaviour.
+- **Scope-aware Delete/Backspace**: focused table header → clears the header content, focused section → section,
+  focused row → row, selected activation bar → activation, selected connector → connector, selected object →
+  object plus attached connectors. Inputs/selects/content-editable elements keep native Delete behaviour.
 - **Canvas text editing**: double-clicking any displayed text opens the matching floating menu, focuses its
   input and selects the existing value. Canvas text stays visible on pointer-down/drag, and node pointer
   capture is deferred until actual movement so native double-clicks reach the text element.
@@ -151,6 +206,32 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
 - Sequence sync/reply arrowheads, sequence-aware fit bounds and correct label layering above nodes.
 - Inspector with frame, row, port, route and fit diagnostics.
 
+## GitHub projects
+
+**File → Open from GitHub…** signs in with the OAuth **device flow** (no client secret), lets you pick a
+repository, branch, folder and project file, then loads the project if that file exists. If the file is
+absent, it creates a blank ER project there; if the current project has unsaved changes, it offers
+**Create blank project** or **Upload current project** instead. A bound project shows its repository path
+and sync state in the status bar; **Save to GitHub** / `Ctrl/Cmd+S` writes all scenes and the active scene.
+
+The first time, either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` or use **Set up GitHub OAuth** in the
+dialog to paste the public client id (stored in this browser). Create an OAuth App at
+[github.com/settings/developers](https://github.com/settings/developers), enable **Device flow**, and use any
+callback URL. A personal access token with `repo` scope is available as a fallback; it is kept in memory only.
+
+Every load/save records the file blob SHA. If the remote changed, or was deleted, UMLer does not auto-merge:
+the dialog offers **Replace local with remote**, **Overwrite remote** (or **Recreate remote**) and **Cancel**.
+Remote JSON is validated before it replaces the local project; a bad remote file never reaches the canvas.
+
+The open project, its GitHub path/SHA and the last sync baseline are autosaved locally, so a page refresh
+reopens the same project and repository location instead of the built-in demo. The GitHub token is kept in
+`sessionStorage` (refresh-safe, tab-scoped); signing out removes it.
+
+A bound project also auto-saves to GitHub every 2 minutes when it has changes. The progress toast shows while a
+save is running. If the remote changed, auto-save does not open a modal: it shows a sticky warning toast and does
+nothing else until you click it, at which point the normal **Replace local with remote / Overwrite remote**
+chooser opens.
+
 ## Verification
 
 `npm run check` output:
@@ -165,10 +246,14 @@ PASS UML communication checkout — 3 nodes, 3 edges, 0 errors, 0 warnings
 
 layout: OK
   fixtures: 6
-  ER nodes/ports/edges: 3/42/2
-  ER content bounds: 585 × 207
+  ER nodes/ports/edges: 3/30/2
+  ER content bounds: 585 × 223.9
 
-Persistence checks passed (29 assertions).
+Persistence checks passed (38 assertions).
+
+GitHub project checks passed (30 assertions).
+
+Storage checks passed (16 assertions).
 ```
 
 Browser verification (Chrome DevTools): clicked table headers, sections, rows and other object text and
@@ -184,9 +269,14 @@ the line at the vertex and no dashed label leaders are drawn; double-clicked an 
 auto-layout; verified the LR communication reverse edges use separate corridors; asserted a locked node kept
 its frame; checked the sequence skip note and framed-diagram guard; and verified zero route collisions/label
 overlaps. Step 3 object-palette checks: opened **+ Add object** on ER, use-case, state and sequence diagrams and
-confirmed each menu shows only relevant objects plus Comment/Image; opened the same menu by right-clicking
+confirmed each menu shows only relevant objects plus Comment/Image; confirmed the button is full-width at the top
+of the left panel and becomes a filled rounded **+** square at the canvas top-left when the panel is collapsed;
+opened the same menu by right-clicking
 empty canvas space; confirmed a right-drag still pans without opening the menu; added a comment, image, use
-case, state and sequence lifeline and confirmed selection/placement/focus; entered a two-line comment; and
+case, state and sequence lifeline and confirmed selection/placement/focus; dragged an SVG image onto the canvas,
+confirmed it rendered the real bytes, resized it from a corner with the ratio unchanged, dropped the same bytes a
+second time and confirmed both nodes shared one asset id, then deleted one and confirmed the asset was pruned;
+entered a two-line comment; and
 dragged a connector from a new lifeline spine port to an existing lifeline; attached a new relationship
 attribute to an existing ER relationship line; selected a sequence arrow through a lifeline lane; added an
 activation bar from the lifeline axis menu, moved and resized it, and verified its handles are evenly spaced;
@@ -206,7 +296,37 @@ deleted scenes through the Scene menu and dialog warnings; exported and re-impor
 exported a six-scene project and re-imported a three-scene project, confirming the replacement dialog, active
 scene restore and undo-history reset; imported broken JSON and confirmed the error toast; hid and restored the
 layout panel with the canvas widening; and verified Delete removes a section, then its table, a row and a
-connector without over-deleting.
+connector without over-deleting. Latest UX checks: confirmed four corner resize handles with no corner
+connector arrows, table side handles at the header centre, NW/SE resizing, lock-toggle replacement in the
+table/object header, class visibility-prefix chips/custom prefix, menu header dragging, Escape/Enter closing,
+and the Latin Modern serif rendering on a white canvas; adding a new sequence lifeline panned the canvas so
+its head stayed visible. Verified the lock badge is a clean editor-only overlay with a `data-editor-only`
+attribute and no serializer mapping. Image menu checks: an empty frame shows the uploaded-image dropdown and
+file picker/drop zone; assigning an SVG renders it and replaces the controls with **Remove image**; removing
+restores the empty frame while keeping the asset available in the library; the image has no border, its caption
+adds a 4 pt gap and grows the frame without changing the image area ratio, and corner resizing stays
+aspect-locked with the caption present; confirmed project export/save omits an unreferenced upload, reload prunes
+it, and **File → Purge unused images** removes it immediately. Latest typography checks: verified larger UI/diagram type, header/row/comment/connector
+Text style controls, B/I/M + size/colour overrides, live theme tint and size changes, transparent object
+background, Reset theme, badge baseline centring, and the tighter new-use-case default; confirmed new objects
+inherit the active theme and per-row overrides beat theme defaults. Latest checks covered transparent tint,
+header/section/comment background overrides, deferred colour commits while dragging, and the compact text-style
+size field. Latest fixes verified transparent line-label plates, a colour-only row override, a freshly created
+entity’s black header text, Delete-on-header clearing only the header, ER center-label conversion into a tethered
+relation attribute, the Tight/Normal/Wide layout-spacing presets, and relation-attribute auto-layout placing
+tables on opposite sides of their parent relationship without crossing tethers. TB layout now also flips
+rectangular endpoints to south/north and re-anchors tether sources, matching the clean LR result.
+GitHub checks: opened the picker with mocked account/repo/branch/directory responses, created a new
+`models/umler-project.json`, marked the grid edit dirty, recreated a deleted remote, exercised
+**Replace local with remote** and **Overwrite remote** for both load and save conflicts, and confirmed the
+status-bar sync dot/path. Live OAuth requires a real OAuth App client id; the device-flow proxy and error
+surface were verified with an invalid client id. Refresh checks: edited the grid, reloaded and confirmed the
+project (not the demo) returned; restored a GitHub-bound project, its repository path and session from browser
+storage; reopened the same remote path and loaded a non-empty ER fixture with three nodes. Auto-save checks:
+accelerated the two-minute timer, confirmed a remote change produced only the sticky warning toast (no modal),
+and confirmed clicking the toast opened the conflict chooser; a delayed PUT showed the persistent **Saving to
+GitHub…** progress toast until success. Reload-guard check: edited a project and confirmed the browser
+confirmation blocked the reload on **Cancel** and allowed it on **Reload**.
 Earlier Step 2 checks covered drag/resize, right-drag panning, stereotype centring, uniform table borders and
 sequence fit bounds.
 
@@ -225,7 +345,7 @@ versioned WASM compiler/packages rather than depending on the CLI downloader.
 ## Not implemented yet (Step 4 and later)
 
 - Typst/CeTZ serializer, WASM compilation and final SVG/PDF preview swap.
-- Autosave, recent-file history and embedding real image bytes in project files.
+- Recent-file history.
 - Container-aware auto-layout for framed diagrams; sequence lane editing.
 - Label dragging/pinning and multiline label wrapping.
 - CeTZ-renderer glyph previews in terminal menus (the editor menu already uses SVG previews).

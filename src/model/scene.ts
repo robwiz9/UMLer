@@ -65,10 +65,12 @@ export interface CanvasSettings {
 
 export type LayoutDirection = "TB" | "LR";
 export type LayoutEngine = "manual" | "sugiyama" | "force-orthogonal";
+export type LayoutSpacing = "tight" | "normal" | "wide";
 
 export interface LayoutSettings {
   readonly engine: LayoutEngine;
   readonly direction: LayoutDirection;
+  readonly spacing?: LayoutSpacing;
   readonly rankGap: number;
   readonly nodeGap: number;
   readonly edgeGap: number;
@@ -81,6 +83,15 @@ export interface LayoutSettings {
   readonly reduceCrossings: boolean;
   readonly maxIterations: number;
 }
+
+export const LAYOUT_SPACING_PRESETS: Record<
+  LayoutSpacing,
+  Pick<LayoutSettings, "rankGap" | "nodeGap" | "edgeGap">
+> = {
+  tight: { rankGap: 63, nodeGap: 36, edgeGap: 24 },
+  normal: { rankGap: 90, nodeGap: 54, edgeGap: 36 },
+  wide: { rankGap: 126, nodeGap: 72, edgeGap: 48 },
+};
 
 export interface SceneDocument {
   readonly schemaVersion: "umler.scene/1";
@@ -124,7 +135,7 @@ export const DEFAULT_CANVAS: CanvasSettings = {
     snapLabels: false,
     labelStep: 1,
   },
-  background: "#fbfaf7",
+  background: "#ffffff",
   exportPadding: 18,
   minZoom: 0.2,
   maxZoom: 4,
@@ -134,9 +145,10 @@ export const DEFAULT_CANVAS: CanvasSettings = {
 export const DEFAULT_LAYOUT: LayoutSettings = {
   engine: "manual",
   direction: "TB",
-  rankGap: 54,
-  nodeGap: 27,
-  edgeGap: 18,
+  spacing: "normal",
+  rankGap: LAYOUT_SPACING_PRESETS.normal.rankGap,
+  nodeGap: LAYOUT_SPACING_PRESETS.normal.nodeGap,
+  edgeGap: LAYOUT_SPACING_PRESETS.normal.edgeGap,
   respectLocks: true,
   reduceCrossings: true,
   maxIterations: 12,
