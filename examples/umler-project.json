@@ -1,8 +1,8 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-10T22:51:45.844Z",
-  "activeSceneId": "scene_e2cfe1a5",
+  "exportedAt": "2026-11-10T22:55:47.854Z",
+  "activeSceneId": "scene_aa538ad0",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
@@ -568,6 +568,587 @@
           "exportPath": "assets/asset_ea1c95e5.jpg"
         }
       }
+    },
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_aa538ad0",
+      "revision": 1,
+      "meta": {
+        "title": "Untitled UML State Machine diagram",
+        "diagramKind": "uml-state-machine",
+        "createdAt": "2026-11-10T22:55:36.408Z",
+        "updatedAt": "2026-11-10T22:55:36.408Z",
+        "appVersion": "0.1.0-step1",
+        "description": "Step 1 schema fixture"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {
+        "state_initial": {
+          "id": "state_initial",
+          "kind": "pseudostate",
+          "name": "initial",
+          "frame": {
+            "x": 72,
+            "y": 90,
+            "width": 18,
+            "height": 18
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "pseudostateKind": "initial",
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "state_idle": {
+          "id": "state_idle",
+          "kind": "state",
+          "name": "Idle",
+          "frame": {
+            "x": 144,
+            "y": 72,
+            "width": 180,
+            "height": 54
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "stateKind": "simple",
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "state_awaiting": {
+          "id": "state_awaiting",
+          "kind": "state",
+          "name": "Awaiting payment",
+          "frame": {
+            "x": 378,
+            "y": 72,
+            "width": 216,
+            "height": 54
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "stateKind": "simple",
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "state_fulfilled": {
+          "id": "state_fulfilled",
+          "kind": "state",
+          "name": "Fulfilled",
+          "frame": {
+            "x": 378,
+            "y": 216,
+            "width": 216,
+            "height": 54
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "stateKind": "simple",
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        },
+        "state_final": {
+          "id": "state_final",
+          "kind": "pseudostate",
+          "name": "final",
+          "frame": {
+            "x": 684,
+            "y": 90,
+            "width": 18,
+            "height": 18
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "pseudostateKind": "final",
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          }
+        }
+      },
+      "edges": {
+        "transition_start": {
+          "id": "transition_start",
+          "source": {
+            "target": "node",
+            "nodeId": "state_initial",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "state_idle",
+            "port": {
+              "kind": "perimeter",
+              "side": "west"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [],
+          "semantic": {
+            "family": "state"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "transition_submit": {
+          "id": "transition_submit",
+          "source": {
+            "target": "node",
+            "nodeId": "state_idle",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "state_awaiting",
+            "port": {
+              "kind": "perimeter",
+              "side": "west"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_transition_submit",
+              "zone": "center",
+              "text": "submit [total > 0] / reserve stock",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "state",
+            "trigger": "submit",
+            "guard": "total > 0",
+            "effect": "reserve stock"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "transition_paid": {
+          "id": "transition_paid",
+          "source": {
+            "target": "node",
+            "nodeId": "state_awaiting",
+            "port": {
+              "kind": "perimeter",
+              "side": "south"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "state_fulfilled",
+            "port": {
+              "kind": "perimeter",
+              "side": "north"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_transition_paid",
+              "zone": "center",
+              "text": "paymentApproved",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "state",
+            "trigger": "paymentApproved"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "transition_finish": {
+          "id": "transition_finish",
+          "source": {
+            "target": "node",
+            "nodeId": "state_fulfilled",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "state_final",
+            "port": {
+              "kind": "perimeter",
+              "side": "west"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "generic",
+              "kind": "arrow"
+            }
+          },
+          "labels": [],
+          "semantic": {
+            "family": "state"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        }
+      },
+      "assets": {}
     }
   ],
   "assets": {
