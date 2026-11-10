@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-10T21:38:00.794Z",
+  "exportedAt": "2026-11-10T21:38:29.357Z",
   "activeSceneId": "scene_e2cfe1a5",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_e2cfe1a5",
-      "revision": 1,
+      "revision": 3,
       "meta": {
         "title": "umler-project",
         "diagramKind": "er",
         "createdAt": "2026-11-10T21:38:00.793Z",
-        "updatedAt": "2026-11-10T21:38:00.793Z",
+        "updatedAt": "2026-11-10T21:38:27.882Z",
         "appVersion": "0.1.0-step1"
       },
       "canvas": {
@@ -129,7 +129,84 @@
           "arrowScale": 1
         }
       },
-      "nodes": {},
+      "nodes": {
+        "entity_a7aa4891": {
+          "id": "entity_a7aa4891",
+          "name": "new_entity",
+          "frame": {
+            "x": -198,
+            "y": -54,
+            "width": 225,
+            "height": 90
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          },
+          "kind": "table",
+          "tableKind": "entity",
+          "header": {},
+          "sections": [
+            {
+              "id": "section_354c88d7",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "row_705509f4",
+                  "kind": "attribute",
+                  "name": "id",
+                  "type": "uuid",
+                  "constraints": [
+                    "PK",
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "row_f4195d31",
+                  "kind": "attribute",
+                  "name": "name",
+                  "type": "text"
+                }
+              ]
+            }
+          ]
+        }
+      },
       "edges": {},
       "assets": {}
     }
