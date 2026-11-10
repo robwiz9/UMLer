@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-10T22:23:55.344Z",
+  "exportedAt": "2026-11-10T22:32:44.695Z",
   "activeSceneId": "scene_e2cfe1a5",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_e2cfe1a5",
-      "revision": 38,
+      "revision": 39,
       "meta": {
         "title": "umler-project",
         "diagramKind": "er",
         "createdAt": "2026-11-10T21:38:00.793Z",
-        "updatedAt": "2026-11-10T22:23:27.470Z",
+        "updatedAt": "2026-11-10T22:27:57.836Z",
         "appVersion": "0.1.0-step1"
       },
       "canvas": {
@@ -323,8 +323,8 @@
           "id": "image_19987399",
           "name": "Image",
           "frame": {
-            "x": -234,
-            "y": -225,
+            "x": -216,
+            "y": -243,
             "width": 144,
             "height": 90
           },
