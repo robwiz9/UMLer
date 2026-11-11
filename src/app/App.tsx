@@ -1514,7 +1514,11 @@ export const App = () => {
   }, [selectedNodeIds]);
 
   const handleCopySelection = useCallback(() => {
-    if (selectedNodeIds.length === 0) {
+    const focusedNodeId = nodeFocus?.nodeId;
+    const copyIds = focusedNodeId !== undefined && scene.nodes[focusedNodeId] !== undefined
+      ? [focusedNodeId]
+      : selectedNodeIds;
+    if (copyIds.length === 0) {
       showToast(
         selectedEdgeId !== null
           ? "Select objects to copy; connectors copy with their objects."
@@ -1523,7 +1527,7 @@ export const App = () => {
       );
       return;
     }
-    const payload = copySceneNodes(scene, selectedNodeIds);
+    const payload = copySceneNodes(scene, copyIds);
     if (payload === null) {
       showToast("The selected objects are no longer available.", "warning");
       return;
@@ -1536,14 +1540,18 @@ export const App = () => {
     showToast(
       `Copied ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}${connectors}.`,
     );
-  }, [scene, selectedEdgeId, selectedNodeIds, showToast]);
+  }, [nodeFocus, scene, selectedEdgeId, selectedNodeIds, showToast]);
 
   const handleCutSelection = useCallback(() => {
-    if (selectedNodeIds.length === 0) {
+    const focusedNodeId = nodeFocus?.nodeId;
+    const cutIds = focusedNodeId !== undefined && scene.nodes[focusedNodeId] !== undefined
+      ? [focusedNodeId]
+      : selectedNodeIds;
+    if (cutIds.length === 0) {
       showToast("Select objects to cut.", "warning");
       return;
     }
-    const payload = copySceneNodes(scene, selectedNodeIds);
+    const payload = copySceneNodes(scene, cutIds);
     if (payload === null) {
       showToast("The selected objects are no longer available.", "warning");
       return;
@@ -1551,12 +1559,12 @@ export const App = () => {
     clipboardRef.current = payload;
     pasteOffsetRef.current = 0;
     setScene((current) =>
-      deleteNodes(current, selectedNodeIds.map((nodeId) => asNodeId(nodeId))),
+      deleteNodes(current, cutIds.map((nodeId) => asNodeId(nodeId))),
     );
     selectNodes([], null);
     setSelectedEdgeId(null);
     showToast(`Cut ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}.`);
-  }, [scene, selectedNodeIds, selectNodes, showToast]);
+  }, [nodeFocus, scene, selectedNodeIds, selectNodes, showToast]);
 
   const handlePasteSelection = useCallback(() => {
     const clipboard = clipboardRef.current;
@@ -1608,15 +1616,24 @@ export const App = () => {
   useEffect(() => {
     const handleClipboardKey = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== "c" && key !== "x" && key !== "v") return;
       const target = event.target;
       if (target instanceof HTMLElement) {
         const tag = target.tagName.toLowerCase();
-        if (tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable) {
-          return;
-        }
+        const editable =
+          tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+        // A focused table header still represents the whole table. Let Ctrl+C
+        // copy that object even when the user is editing its name field.
+        const copyFocusedTable =
+          key === "c" &&
+          nodeFocus?.kind === "table" &&
+          target.closest(".node-focus-menu") !== null;
+        // A select cannot accept pasted text. Allow object paste after choosing
+        // the target scene from the scene switcher, which keeps its focus.
+        const pasteIntoSelect = key === "v" && tag === "select";
+        if (editable && !copyFocusedTable && !pasteIntoSelect) return;
       }
-      const key = event.key.toLowerCase();
-      if (key !== "c" && key !== "x" && key !== "v") return;
       event.preventDefault();
       if (key === "c") handleCopySelection();
       else if (key === "x") handleCutSelection();
@@ -1625,7 +1642,7 @@ export const App = () => {
 
     window.addEventListener("keydown", handleClipboardKey);
     return () => window.removeEventListener("keydown", handleClipboardKey);
-  }, [handleCopySelection, handleCutSelection, handlePasteSelection]);
+  }, [handleCopySelection, handleCutSelection, handlePasteSelection, nodeFocus]);
 
   /**
    * Delete is scope-aware: the focused table part is removed before its

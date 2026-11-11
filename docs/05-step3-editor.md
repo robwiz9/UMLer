@@ -288,7 +288,8 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
   included when both of their endpoint objects are part of the copy. A connector alone offers no clipboard
   payload and the app explains that connectors travel with their objects. Pastes allocate fresh node, edge,
   label and waypoint IDs, shift by 18 pt per successive paste, preserve image assets, and leave the new objects
-  selected.
+  selected. Selecting a table header makes the whole table the copy subject; Ctrl/Cmd+C copies that table even
+  while the header name field is focused.
 - **Cross-diagram paste** — a **single** copied object can be pasted into a scene of another diagram type.
   The pasted object is converted at paste time and placed clear of existing objects:
   ER entity/associative/relationship-attribute tables → class table; class table (and ER table) → class
@@ -297,7 +298,8 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
   object ↔ sequence lifeline both ways. Comments and images are common to every diagram and paste unchanged.
   Repeating the conversion is allowed, so lossy chains such as ER table → class → object → lifeline work.
   Multi-object cross-diagram paste is rejected with a one-object hint.
-- Shortcuts defer to native editing while focus is in an input, textarea, select or content-editable field.
+- Shortcuts defer to native editing while focus is in an input, textarea, select or content-editable field,
+  except object paste while the scene switcher select is focused and Ctrl/Cmd+C for a focused table header.
 
 ### Delete key
 

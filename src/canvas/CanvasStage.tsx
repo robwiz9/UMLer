@@ -1608,7 +1608,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       Math.abs(interaction.lastFrame.y - interaction.startFrame.y) > 1e-6 ||
       Math.abs(interaction.lastFrame.width - interaction.startFrame.width) > 1e-6 ||
       Math.abs(interaction.lastFrame.height - interaction.startFrame.height) > 1e-6;
-    if (commit && changed) {
+    const movedDrag = interaction.kind === "drag" && interaction.captured;
+    const shouldCommit =
+      changed && (interaction.kind === "resize" || movedDrag);
+    if (commit && shouldCommit) {
       onCommitFrames({
         [interaction.nodeId]: interaction.lastFrame,
         ...(interaction.kind === "drag" ? interaction.lastChildFrames : {}),
@@ -1616,7 +1619,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     } else {
       onPreviewFrames({});
     }
-    if (interaction.kind === "drag" && changed) suppressNextNodePartClick();
+    if (movedDrag && changed) suppressNextNodePartClick();
     interactionRef.current = null;
     setGuides([]);
     setPanning(false);

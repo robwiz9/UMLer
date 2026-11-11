@@ -68,7 +68,8 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   rectangle (lifelines count by their head only); Ctrl/Cmd+click toggles an object; dragging any selected object
   moves the whole selection. Ctrl/Cmd+C, X and V copy, cut and paste objects within the scene; connectors are
   copied only when both endpoint objects are selected, so a connector cannot be copied alone. Pasted objects
-  are offset, selected and given fresh IDs, and image assets travel with their nodes. A single copied object
+  are offset, selected and given fresh IDs, and image assets travel with their nodes. Selecting a table header
+  makes the whole table the copy subject, including while its name field is focused. A single copied object
   can also be pasted into a scene of another diagram type: ER tables become class tables, class tables become
   object instances or lifelines, and the reverse conversions preserve names and usable rows while dropping
   notation-specific details.
