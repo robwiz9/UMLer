@@ -88,6 +88,7 @@ export const createEdgeForDiagram = (
         style: edgeTargetStyle,
       };
     case "uml-class":
+    case "uml-object":
     case "uml-use-case":
       return {
         ...base,

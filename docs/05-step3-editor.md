@@ -14,10 +14,11 @@ The top bar is the only scene switcher. Its **File** menu starts a new project, 
 and exports and imports scene and project JSON files. The
 **Scene** menu provides:
 
-- **New scene…** — dialog with six square diagram-type icon buttons (ER, class, use case, sequence,
+- **New scene…** — dialog with seven square diagram-type icon buttons (ER, class, object, use case, sequence,
   communication, state), a **Template / Empty** start choice (Template is the default and uses that type’s
   built-in example), and a scene name. Until the name is edited, choosing a type updates it to
-  `Untitled <diagram type> diagram`. Template copies the built-in diagram; Empty creates a blank scene;
+  `Untitled <diagram type> diagram`. Template copies the built-in diagram when one exists (otherwise it
+  starts empty); Empty creates a blank scene;
 - **Rename scene…** — dialog editing the active scene title;
 - **Duplicate scene** — clones the active document with a unique ` (2)`, ` (3)`, … suffix;
 - **Delete this scene…** — warning dialog; disabled when only one scene remains.
@@ -160,6 +161,7 @@ The catalogue is filtered by `scene.meta.diagramKind`:
 |---|---|
 | ER | Entity table, associative table, relationship attribute |
 | UML class | Class |
+| UML object | Class instance |
 | UML use case | Actor, use case, system boundary |
 | UML sequence | Lifeline, interaction frame |
 | UML communication | Communication object |
@@ -201,8 +203,11 @@ without changing the image area’s aspect ratio.
 Object properties are no longer edited in the side inspector. The side inspector is read-only; editing controls
 appear beside the focused object, like the connector menus. Every floating menu (object, terminal, line and
 add-object) can be moved by dragging its header. Its close/lock buttons do not start a drag. **Escape** closes
-the topmost menu; **Enter** commits and closes it while focus is in a single-line text field. Multiline comment
-fields keep their newline behaviour.
+the topmost menu. **Add row** creates a blank row and focuses its attribute/operation name. Row fields use
+**Enter**/**Tab** for fast entry: Enter or Tab in the name moves to the data type; Enter in the data type
+inserts a blank row below and focuses the new name; Enter in a row whose name and data type are both empty
+deletes that row and closes the menu. In other single-line fields Enter commits and closes the menu. Multiline
+comment fields keep their newline behaviour.
 
 ![Floating table header controls](./assets/step3-object-menu.png)
 
@@ -214,13 +219,15 @@ Focus granularity for tables/classes:
   editor-only overlay and must **not** be emitted by the Typst/CeTZ serializer. Double-clicking the
   header starts editing the table name.
 - **Section focus** — first click a section (header, empty section area, or the top border/divider line above
-  its rows). Controls: section header text, Add row, Add section, Remove this section. A second click on that
-  section's header focuses the header input. The divider above the rows is a dedicated hit strip, so an
-  untitled section remains selectable even when its header text is empty.
+  its rows). Controls: section header text, Add row, Add section, Remove this section. **Add row** appends a
+  blank row and switches to that row's menu with its name field focused. A second click on that section's
+  header focuses the header input. The divider above the rows is a dedicated hit strip, so an untitled section
+  remains selectable even when its header text is empty.
 - **Row focus** — click anywhere in a row. Controls: attribute/operation name, data type or return type,
   Add row, Delete row. On class tables this also includes the UML **visibility prefix** chips
   (`+`, `-`, `#`, `~`, none) and a custom-prefix override; ER rows keep the `PK`/`FK`/`NN`/`UQ` toggles.
-  Double-clicking the name or type text focuses that field.
+  Double-clicking the name or type text focuses that field. Enter/Tab in the name moves to the type field;
+  Enter in the type field inserts a blank row below; Enter in a fully blank row deletes it and closes the menu.
 
 Other diagram objects get an object focus menu with their displayed text field: actor/use-case/state/object/
 relationship/frame name, lifeline head label, image caption, or a multi-line comment body. Shape bodies are
@@ -266,6 +273,32 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
   creates one. Frames hit-test on their border strips and title, not their whole interior, so messages and
   arrows inside a frame remain selectable.
 
+### Selection and clipboard
+
+- **Rubber-band selection** — left-drag from empty canvas. An object is selected only when its whole frame is
+  inside the rectangle. Lifelines are the exception: only their head rectangle must be enclosed, so the tall
+  time axis never makes a lifeline select out of a region that does not contain its head.
+- **Ctrl/Cmd+click** toggles one object in or out of the current selection. A plain click replaces the selection
+  with that object; clicking an already selected member starts a group drag.
+- **Group drag** — dragging any selected member moves every selected object, plus children of selected
+  boundaries, by the same snapped delta. Connectors reroute from the committed frames. Resize handles,
+  connection ports and the floating focus menu appear only for a single selected object; multiple objects get
+  selection outlines and a group drag.
+- **Copy / cut / paste** — `Ctrl/Cmd+C`, `Ctrl/Cmd+X`, `Ctrl/Cmd+V`. Only objects are copied; connectors are
+  included when both of their endpoint objects are part of the copy. A connector alone offers no clipboard
+  payload and the app explains that connectors travel with their objects. Pastes allocate fresh node, edge,
+  label and waypoint IDs, shift by 18 pt per successive paste, preserve image assets, and leave the new objects
+  selected.
+- **Cross-diagram paste** — a **single** copied object can be pasted into a scene of another diagram type.
+  The pasted object is converted at paste time and placed clear of existing objects:
+  ER entity/associative/relationship-attribute tables → class table; class table (and ER table) → class
+  instance / communication object with a `:Name` label; class table → sequence lifeline with a `:Name` head;
+  object/lifeline → class or ER table (name preserved, rows and notation-only details are discarded), and
+  object ↔ sequence lifeline both ways. Comments and images are common to every diagram and paste unchanged.
+  Repeating the conversion is allowed, so lossy chains such as ER table → class → object → lifeline work.
+  Multi-object cross-diagram paste is rejected with a one-object hint.
+- Shortcuts defer to native editing while focus is in an input, textarea, select or content-editable field.
+
 ### Delete key
 
 `Delete` / `Backspace` applies the least destructive removal for the current focus, unless focus is in an input,
@@ -276,7 +309,7 @@ textarea, select or content-editable element:
 3. focused **row** → delete that row;
 4. selected **activation bar** → delete that activation only;
 5. selected **connector** → delete the connector;
-6. selected **object** → delete the object and all attached connectors.
+6. selected **object(s)** → delete the objects and all attached connectors.
 
 Pressing Delete once on a section therefore leaves the table header intact; pressing it again with the table
 selected removes the table. Delete on the header clears only the header content; a second press with the table
@@ -575,6 +608,8 @@ existing text is visibly selected.
 | `src/app/EdgeInspector.tsx` | Connector labels, route mode, stroke and reroute; reused as the line popover |
 | `src/app/LayoutPanel.tsx` | Direction choice, auto-layout action, result note |
 | `src/app/Inspector.tsx` | Read-only selection/geometry inspector |
+| `src/model/clipboard.ts` | Selection-scoped node/edge copy and ID-remapped paste |
+| `src/model/convert.ts` | Lossy cross-diagram object conversion used by cross-scene paste |
 
 ## 7. Verification
 
@@ -604,6 +639,17 @@ npm run check
     scene + bare-scene + BOM round trips
     project round trip and active-scene fallback
     malformed/duplicate/invalid imports rejected
+  test:clipboard: 26 assertions
+    selected nodes copy with only internal connectors
+    tethered relation attributes copy with their parent connector
+    paste remaps node/edge IDs and offsets frames
+    cut prunes image assets and paste restores them
+  test:convert: 29 assertions
+    ER table ⇄ class table keeps names, sections and usable rows
+    class table → object/lifeline and object → class/lifeline
+    relation-attribute → class section conversion
+    common image nodes survive target diagram changes
+    unsupported shape/type combinations return no conversion
   test:github: 30 assertions
     path normalization/traversal rejection, stable project digests
     remote SHA conflict classification, device-flow error messages
@@ -643,8 +689,10 @@ Browser checks:
 - add a new use case and confirm the tighter `138 × 45` ellipse does not leave excessive empty space around a
   short label;
 - drag each floating menu by its header and confirm it moves within the canvas; press Escape and confirm it
-  closes; focus a single-line field, press Enter and confirm it closes; keep Shift+Enter/newlines usable in a
-  multi-line comment;
+  closes; press Enter in a non-row single-line field and confirm it closes; keep Shift+Enter/newlines usable in
+  a multi-line comment; in a row, confirm Add row focuses the new name and that Enter/Tab in the name moves to
+  the type, Enter in the type inserts a blank row below, and Enter in a fully blank row deletes it and closes
+  the menu;
 - select a class row and confirm the visibility-prefix chips (`+`, `-`, `#`, `~`, none) and custom-prefix field
   update the rendered row; confirm ER rows keep the PK/FK/NN/UQ controls;
 - select a table and confirm resize handles at all four corners and no corner connection arrows; confirm
@@ -652,7 +700,8 @@ Browser checks:
   its own side arrows; resize from the NW and SE corners and confirm the opposite corner stays fixed;
 - double-click table header, section header, row name, data type, constraint badge and other object text;
   confirm the matching field is focused and selected;
-- add a table row from the floating menu and confirm the table/revision update;
+- add a table row from the floating menu and confirm the menu focuses its name field, the table/revision
+  update, and the blank row is inserted below the current row when added from a row menu;
 - open **+ Add object** and confirm the catalogue matches the active diagram (ER / class / use case /
   sequence / communication / state), with Comment and Image in every catalogue; confirm the button is the
   full-width filled control at the top of the left panel, and that collapsing the panel replaces it with the
@@ -688,6 +737,23 @@ Browser checks:
   cursors;
 - right-/middle-drag pan, release, then click a node/edge and open another scene tab; confirm pan mode ends and
   normal selection works;
+- left-drag a rubber band around two objects and confirm both get outlines; drag a band that covers only part
+  of an object and confirm it is not selected; Ctrl/Cmd+click a third object and confirm it toggles;
+- drag one selected member and confirm every selected object moves by the same snapped delta while connectors
+  stay attached; confirm resize handles/ports are hidden for the multi-selection;
+- select two connected objects, press `Ctrl/Cmd+C` then `Ctrl/Cmd+V`, and confirm fresh copies appear offset
+  and selected with their internal connector; select only a connector, press `Ctrl/Cmd+C`, and confirm the
+  warning instead of a copy;
+- copy one ER table, switch to the class scene and press `Ctrl/Cmd+V`; confirm a class table with the same
+  rows appears; copy that table, create/switch to an object scene and paste, and confirm `:Name` underlined
+  object; paste the same copied table into a sequence scene and confirm a lifeline with the `:Name` head;
+- copy two objects and try pasting them into a scene of another diagram type; confirm the single-object
+  warning and no scene change;
+- create a scene with the **Object** type and confirm the palette and the new **Class instance** object work;
+- press `Ctrl/Cmd+X` and `Ctrl/Cmd+V` and confirm the cut objects disappear and paste back; select two objects
+  and press Delete and confirm both and their attached connectors are removed;
+- in a sequence diagram, rubber-band only a lifeline head and confirm it selects; rubber-band its vertical
+  axis alone and confirm it does not select;
 - confirm the lifeline axis menu no longer offers an interaction frame (the frame remains in the Add object
   palette);
 - confirm a sequence edge shows no orthogonal routing control and stays straight even after double-clicking it;

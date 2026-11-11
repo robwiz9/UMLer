@@ -9,7 +9,7 @@ import type { ActivationId, RowId, SectionId } from "../model/ids.ts";
 import { NodeFocusMenu } from "./NodeFocusMenu.tsx";
 import { DraggablePanel } from "./DraggablePanel.tsx";
 import type { Point, Rect } from "../model/geometry.ts";
-import { rectContainsPoint, snap, sub } from "../model/geometry.ts";
+import { rectContainsPoint, rectFromPoints, snap, sub } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import type { EdgeAttachmentRef, PortAttachmentRef } from "../model/edge-create.ts";
 import { childrenOfBoundary } from "../model/containment.ts";
@@ -53,6 +53,7 @@ interface CanvasStageProps {
   readonly onUseImageAsset: (nodeId: string, assetId: string) => void;
   readonly onRemoveImageFromNode: (nodeId: string) => void;
   readonly selectedNodeId: string | null;
+  readonly selectedNodeIds: readonly string[];
   readonly selectedEdgeId: string | null;
   readonly selectedActivation: {
     readonly nodeId: string;
@@ -60,6 +61,8 @@ interface CanvasStageProps {
   } | null;
   readonly fitNonce: number;
   readonly onSelectNode: (nodeId: string | null) => void;
+  readonly onSelectNodes: (nodeIds: readonly string[], primary?: string | null) => void;
+  readonly onToggleNodeSelection: (nodeId: string) => void;
   readonly onSelectEdge: (edgeId: string | null) => void;
   readonly onSelectActivation: (
     activation: { readonly nodeId: string; readonly activationId: ActivationId } | null,
@@ -98,7 +101,7 @@ interface CanvasStageProps {
   readonly onClearNodeFocus: () => void;
   readonly onUpdateNode: (nodeId: string, patch: Partial<SceneNode>) => void;
   readonly onUpdateRow: (nodeId: string, rowId: RowId, patch: Partial<TableRow>) => void;
-  readonly onAddRow: (nodeId: string, sectionId?: SectionId) => void;
+  readonly onAddRow: (nodeId: string, sectionId?: SectionId, afterRowId?: RowId) => void;
   readonly onDeleteRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
@@ -132,6 +135,15 @@ type Interaction =
       readonly pointerId: number;
       readonly startScreen: Point;
       readonly startCamera: Camera;
+    }
+  | {
+      readonly kind: "marquee";
+      readonly pointerId: number;
+      readonly startWorld: Point;
+      currentWorld: Point;
+      readonly additive: boolean;
+      readonly baseIds: readonly string[];
+      moved: boolean;
     }
   | {
       readonly kind: "drag";
@@ -223,6 +235,16 @@ const pointFromEvent = (event: { readonly clientX: number; readonly clientY: num
 
 const clampValue = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+/** Lifelines are selected by their head; the tall time axis is not a target. */
+const selectionFrameFor = (node: NodeLayout): Rect =>
+  node.kind === "lifeline" ? node.headFrame : node.frame;
+
+const frameFullyInside = (inner: Rect, outer: Rect): boolean =>
+  inner.x >= outer.x - 0.001 &&
+  inner.y >= outer.y - 0.001 &&
+  inner.x + inner.width <= outer.x + outer.width + 0.001 &&
+  inner.y + inner.height <= outer.y + outer.height + 0.001;
 
 /** Port reference in the form the document stores. */
 const attachmentFor = (port: PortGeometry): PortAttachmentRef => ({
@@ -523,10 +545,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onUseImageAsset,
   onRemoveImageFromNode,
   selectedNodeId,
+  selectedNodeIds,
   selectedEdgeId,
   selectedActivation,
   fitNonce,
   onSelectNode,
+  onSelectNodes,
+  onToggleNodeSelection,
   onSelectEdge,
   onSelectActivation,
   onSetMarker,
@@ -566,6 +591,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const svgRef = useRef<SVGSVGElement | null>(null);
   const openAddMenuRef = useRef<((origin: "panel" | "canvas") => void) | null>(null);
   const interactionRef = useRef<Interaction | null>(null);
+  const suppressNodePartClickRef = useRef(false);
   const layoutRef = useRef(layout);
   const cameraRef = useRef(camera);
   const zoomRef = useRef(zoom);
@@ -585,6 +611,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
   const [cursorWorld, setCursorWorld] = useState<Point>({ x: 0, y: 0 });
   const [guides, setGuides] = useState<readonly SnapGuide[]>([]);
+  const [marquee, setMarquee] = useState<Rect | null>(null);
   const [hoveredPort, setHoveredPort] = useState<PortGeometry | null>(null);
   const [panning, setPanning] = useState(false);
   const [activeEndpoint, setActiveEndpoint] = useState<EdgeEnd | null>(null);
@@ -658,6 +685,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         return;
       }
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+      // A field handled Enter itself (e.g. row entry moves focus instead of
+      // committing); do not close the menu underneath it.
+      if (event.defaultPrevented) return;
       // Single-line fields commit on Enter; multiline notes and pickers do not.
       if (!(event.target instanceof HTMLInputElement)) return;
       if (!["text", "search", "number", "email", "url", "tel", "password"].includes(event.target.type)) {
@@ -1069,12 +1099,33 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
 
   const handleBackgroundPointerDown = (event: React.PointerEvent<SVGRectElement>): void => {
     if (event.button !== 0) return;
+    const svg = svgRef.current;
+    if (svg === null) return;
+    const screen = pointFromEvent(event, svg);
+    const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     onSelectActivation(null);
     setActivationDraft(null);
     setActiveEndpoint(null);
     setLinePopover(null);
+    onClearNodeFocus();
     onSelectEdge(null);
-    onSelectNode(null);
+    const additive = event.ctrlKey || event.metaKey;
+    if (!additive) onSelectNode(null);
+    interactionRef.current = {
+      kind: "marquee",
+      pointerId: event.pointerId,
+      startWorld: world,
+      currentWorld: world,
+      additive,
+      baseIds: additive ? selectedNodeIds : [],
+      moved: false,
+    };
+    setMarquee(null);
+    try {
+      svg.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events cannot own capture.
+    }
     event.preventDefault();
   };
 
@@ -1085,18 +1136,41 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (svg === null || nodeLayout === undefined) return;
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    const additive = event.ctrlKey || event.metaKey;
+    if (additive) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextNodePartClick();
+      onClearNodeFocus();
+      onToggleNodeSelection(nodeId);
+      return;
+    }
+
+    const alreadySelected = selectedNodeIds.includes(nodeId);
+    const movingIds = alreadySelected && selectedNodeIds.length > 0
+      ? selectedNodeIds
+      : [nodeId];
+    if (!alreadySelected) onSelectNodes([nodeId], nodeId);
+    else if (selectedNodeId !== nodeId) onSelectNodes(movingIds, nodeId);
+
     onSelectActivation(null);
     setActivationDraft(null);
     setActiveEndpoint(null);
     setLinePopover(null);
     onSelectEdge(null);
-    onSelectNode(nodeId);
-    const childIds = childrenOfBoundary(scene, nodeId).map((child) => child.id);
-    const childStartFrames = Object.fromEntries(
-      childIds.map((childId) => [
-        childId,
-        layout.nodes[childId]?.frame ?? scene.nodes[childId]?.frame ?? nodeLayout.frame,
-      ]),
+
+    const movingSet = new Set<string>();
+    for (const id of movingIds) {
+      movingSet.add(id);
+      for (const child of childrenOfBoundary(scene, id)) movingSet.add(String(child.id));
+    }
+    movingSet.delete(nodeId);
+    const childIds = [...movingSet];
+    const childStartFrames: Record<string, Rect> = Object.fromEntries(
+      childIds.flatMap((childId) => {
+        const frame = layout.nodes[childId]?.frame ?? scene.nodes[childId]?.frame;
+        return frame === undefined ? [] : [[childId, frame] as const];
+      }),
     );
     beginInteraction(event, {
       kind: "drag",
@@ -1268,7 +1342,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     corner: ResizeCorner,
     event: React.PointerEvent<SVGRectElement>,
   ): void => {
-    if (event.button !== 0 || selectedNodeId === null) return;
+    if (event.button !== 0 || selectedNodeIds.length !== 1 || selectedNodeId === null) return;
     const svg = svgRef.current;
     const nodeLayout = layout.nodes[selectedNodeId];
     if (svg === null || nodeLayout === undefined) return;
@@ -1379,6 +1453,33 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const finish = (commit: boolean): void => {
     const interaction = interactionRef.current;
     if (interaction === null) return;
+
+    if (interaction.kind === "marquee") {
+      if (commit && interaction.moved) {
+        const region = rectFromPoints(interaction.startWorld, interaction.currentWorld);
+        const contained = Object.values(layout.nodes)
+          .filter((node) => frameFullyInside(selectionFrameFor(node), region))
+          .sort(
+            (a, b) =>
+              (scene.nodes[a.nodeId]?.z ?? 0) - (scene.nodes[b.nodeId]?.z ?? 0),
+          )
+          .map((node) => node.nodeId);
+        const next = interaction.additive
+          ? [...new Set([...interaction.baseIds, ...contained])]
+          : contained;
+        onSelectNodes(next, next[next.length - 1] ?? null);
+      } else if (commit && !interaction.additive) {
+        onSelectNode(null);
+      }
+      setMarquee(null);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
 
     if (interaction.kind === "activation-move" || interaction.kind === "activation-resize") {
       const changed =
@@ -1515,6 +1616,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     } else {
       onPreviewFrames({});
     }
+    if (interaction.kind === "drag" && changed) suppressNextNodePartClick();
     interactionRef.current = null;
     setGuides([]);
     setPanning(false);
@@ -1536,6 +1638,16 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
 
     const interaction = interactionRef.current;
     if (interaction === null) return;
+
+    if (interaction.kind === "marquee") {
+      const moved = interaction.moved ||
+        Math.hypot(world.x - interaction.startWorld.x, world.y - interaction.startWorld.y) *
+          zoomRef.current > 3;
+      interaction.moved = moved;
+      interaction.currentWorld = world;
+      setMarquee(moved ? rectFromPoints(interaction.startWorld, world) : null);
+      return;
+    }
 
     if (interaction.kind === "draw") {
       const rawTarget = findDrawTarget(
@@ -1751,8 +1863,28 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     finish(false);
   };
 
-  const selectedLayout = selectedNodeId !== null ? layout.nodes[selectedNodeId] : undefined;
-  const selectedPorts = selectedNodeId !== null ? snapHandlesForNode(layout.ports, selectedNodeId) : [];
+  const suppressNextNodePartClick = (): void => {
+    suppressNodePartClickRef.current = true;
+    window.setTimeout(() => {
+      suppressNodePartClickRef.current = false;
+    }, 0);
+  };
+
+  const handleNodePartClick = (focus: NodeFocus): void => {
+    if (suppressNodePartClickRef.current) {
+      suppressNodePartClickRef.current = false;
+      return;
+    }
+    onNodePartClick(focus);
+  };
+
+  const singleSelectedNodeId = selectedNodeIds.length === 1
+    ? selectedNodeId ?? selectedNodeIds[0] ?? null
+    : null;
+  const selectedLayout =
+    singleSelectedNodeId === null ? undefined : layout.nodes[singleSelectedNodeId];
+  const selectedPorts =
+    singleSelectedNodeId === null ? [] : snapHandlesForNode(layout.ports, singleSelectedNodeId);
   const selectedActivationFrame = (() => {
     if (selectedActivation === null) return null;
     const nodeLayout = layout.nodes[selectedActivation.nodeId];
@@ -2016,7 +2148,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 node={node}
                 layout={nodeLayout}
                 theme={scene.theme}
-                selected={node.id === selectedNodeId}
+                selected={selectedNodeIds.includes(node.id)}
                 skeleton={false}
                 imageAsset={
                   node.kind === "image" && node.assetId !== undefined
@@ -2025,7 +2157,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 }
                 onPointerDown={(event) => handleNodePointerDown(event, node.id)}
                 onTextDoubleClick={(target) => onTextDoubleClick(node.id, target)}
-                onPartClick={onNodePartClick}
+                onPartClick={handleNodePartClick}
                 activationDraft={
                   activationDraft?.nodeId === node.id
                     ? {
@@ -2259,6 +2391,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 />
               ))}
             </>
+          ) : null}
+          {marquee !== null ? (
+            <rect
+              x={marquee.x}
+              y={marquee.y}
+              width={marquee.width}
+              height={marquee.height}
+              fill={scene.theme.colors.selection}
+              fillOpacity={0.08}
+              stroke={scene.theme.colors.selection}
+              strokeWidth={1 / zoom}
+              strokeDasharray={`${4 / zoom} ${3 / zoom}`}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
           ) : null}
           {guides.map((guide) => (
             <line

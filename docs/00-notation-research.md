@@ -1,4 +1,4 @@
-# 00 — Notation research: ER and the five UML diagram types
+# 00 — Notation research: ER and the UML diagram types
 
 **Status:** research note for Step 1. This is a visual/notation specification, not a claim that the app
 will implement the complete UML metamodel.

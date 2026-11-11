@@ -976,6 +976,9 @@ export const NodeSkeleton = ({
   return (
     <g
       data-node-id={node.id}
+      data-node-kind={node.kind}
+      data-table-kind={node.kind === "table" ? node.tableKind : undefined}
+      data-selected={selected ? "true" : undefined}
       onPointerDown={onPointerDown}
       onClick={(event) => {
         event.stopPropagation();

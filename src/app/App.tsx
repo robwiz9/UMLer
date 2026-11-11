@@ -60,6 +60,8 @@ import { snap, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import { createImageObject, createObjectFromTemplate } from "../model/object-catalog.ts";
 import { collectProjectAssets, pruneUnusedProjectAssets, unusedProjectAssets } from "../model/assets.ts";
+import { copySceneNodes, pasteSceneClipboard, type SceneClipboard } from "../model/clipboard.ts";
+import { convertNodeForDiagram } from "../model/convert.ts";
 import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
 import { createImageAssetFromFile, isSupportedImageFile } from "./image-assets.ts";
 import type { EdgeAttachmentRef, EdgeTargetRef, PortAttachmentRef } from "../model/edge-create.ts";
@@ -72,10 +74,12 @@ import {
   deleteActivation,
   deleteEdge,
   deleteNode,
+  deleteNodes,
   deleteRow,
   deleteSection,
   insertEdge,
   insertObject,
+  insertSubgraph,
   insertConnectedObject,
   moveSequenceEdge,
   patchLayout,
@@ -241,6 +245,7 @@ export const App = () => {
   const [panelVisible, setPanelVisible] = useState(true);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [selectedActivation, setSelectedActivation] = useState<{
     readonly nodeId: string;
@@ -258,6 +263,8 @@ export const App = () => {
   const [focusRequest, setFocusRequest] = useState<CanvasTextFocusRequest | null>(null);
   const [nodeFocus, setNodeFocus] = useState<NodeFocus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const clipboardRef = useRef<SceneClipboard | null>(null);
+  const pasteOffsetRef = useRef(0);
   const importTargetRef = useRef<ImportTarget>("scene");
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
   const manualSaveRef = useRef<() => void>(() => {});
@@ -351,6 +358,7 @@ export const App = () => {
     setActiveSceneId(sceneId);
     resetHistory(target);
     setSelectedNodeId(null);
+    setSelectedNodeIds([]);
     setSelectedEdgeId(null);
     setSelectedActivation(null);
     setPreviewFrames({});
@@ -374,6 +382,7 @@ export const App = () => {
 
   const clearTransientSelection = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedNodeIds([]);
     setSelectedEdgeId(null);
     setSelectedActivation(null);
     setNodeFocus(null);
@@ -1192,10 +1201,28 @@ export const App = () => {
     setScene((current) => updateRow(current, asNodeId(nodeId), asRowId(rowId), patch));
   }, []);
 
-  const handleRowAdd = useCallback((nodeId: string, sectionId?: string) => {
+  const handleRowAdd = useCallback((nodeId: string, sectionId?: string, afterRowId?: string) => {
+    const rowId = asRowId(newId("row"));
     setScene((current) =>
-      addRow(current, asNodeId(nodeId), sectionId === undefined ? undefined : asSectionId(sectionId)),
+      addRow(
+        current,
+        asNodeId(nodeId),
+        sectionId === undefined ? undefined : asSectionId(sectionId),
+        {
+          rowId,
+          afterRowId: afterRowId === undefined ? undefined : asRowId(afterRowId),
+        },
+      ),
     );
+    setSelectedNodeId(nodeId);
+    setSelectedNodeIds([nodeId]);
+    setSelectedEdgeId(null);
+    setNodeFocus({ kind: "row", nodeId, rowId });
+    setFocusRequest((current) => ({
+      nodeId,
+      target: { kind: "rowName", rowId },
+      token: (current?.token ?? 0) + 1,
+    }));
   }, []);
 
   const handleRowDelete = useCallback((nodeId: string, rowId: string) => {
@@ -1224,6 +1251,7 @@ export const App = () => {
       const node = created.node;
       setScene((current) => insertObject(current, node, created.asset));
       setSelectedNodeId(node.id);
+      setSelectedNodeIds([node.id]);
       setSelectedEdgeId(null);
       const focus: NodeFocus =
         node.kind === "table" || node.kind === "relationAttribute"
@@ -1284,6 +1312,7 @@ export const App = () => {
         const last = placed[placed.length - 1];
         if (last !== undefined) {
           setSelectedNodeId(last.id);
+          setSelectedNodeIds([last.id]);
           setSelectedEdgeId(null);
           setSelectedActivation(null);
           setNodeFocus(null);
@@ -1384,6 +1413,7 @@ export const App = () => {
         ),
       );
       setSelectedNodeId(node.id);
+      setSelectedNodeIds([node.id]);
       setSelectedEdgeId(null);
       setSelectedActivation(null);
       setNodeFocus({ kind: "table", nodeId: node.id });
@@ -1431,19 +1461,171 @@ export const App = () => {
       setScene((current) => insertEdge(current, edge));
       setSelectedEdgeId(edge.id);
       setSelectedNodeId(null);
+      setSelectedNodeIds([]);
       setNodeFocus(null);
       setLayoutNote("Connector created. Click the line or a terminal to refine it.");
     },
     [scene],
   );
 
+  const selectNodes = useCallback(
+    (nodeIds: readonly string[], primary?: string | null) => {
+      const unique = [...new Set(nodeIds)];
+      setSelectedNodeIds(unique);
+      setSelectedNodeId(primary ?? unique[unique.length - 1] ?? null);
+      setSelectedActivation(null);
+      setSelectedEdgeId(null);
+      setNodeFocus((current) =>
+        current !== null && unique.length === 1 && unique[0] === current.nodeId
+          ? current
+          : null);
+    },
+    [],
+  );
+
+  const selectNode = useCallback((nodeId: string | null) => {
+    selectNodes(nodeId === null ? [] : [nodeId], nodeId);
+  }, [selectNodes]);
+
+  const toggleNodeSelection = useCallback((nodeId: string) => {
+    const has = selectedNodeIds.includes(nodeId);
+    const next = has
+      ? selectedNodeIds.filter((id) => id !== nodeId)
+      : [...selectedNodeIds, nodeId];
+    const primary = has
+      ? (selectedNodeId === nodeId ? next[next.length - 1] ?? null : selectedNodeId)
+      : nodeId;
+    setSelectedNodeIds(next);
+    setSelectedNodeId(primary);
+    setSelectedActivation(null);
+    setSelectedEdgeId(null);
+    setNodeFocus(null);
+  }, [selectedNodeId, selectedNodeIds]);
+
   const handleDeleteNode = useCallback((nodeId: string) => {
     setScene((current) => deleteNode(current, asNodeId(nodeId)));
-    setSelectedNodeId((current) => (current === nodeId ? null : current));
+    const remaining = selectedNodeIds.filter((id) => id !== nodeId);
+    setSelectedNodeIds(remaining);
+    setSelectedNodeId((current) =>
+      current === nodeId ? remaining[remaining.length - 1] ?? null : current);
     setSelectedActivation((current) => (current?.nodeId === nodeId ? null : current));
     setNodeFocus((current) => (current?.nodeId === nodeId ? null : current));
     setLayoutNote("Object and its connectors deleted.");
-  }, []);
+  }, [selectedNodeIds]);
+
+  const handleCopySelection = useCallback(() => {
+    if (selectedNodeIds.length === 0) {
+      showToast(
+        selectedEdgeId !== null
+          ? "Select objects to copy; connectors copy with their objects."
+          : "Select objects to copy.",
+        "warning",
+      );
+      return;
+    }
+    const payload = copySceneNodes(scene, selectedNodeIds);
+    if (payload === null) {
+      showToast("The selected objects are no longer available.", "warning");
+      return;
+    }
+    clipboardRef.current = payload;
+    pasteOffsetRef.current = 0;
+    const connectors = payload.edges.length === 0
+      ? ""
+      : ` and ${payload.edges.length} connector${payload.edges.length === 1 ? "" : "s"}`;
+    showToast(
+      `Copied ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}${connectors}.`,
+    );
+  }, [scene, selectedEdgeId, selectedNodeIds, showToast]);
+
+  const handleCutSelection = useCallback(() => {
+    if (selectedNodeIds.length === 0) {
+      showToast("Select objects to cut.", "warning");
+      return;
+    }
+    const payload = copySceneNodes(scene, selectedNodeIds);
+    if (payload === null) {
+      showToast("The selected objects are no longer available.", "warning");
+      return;
+    }
+    clipboardRef.current = payload;
+    pasteOffsetRef.current = 0;
+    setScene((current) =>
+      deleteNodes(current, selectedNodeIds.map((nodeId) => asNodeId(nodeId))),
+    );
+    selectNodes([], null);
+    setSelectedEdgeId(null);
+    showToast(`Cut ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}.`);
+  }, [scene, selectedNodeIds, selectNodes, showToast]);
+
+  const handlePasteSelection = useCallback(() => {
+    const clipboard = clipboardRef.current;
+    if (clipboard === null) {
+      showToast("Nothing to paste.", "warning");
+      return;
+    }
+    if (clipboard.sceneId !== scene.id && clipboard.diagramKind !== scene.meta.diagramKind) {
+      if (clipboard.nodes.length !== 1) {
+        showToast("Copy a single object to paste it into another diagram type.", "warning");
+        return;
+      }
+      const source = clipboard.nodes[0];
+      if (source === undefined) {
+        showToast("Nothing to paste.", "warning");
+        return;
+      }
+      const converted = convertNodeForDiagram(source, scene.meta.diagramKind, scene);
+      if (converted === null) {
+        showToast("This object cannot be converted to the target diagram type.", "warning");
+        return;
+      }
+      pasteOffsetRef.current += 1;
+      setScene((current) => insertSubgraph(current, [converted], [], clipboard.assets));
+      selectNodes([converted.id], converted.id);
+      showToast("Pasted 1 object and converted it for this diagram.");
+      return;
+    }
+    const pasteNumber = pasteOffsetRef.current + 1;
+    const result = pasteSceneClipboard(scene, clipboard, {
+      x: pasteNumber * 18,
+      y: pasteNumber * 18,
+    });
+    if (result === null) {
+      showToast("Nothing to paste.", "warning");
+      return;
+    }
+    pasteOffsetRef.current = pasteNumber;
+    setScene(result.scene);
+    selectNodes(result.nodeIds, result.nodeIds[result.nodeIds.length - 1] ?? null);
+    const connectors = result.edgeIds.length === 0
+      ? ""
+      : ` and ${result.edgeIds.length} connector${result.edgeIds.length === 1 ? "" : "s"}`;
+    showToast(
+      `Pasted ${result.nodeIds.length} object${result.nodeIds.length === 1 ? "" : "s"}${connectors}.`,
+    );
+  }, [scene, selectNodes, showToast]);
+
+  useEffect(() => {
+    const handleClipboardKey = (event: KeyboardEvent): void => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName.toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable) {
+          return;
+        }
+      }
+      const key = event.key.toLowerCase();
+      if (key !== "c" && key !== "x" && key !== "v") return;
+      event.preventDefault();
+      if (key === "c") handleCopySelection();
+      else if (key === "x") handleCutSelection();
+      else handlePasteSelection();
+    };
+
+    window.addEventListener("keydown", handleClipboardKey);
+    return () => window.removeEventListener("keydown", handleClipboardKey);
+  }, [handleCopySelection, handleCutSelection, handlePasteSelection]);
 
   /**
    * Delete is scope-aware: the focused table part is removed before its
@@ -1530,18 +1712,37 @@ export const App = () => {
         return;
       }
 
-      if (selectedNodeId !== null) {
+      const nodeIds = selectedNodeIds.length > 0
+        ? selectedNodeIds
+        : selectedNodeId === null
+          ? []
+          : [selectedNodeId];
+      if (nodeIds.length > 0) {
         event.preventDefault();
-        setScene((current) => deleteNode(current, asNodeId(selectedNodeId)));
-        setSelectedNodeId(null);
-        setNodeFocus(null);
-        setLayoutNote("Object and its connectors deleted.");
+        setScene((current) =>
+          deleteNodes(current, nodeIds.map((nodeId) => asNodeId(nodeId))),
+        );
+        selectNodes([], null);
+        setSelectedEdgeId(null);
+        setLayoutNote(
+          nodeIds.length === 1
+            ? "Object and its connectors deleted."
+            : `${nodeIds.length} objects and their connectors deleted.`,
+        );
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nodeFocus, scene.nodes, selectedActivation, selectedEdgeId, selectedNodeId]);
+  }, [
+    nodeFocus,
+    scene.nodes,
+    selectNodes,
+    selectedActivation,
+    selectedEdgeId,
+    selectedNodeId,
+    selectedNodeIds,
+  ]);
 
   const handleSetEdgeLabel = useCallback((edgeId: string, zone: EdgeLabelZone, text: string) => {
     setScene((current) => setEndpointLabel(current, asEdgeId(edgeId), zone, text));
@@ -1646,19 +1847,13 @@ export const App = () => {
     setFitNonce((value) => value + 1);
   }, [layout, scene]);
 
-  const selectNode = useCallback((nodeId: string | null) => {
-    setSelectedNodeId(nodeId);
-    setSelectedActivation(null);
-    setNodeFocus((current) => (current !== null && current.nodeId === nodeId ? current : null));
-    if (nodeId !== null) setSelectedEdgeId(null);
-  }, []);
-
   const selectEdge = useCallback((edgeId: string | null) => {
     setSelectedEdgeId(edgeId);
     if (edgeId !== null) {
       setSelectedActivation(null);
       setNodeFocus(null);
       setSelectedNodeId(null);
+      setSelectedNodeIds([]);
     }
   }, []);
 
@@ -1683,8 +1878,7 @@ export const App = () => {
 
   const handleCanvasTextDoubleClick = useCallback((nodeId: string, target: CanvasTextTarget) => {
     const node = scene.nodes[nodeId];
-    setSelectedNodeId(nodeId);
-    setSelectedEdgeId(null);
+    selectNodes([nodeId], nodeId);
     if (target.kind === "rowName" || target.kind === "rowType") {
       setNodeFocus({ kind: "row", nodeId, rowId: target.rowId });
     } else if (target.kind === "sectionTitle") {
@@ -1695,7 +1889,7 @@ export const App = () => {
       setNodeFocus({ kind: "object", nodeId });
     }
     requestFocus(nodeId, target);
-  }, [requestFocus, scene.nodes]);
+  }, [requestFocus, scene.nodes, selectNodes]);
 
   const nodeTargetForFocus = useCallback((focus: NodeFocus): CanvasTextTarget => {
     const node = scene.nodes[focus.nodeId];
@@ -1710,8 +1904,7 @@ export const App = () => {
   }, [scene.nodes]);
 
   const handleNodePartClick = useCallback((focus: NodeFocus) => {
-    setSelectedNodeId(focus.nodeId);
-    setSelectedEdgeId(null);
+    selectNodes([focus.nodeId], focus.nodeId);
     const same = nodeFocus !== null &&
       nodeFocus.kind === focus.kind &&
       nodeFocus.nodeId === focus.nodeId &&
@@ -1721,7 +1914,7 @@ export const App = () => {
         (nodeFocus.kind === "lifelineSpine" && Math.abs(nodeFocus.y - focus.y) < 1));
     if (same) requestFocus(focus.nodeId, nodeTargetForFocus(focus));
     setNodeFocus(focus);
-  }, [nodeFocus, nodeTargetForFocus, requestFocus]);
+  }, [nodeFocus, nodeTargetForFocus, requestFocus, selectNodes]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -1835,10 +2028,13 @@ export const App = () => {
           onUseImageAsset={handleUseImageAsset}
           onRemoveImageFromNode={handleRemoveImageFromNode}
           selectedNodeId={selectedNodeId}
+          selectedNodeIds={selectedNodeIds}
           selectedEdgeId={selectedEdgeId}
           selectedActivation={selectedActivation}
           fitNonce={fitNonce}
           onSelectNode={selectNode}
+          onSelectNodes={selectNodes}
+          onToggleNodeSelection={toggleNodeSelection}
           onSelectEdge={selectEdge}
           onSelectActivation={selectActivation}
           onSetMarker={handleSetMarker}

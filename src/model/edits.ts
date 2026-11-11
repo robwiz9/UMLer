@@ -102,19 +102,26 @@ export const setSceneTheme = (scene: SceneDocument, theme: Theme): SceneDocument
   });
 
 /**
- * Removes a node and every connector whose endpoint references it. Connectors
- * are the only external references to a node in the scene graph.
+ * Removes several nodes and every connector whose endpoint references one of
+ * them. Connectors are the only external references to a node in the scene
+ * graph; edges tethered to a removed connector are removed as well.
  */
-export const deleteNode = (scene: SceneDocument, nodeId: NodeId): SceneDocument => {
-  if (scene.nodes[nodeId] === undefined) return scene;
+export const deleteNodes = (
+  scene: SceneDocument,
+  nodeIds: readonly NodeId[],
+): SceneDocument => {
+  const removedNodes = new Set<string>(nodeIds);
+  if (removedNodes.size === 0) return scene;
+  if (![...removedNodes].some((id) => scene.nodes[id] !== undefined)) return scene;
+
   const removedEdges = new Set<string>();
   let changed = true;
   while (changed) {
     changed = false;
     for (const edge of Object.values(scene.edges)) {
       if (removedEdges.has(edge.id)) continue;
-      const sourceNodeGone = edge.source.target === "node" && edge.source.nodeId === nodeId;
-      const targetNodeGone = edge.target.target === "node" && edge.target.nodeId === nodeId;
+      const sourceNodeGone = edge.source.target === "node" && removedNodes.has(edge.source.nodeId);
+      const targetNodeGone = edge.target.target === "node" && removedNodes.has(edge.target.nodeId);
       const sourceEdgeGone =
         edge.source.target === "edge" && removedEdges.has(edge.source.edgeId);
       const targetEdgeGone =
@@ -126,7 +133,7 @@ export const deleteNode = (scene: SceneDocument, nodeId: NodeId): SceneDocument 
     }
   }
   const nodes = Object.fromEntries(
-    Object.entries(scene.nodes).filter(([id]) => id !== nodeId),
+    Object.entries(scene.nodes).filter(([id]) => !removedNodes.has(id)),
   );
   const edges = Object.fromEntries(
     Object.entries(scene.edges).filter(([id]) => !removedEdges.has(id)),
@@ -142,6 +149,30 @@ export const deleteNode = (scene: SceneDocument, nodeId: NodeId): SceneDocument 
     Object.entries(scene.assets).filter(([id]) => usedAssetIds.has(id)),
   );
   return stamp(scene, { nodes, edges, assets });
+};
+
+export const deleteNode = (scene: SceneDocument, nodeId: NodeId): SceneDocument =>
+  deleteNodes(scene, [nodeId]);
+
+/** Inserts a copied subgraph in one revision. */
+export const insertSubgraph = (
+  scene: SceneDocument,
+  nodes: readonly SceneNode[],
+  edges: readonly SceneEdge[],
+  assets: Readonly<Record<string, ImageAsset>> = {},
+): SceneDocument => {
+  if (nodes.length === 0) return scene;
+  return stamp(scene, {
+    nodes: {
+      ...scene.nodes,
+      ...Object.fromEntries(nodes.map((node) => [node.id, node])),
+    },
+    edges: {
+      ...scene.edges,
+      ...Object.fromEntries(edges.map((edge) => [edge.id, edge])),
+    },
+    assets: { ...scene.assets, ...assets },
+  });
 };
 
 /** Attach project image bytes to an image node, or revert it to an empty frame. */
@@ -355,10 +386,18 @@ export const updateRow = (
     return withSections(node, sections);
   });
 
+export interface AddRowOptions {
+  /** Pre-allocated so the caller can focus the new row's name field. */
+  readonly rowId?: RowId;
+  /** Insert directly below this row instead of appending to the section. */
+  readonly afterRowId?: RowId;
+}
+
 export const addRow = (
   scene: SceneDocument,
   nodeId: NodeId,
   sectionId?: SectionId,
+  options: AddRowOptions = {},
 ): SceneDocument =>
   updateNode(scene, nodeId, (node) => {
     if (node.kind !== "table" && node.kind !== "relationAttribute") return node;
@@ -379,15 +418,20 @@ export const addRow = (
       return withSections(node, [...sections, section]);
     }
     const row: TableRow = {
-      id: asRowId(newId("row")),
+      id: options.rowId ?? asRowId(newId("row")),
       kind: target.role === "methods" ? "method" : "attribute",
-      name: target.role === "methods" ? "newOperation" : "newAttribute",
-      type: target.role === "methods" ? undefined : "string",
+      // Blank rows let the row editor drive a fast keyboard entry flow.
+      name: "",
       visibility: node.kind === "table" && node.tableKind === "class" ? "+" : undefined,
       constraints: [],
     };
+    const afterIndex = options.afterRowId === undefined
+      ? -1
+      : target.rows.findIndex((entry) => entry.id === options.afterRowId);
+    const rows = [...target.rows];
+    rows.splice(afterIndex < 0 ? rows.length : afterIndex + 1, 0, row);
     const next = sections.map((section, index) =>
-      index === targetIndex ? { ...section, rows: [...section.rows, row] } : section,
+      index === targetIndex ? { ...section, rows } : section,
     );
     return withSections(node, next);
   });

@@ -12,10 +12,12 @@
     "validate:scene": "node --experimental-strip-types --no-warnings scripts/validate-fixtures.ts",
     "test:layout": "node --experimental-strip-types --no-warnings scripts/test-layout.ts",
     "test:persistence": "node --experimental-strip-types --no-warnings scripts/test-persistence.ts",
+    "test:clipboard": "node --experimental-strip-types --no-warnings scripts/test-clipboard.ts",
+    "test:convert": "node --experimental-strip-types --no-warnings scripts/test-convert.ts",
     "test:github": "node --experimental-strip-types --no-warnings scripts/test-github.ts",
     "test:storage": "node --experimental-strip-types --no-warnings scripts/test-storage.ts",
     "bootstrap:typst": "node scripts/bootstrap-typst-packages.mjs",
-    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:github && npm run test:storage",
+    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:github && npm run test:storage",
     "proof": "typst compile --package-path .typst/packages --format png --ppi 96 docs/assets/notation-proof.typ docs/assets/notation-proof.png"
   },
   "keywords": [

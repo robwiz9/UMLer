@@ -41,6 +41,7 @@ export type ObjectTemplateId =
   | "associative-table"
   | "relation-attribute"
   | "class"
+  | "class-instance"
   | "state"
   | "initial-state"
   | "final-state"
@@ -112,6 +113,16 @@ const BY_DIAGRAM: Record<DiagramKind, readonly ObjectTemplate[]> = {
       label: "Class",
       hint: "Name, attributes and operations",
       icon: "▥",
+      group: "diagram",
+    },
+    ...COMMON_TEMPLATES,
+  ],
+  "uml-object": [
+    {
+      id: "class-instance",
+      label: "Class instance",
+      hint: "Underlined object with a :Class name",
+      icon: "▭",
       group: "diagram",
     },
     ...COMMON_TEMPLATES,
@@ -368,6 +379,12 @@ const communicationObject = (frame: Rect): ObjectNode => ({
   underlineName: true,
 });
 
+const classInstance = (frame: Rect): ObjectNode => ({
+  ...shapeBase(asNodeId(newId("object")), ":Class", frame),
+  kind: "object",
+  underlineName: true,
+});
+
 const actorNode = (frame: Rect): ActorNode => ({
   ...shapeBase(asNodeId(newId("actor")), "Actor", frame),
   kind: "actor",
@@ -487,6 +504,8 @@ export const createObjectFromTemplate = (
       return created(relationAttribute(placeObjectFrame(scene, center, 198, 72)));
     case "class":
       return created(classTable(placeObjectFrame(scene, center, 225, 108)));
+    case "class-instance":
+      return created(classInstance(placeObjectFrame(scene, center, 180, 45)));
     case "state":
       return created(stateNode(placeObjectFrame(scene, center, 180, 54)));
     case "initial-state":

@@ -17,6 +17,7 @@ export type DiagramKind =
   | "er"
   | "uml-use-case"
   | "uml-class"
+  | "uml-object"
   | "uml-sequence"
   | "uml-communication"
   | "uml-state-machine";
@@ -25,6 +26,7 @@ export const DIAGRAM_KIND_LABELS: Record<DiagramKind, string> = {
   er: "Entity–Relationship",
   "uml-use-case": "UML Use Case",
   "uml-class": "UML Class",
+  "uml-object": "UML Object",
   "uml-sequence": "UML Sequence",
   "uml-communication": "UML Communication",
   "uml-state-machine": "UML State Machine",

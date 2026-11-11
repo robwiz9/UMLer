@@ -33,7 +33,7 @@ builds and runs normally.
 
 | Document | What it covers |
 |---|---|
-| [00 — Notation research](docs/00-notation-research.md) | Visual conventions and formalities for ER + the five UML diagram types |
+| [00 — Notation research](docs/00-notation-research.md) | Visual conventions and formalities for ER + the six UML diagram types |
 | [01 — CeTZ mapping](docs/01-cetz-mapping.md) | How every primitive maps to CeTZ 0.5.3 `anchors`, `rect`, `line`, `ortho`, `mark`, `content` |
 | [02 — Architecture](docs/02-architecture.md) | Two-phase skeleton → CeTZ pipeline, auto-layout, A* routing, parity contract |
 | [03 — Step 1 scene graph](docs/03-step1-scene-graph.md) | TypeScript schema, invariants, fixtures, review decisions |
@@ -64,11 +64,20 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
 - Node drag, **four-corner resize** and live commit/revision handling. The corners of the selection frame are
   resize handles; corner connection arrows are gone, and table/class east-west ports sit at the header centre
   above the row-level arrows.
+- **Rubber-band selection and clipboard**: left-drag empty canvas to select every object fully inside the
+  rectangle (lifelines count by their head only); Ctrl/Cmd+click toggles an object; dragging any selected object
+  moves the whole selection. Ctrl/Cmd+C, X and V copy, cut and paste objects within the scene; connectors are
+  copied only when both endpoint objects are selected, so a connector cannot be copied alone. Pasted objects
+  are offset, selected and given fresh IDs, and image assets travel with their nodes. A single copied object
+  can also be pasted into a scene of another diagram type: ER tables become class tables, class tables become
+  object instances or lifelines, and the reverse conversions preserve names and usable rows while dropping
+  notation-specific details.
 - **Diagram-aware object palette** via the full-width **+ Add object** button at the top of the left panel, the
   filled **+** square in the canvas top-left when the panel is collapsed, or a single right-click on empty
   canvas space. The menu only offers valid objects for the active diagram:
   - ER: entity table, associative table, relationship attribute;
   - UML class: class;
+  - UML object: class instance;
   - UML use case: actor, use case, system boundary;
   - UML sequence: lifeline, interaction frame;
   - UML communication: communication object;
@@ -135,14 +144,17 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   fresh id and unique title, and a project import asks for confirmation before replacing the in-session scenes.
   Scene can create a scene with
   square diagram-type icons, an auto-generated `Untitled <type> diagram` name until edited, and a Template
-  (built-in example, default) or Empty start mode; it can also rename, duplicate with a numbered suffix, or
+  (built-in example when available, default) or Empty start mode; it can also rename, duplicate with a numbered suffix, or
   delete with a warning. The top-bar scene switcher is the only scene list.
 - **Layout panel toggle**: hide the left panel to let the canvas fill the workspace.
 - **Floating object focus menus**: click a table header, section, row or other object and its editing controls
-  appear beside the object; the side inspector is removed. Menus drag by their header, Escape closes them, and
-  Enter closes them from a single-line field. The top-level object/table header has a **lock** toggle in place
-  of the close button; class row menus expose visibility-prefix chips and a custom prefix. The lock badge is an
-  editor-only canvas overlay and must **not** be emitted by the Typst/CeTZ exporter.
+  appear beside the object; the side inspector is removed. Menus drag by their header and Escape closes them.
+  Add row creates a blank row and focuses its name. In row fields, Enter/Tab in the name moves to the data type,
+  Enter in the data type inserts a blank row below, and Enter in a row whose name and data type are both empty
+  deletes it and closes the menu. Elsewhere Enter closes a single-line field. The top-level object/table header
+  has a **lock** toggle in place of the close button; class row menus expose visibility-prefix chips and a
+  custom prefix. The lock badge is an editor-only canvas overlay and must **not** be emitted by the
+  Typst/CeTZ exporter.
   - header: table name, stereotype for classes, **lock**, Text style, Add row, Add section;
   - section: header text, Text style, Add row, Add section, Delete section; the divider above the rows is a
     dedicated hit strip so an untitled section remains selectable;
@@ -162,8 +174,8 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   Hovering the body shows a move cursor; hovering the top/bottom border bands shows a vertical-resize cursor
   and starts a resize.
 - **Scope-aware Delete/Backspace**: focused table header → clears the header content, focused section → section,
-  focused row → row, selected activation bar → activation, selected connector → connector, selected object →
-  object plus attached connectors. Inputs/selects/content-editable elements keep native Delete behaviour.
+  focused row → row, selected activation bar → activation, selected connector → connector, selected object(s) →
+  object(s) plus attached connectors. Inputs/selects/content-editable elements keep native Delete behaviour.
 - **Canvas text editing**: double-clicking any displayed text opens the matching floating menu, focuses its
   input and selects the existing value. Canvas text stays visible on pointer-down/drag, and node pointer
   capture is deferred until actual movement so native double-clicks reach the text element.
@@ -251,6 +263,10 @@ layout: OK
 
 Persistence checks passed (38 assertions).
 
+Clipboard checks passed (26 assertions).
+
+Conversion checks passed (29 assertions).
+
 GitHub project checks passed (30 assertions).
 
 Storage checks passed (16 assertions).
@@ -260,7 +276,9 @@ Browser verification (Chrome DevTools): clicked table headers, sections, rows an
 confirmed the correct floating control menu appeared beside the object; used native double-clicks on headers,
 section titles, row names, data types, stereotypes, constraint
 badges, frame text, image captions and lifeline labels and confirmed the matching field was focused and fully
-selected; added a row from the floating table menu and verified the revision/table update; opened the compact
+selected; added a row from the floating table menu and verified the revision/table update, its name field was
+focused, Enter/Tab moved to the data type, Enter in the data type inserted a blank row below with the new name
+focused, and Enter in the blank row deleted it and closed the menu; opened the compact
 terminal menu by clicking both a terminal glyph and a cardinality label; verified custom-text deletion and
 re-add returns the label beside the endpoint; confirmed the menu’s `none`-first ordering, per-end contents and
 outside-the-line placement; clicked the centre label and confirmed the separate line menu opens beside it with
@@ -306,7 +324,14 @@ file picker/drop zone; assigning an SVG renders it and replaces the controls wit
 restores the empty frame while keeping the asset available in the library; the image has no border, its caption
 adds a 4 pt gap and grows the frame without changing the image area ratio, and corner resizing stays
 aspect-locked with the caption present; confirmed project export/save omits an unreferenced upload, reload prunes
-it, and **File → Purge unused images** removes it immediately. Latest typography checks: verified larger UI/diagram type, header/row/comment/connector
+it, and **File → Purge unused images** removes it immediately. Selection checks: a left-drag rubber band
+selected only fully contained objects, a partially covered table stayed unselected, a lifeline selected from
+its head rectangle but not from its vertical axis, Ctrl+click toggled members, and dragging one member moved
+the whole selection. Clipboard checks: copying two connected tables preserved their connector, copying a
+connector alone warned instead of producing a payload, paste offset and selected fresh copies, and cut/paste
+restored the objects. Cross-diagram checks: copied an ER entity table into the class scene and confirmed the
+pasted table was a class table with its rows, then copied that class and pasted it into an object scene as
+`:orders`, and into a sequence scene as a lifeline with an `:orders` head. Latest typography checks: verified larger UI/diagram type, header/row/comment/connector
 Text style controls, B/I/M + size/colour overrides, live theme tint and size changes, transparent object
 background, Reset theme, badge baseline centring, and the tighter new-use-case default; confirmed new objects
 inherit the active theme and per-row overrides beat theme defaults. Latest checks covered transparent tint,

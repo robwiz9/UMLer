@@ -1953,7 +1953,7 @@ button {
 
 .diagram-type-grid {
   display: grid;
-  grid-template-columns: repeat(3, 82px);
+  grid-template-columns: repeat(4, 82px);
   justify-content: center;
   gap: 8px;
 }

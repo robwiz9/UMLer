@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { CanvasTextFocusRequest } from "../model/text-targets.ts";
@@ -14,7 +14,7 @@ interface NodeFocusMenuProps {
   readonly focusRequest: CanvasTextFocusRequest | null;
   readonly onUpdateNode: (nodeId: string, patch: Partial<SceneNode>) => void;
   readonly onUpdateRow: (nodeId: string, rowId: RowId, patch: Partial<TableRow>) => void;
-  readonly onAddRow: (nodeId: string, sectionId?: SectionId) => void;
+  readonly onAddRow: (nodeId: string, sectionId?: SectionId, afterRowId?: RowId) => void;
   readonly onDeleteRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
@@ -467,6 +467,56 @@ export const NodeFocusMenu = ({
     const isMethod = row.kind === "method";
     const isClassRow = node.kind === "table" && node.tableKind === "class";
     const prefixValue = row.prefix ?? row.visibility ?? "";
+    const typeValue = isMethod ? row.returnType ?? "" : row.type ?? "";
+    const focusTypeField = (): void => {
+      const input = document.getElementById(`row-${row.id}-type`);
+      if (input instanceof HTMLInputElement) {
+        input.focus();
+        input.select();
+      }
+    };
+    const handleNameKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
+      if (
+        event.key === "Tab" &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        event.preventDefault();
+        focusTypeField();
+        return;
+      }
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (row.name.trim() === "" && typeValue.trim() === "") {
+        onDeleteRow(node.id, row.id);
+        onClose();
+        return;
+      }
+      focusTypeField();
+    };
+    const handleTypeKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
+      if (
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      onAddRow(node.id, rowSection?.id, row.id);
+    };
     return (
       <div className="node-focus-menu">
         <div className="popover-head">
@@ -481,8 +531,10 @@ export const NodeFocusMenu = ({
           <input
             id={`row-${row.id}-name`}
             name={`row-${row.id}-name`}
+            placeholder={isMethod ? "operation" : "attribute"}
             value={row.name}
             onChange={(event) => onUpdateRow(node.id, row.id, { name: event.target.value })}
+            onKeyDown={handleNameKeyDown}
           />
         </label>
         <label className="field-label">
@@ -490,11 +542,13 @@ export const NodeFocusMenu = ({
           <input
             id={`row-${row.id}-type`}
             name={`row-${row.id}-type`}
-            value={isMethod ? row.returnType ?? "" : row.type ?? ""}
+            placeholder={isMethod ? "returns" : "type"}
+            value={typeValue}
             onChange={(event) =>
               onUpdateRow(node.id, row.id, isMethod
                 ? { returnType: event.target.value || undefined }
                 : { type: event.target.value || undefined })}
+            onKeyDown={handleTypeKeyDown}
           />
         </label>
         {isClassRow ? (
@@ -557,7 +611,7 @@ export const NodeFocusMenu = ({
           onChange={(textStyle) => onUpdateRow(node.id, row.id, { textStyle })}
         />
         <div className="focus-actions">
-          <button type="button" className="editor-add" onClick={() => onAddRow(node.id, rowSection?.id)}>
+          <button type="button" className="editor-add" onClick={() => onAddRow(node.id, rowSection?.id, row.id)}>
             + Add row
           </button>
           <button

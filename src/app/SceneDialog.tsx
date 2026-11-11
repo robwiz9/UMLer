@@ -21,6 +21,7 @@ interface SceneDialogProps {
 const KIND_ORDER: readonly DiagramKind[] = [
   "er",
   "uml-class",
+  "uml-object",
   "uml-use-case",
   "uml-sequence",
   "uml-communication",
@@ -30,6 +31,7 @@ const KIND_ORDER: readonly DiagramKind[] = [
 const SHORT_LABELS: Record<DiagramKind, string> = {
   er: "ER",
   "uml-class": "Class",
+  "uml-object": "Object",
   "uml-use-case": "Use case",
   "uml-sequence": "Sequence",
   "uml-communication": "Comm.",
@@ -65,6 +67,13 @@ const DiagramTypeIcon = ({ kind }: { readonly kind: DiagramKind }) => {
           <line x1="6" y1="21" x2="28" y2="21" {...common} />
           <line x1="10" y1="16" x2="20" y2="16" {...common} />
           <line x1="10" y1="26" x2="22" y2="26" {...common} />
+        </svg>
+      );
+    case "uml-object":
+      return (
+        <svg viewBox="0 0 34 34" aria-hidden="true">
+          <rect x="6" y="9" width="22" height="16" rx="1" {...common} />
+          <text x="17" y="20" textAnchor="middle" fontSize="8" fill="currentColor" stroke="none">:A</text>
         </svg>
       );
     case "uml-use-case":
