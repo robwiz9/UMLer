@@ -49,7 +49,7 @@ The serializer is pure: no DOM, no camera, no re-routing and no re-measurement.
 It reads the same `LayoutSnapshot` the SVG skeleton draws. The only geometry
 operations are the selection origin, the page-fit scale and the y flip.
 
-The user-selected page dimensions are **only an input to the fit calculation**.
+The user-selected page dimensions and per-side margins are **only inputs to the fit calculation**.
 They are never written into the snippet. The preview is a disposable host
 document that supplies the CeTZ import and a page of those dimensions; neither
 line appears in the copied code.
@@ -61,19 +61,24 @@ bounds, including the scene's `canvas.exportPadding`. The chosen page size is a
 calculation input only; the snippet does not set a page.
 
 ```text
-fitLimit = min(pageWidth / naturalWidth,
-               (pageHeight - captionReserve) / naturalHeight)
+availableWidth  = pageWidth - marginLeft - marginRight
+availableHeight = pageHeight - marginTop - marginBottom - captionReserve
+fitLimit = min(availableWidth / naturalWidth,
+               availableHeight / naturalHeight)
 scale    = min(requestedDocumentZoom, fitLimit)
 ```
 
 - At **100%** the diagram is never stretched merely because the page is larger.
 - A user zoom above 100% is explicit and is honoured until the fit limit.
 - The zoom value is a single number field (10–300%); it is typed directly.
-- If the diagram does not fit, it is reduced with the aspect ratio preserved.
+- If the diagram does not fit the host's **content box**, it is reduced with the
+  aspect ratio preserved.
+- Page margins are per-side (top/right/bottom/left) and use the page unit. They
+  describe the host document's margins; asymmetric margins are supported.
 - The caption band reserves 22 pt; the caption itself is host typography and is
   not scaled with the diagram.
 - The snippet assumes the host document's page/container; the scene's export
-  padding is the only built-in gutter.
+  padding is the only built-in gutter inside the content box.
 - Horizontal alignment is `#align(left|center|right)` around the figure body.
   This is a local wrapper, not a global setter.
 - The figure uses `placement: none`, so the label is plain. The label is editable; its default is the
@@ -88,9 +93,9 @@ Page presets:
 | Custom | user units, converted from mm or pt |
 | Document zoom | 10–300% (typed zoom is clamped in the serializer) |
 
-The page dimensions are only used to compute the effective scale and to render
-the preview page. The copied snippet contains no `#set page`. Preview dimensions
-are in points, so the preview does not depend on unit preferences.
+The page dimensions and margins are only used to compute the effective scale and
+to render the preview page. The copied snippet contains no `#set page`. Preview
+dimensions are in points, so the preview does not depend on unit preferences.
 
 ## 4. Selection export
 
@@ -228,7 +233,8 @@ fails, the diagnostics are shown and the code remains copyable.
 |---|---|
 | Whole diagram / Selection | Scope; selection is disabled with zero selected objects. |
 | Document size | A4 vertical, A4 horizontal or custom width × height. Used only for fit and preview; never emitted. |
-| Unit | mm or pt; switching converts the current values. |
+| Page margins | Top / Right / Bottom / Left in the page unit. Used only for fit and preview. |
+| Unit | mm or pt; switching converts the current values and margins. |
 | Diagram zoom | One manually editable number field, 10–300%; explicit enlargement is allowed, implicit stretching is not. |
 | Size card | Inside **Placement**: natural size, effective scale, page, node/edge/label counts and fit-down warning. |
 | Alignment | Left / Center (default) / Right; emitted as a local `#align` wrapper. |
@@ -243,19 +249,23 @@ Settings other than the per-scene diagram id and label are remembered in
 
 ## 9. Verification
 
-- `npm run test:cetz` — 144 assertions: all six fixtures, balanced delimiters,
+- `npm run test:cetz` — 150 assertions: all six fixtures, balanced delimiters,
   no import/page/global-text setters in the result, preview host wrapper,
   selection rules (including edge-to-edge tethers), fit-down, no implicit
-  upscale, explicit zoom, A4 landscape, editable/empty/whitespace label, id
-  sanitizing, resource folder normalization, external image references, literal
-  text escaping.
+  upscale, explicit zoom, A4 landscape, per-side and asymmetric margin fitting,
+  editable/empty/whitespace label, id sanitizing, resource folder normalization,
+  external image references, literal text escaping.
 - Browser (Chrome DevTools): opened the panel on every fixture; all six compiled
   and rendered in 0.5–3 s; verified A4 vertical, A4 horizontal, custom 120 × 210
   mm, typed zoom in the number field, left/center/right alignment, the editable
   label (scene-name default, empty label, custom text), selection export with
   count, id/folder sanitizing, copy, expand modal, and that a selection did not
   resize the object.
-- The preview compiles against CeTZ 0.5.2. The emitted calls use only APIs
+- Typst Playground (`https://typst.app/play/`, Typst 0.15 + CeTZ 0.5.3): pasted
+  the generated snippet with a real A4 page and **20 mm margins on all sides**;
+  it compiled cleanly and the 79%-scaled diagram fit the content box without
+  overflowing. A 100 × 60 mm page produced a 46% snippet that also fit.
+- The local preview compiles against CeTZ 0.5.2. The emitted calls use only APIs
   present in 0.5.3 as well; the difference is the package's compiler
   requirement, not the drawing API used here.
 

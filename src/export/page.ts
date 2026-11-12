@@ -21,12 +21,24 @@ export const PAGE_PRESET_LABELS: Record<PagePreset, string> = {
   custom: "Custom",
 };
 
+/**
+ * Margins are entered in the same unit as the custom page size. They describe
+ * the host document's page margins, not a page the exporter writes itself.
+ */
+export interface PageMargins {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+
 export interface PageSpec {
   readonly preset: PagePreset;
   /** Custom width/height are entered by the user in `unit`. */
   readonly customWidth: number;
   readonly customHeight: number;
   readonly unit: PageUnit;
+  readonly margins: PageMargins;
 }
 
 export interface PageSize {
@@ -34,12 +46,32 @@ export interface PageSize {
   readonly heightPt: number;
 }
 
+export const ZERO_MARGINS: PageMargins = {
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
+
 export const DEFAULT_PAGE: PageSpec = {
   preset: "a4-portrait",
   customWidth: 210,
   customHeight: 297,
   unit: "mm",
+  margins: ZERO_MARGINS,
 };
+
+/** Supports older persisted settings that predate the margin fields. */
+export const normalizePageSpec = (spec?: Partial<PageSpec>): PageSpec => ({
+  preset: spec?.preset ?? DEFAULT_PAGE.preset,
+  customWidth: spec?.customWidth ?? DEFAULT_PAGE.customWidth,
+  customHeight: spec?.customHeight ?? DEFAULT_PAGE.customHeight,
+  unit: spec?.unit ?? DEFAULT_PAGE.unit,
+  margins: {
+    ...ZERO_MARGINS,
+    ...(spec?.margins ?? {}),
+  },
+});
 
 export const MM_TO_PT = 72 / 25.4;
 
@@ -61,6 +93,20 @@ export const pageSize = (spec: PageSpec): PageSize => {
   const heightPt = Math.max(1, unitToPt(spec.customHeight, spec.unit));
   return { widthPt, heightPt };
 };
+
+export interface PageMarginsPt {
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+
+export const pageMarginsPt = (spec: PageSpec): PageMarginsPt => ({
+  top: unitToPt(spec.margins.top, spec.unit),
+  right: unitToPt(spec.margins.right, spec.unit),
+  bottom: unitToPt(spec.margins.bottom, spec.unit),
+  left: unitToPt(spec.margins.left, spec.unit),
+});
 
 /** Room reserved below the canvas for a one-line figure caption. */
 export const CAPTION_RESERVE_PT = 22;
@@ -97,13 +143,20 @@ export const fitDiagramToPage = (
   page: PageSize,
   requestedZoom: number,
   hasCaption: boolean,
+  margins: PageMargins = ZERO_MARGINS,
 ): FitResult => {
   const width = Math.max(0.01, naturalWidthPt);
   const height = Math.max(0.01, naturalHeightPt);
   const requested = clamp(Number.isFinite(requestedZoom) ? requestedZoom : 1, 0.05, 4);
   const reserve = hasCaption ? CAPTION_RESERVE_PT : 0;
-  const availableWidthPt = Math.max(1, page.widthPt);
-  const availableHeightPt = Math.max(1, page.heightPt - reserve);
+  // The snippet is pasted into the host's content area, so the page margins
+  // are unavailable space for fitting. Supporting per-side margins matters for
+  // asymmetric documents (e.g. a wide binding margin).
+  const availableWidthPt = Math.max(1, page.widthPt - margins.left - margins.right);
+  const availableHeightPt = Math.max(
+    1,
+    page.heightPt - margins.top - margins.bottom - reserve,
+  );
   const fitLimit = Math.min(
     availableWidthPt / width,
     availableHeightPt / height,
@@ -164,7 +217,14 @@ export const mergeExportSettings = (
 ): ExportSettings => ({
   ...base,
   ...patch,
-  page: { ...base.page, ...patch.page },
+  page: {
+    ...base.page,
+    ...patch.page,
+    margins: {
+      ...base.page.margins,
+      ...(patch.page?.margins ?? {}),
+    },
+  },
 });
 
 /**

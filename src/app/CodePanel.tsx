@@ -8,8 +8,8 @@ import {
   serializeSceneToCetz,
 } from "../export/cetz.ts";
 import {
-  DEFAULT_PAGE,
   defaultDiagramId,
+  normalizePageSpec,
   pageSize,
   ptToUnit,
   unitToPt,
@@ -121,6 +121,15 @@ const PAGE_OPTIONS: readonly {
     { preset: "custom", label: "Custom", icon: "custom" },
   ];
 
+const MARGIN_SIDES = ["top", "right", "bottom", "left"] as const;
+
+const MARGIN_LABELS: Record<(typeof MARGIN_SIDES)[number], string> = {
+  top: "Top",
+  right: "Right",
+  bottom: "Bottom",
+  left: "Left",
+};
+
 const copyToClipboard = async (text: string): Promise<void> => {
   try {
     await navigator.clipboard.writeText(text);
@@ -150,7 +159,7 @@ export const CodePanel = ({
 }: CodePanelProps) => {
   const stored = useRef<StoredSettings | null>(null);
   if (stored.current === null) stored.current = loadStored();
-  const [page, setPage] = useState<PageSpec>(stored.current.page ?? DEFAULT_PAGE);
+  const [page, setPage] = useState<PageSpec>(normalizePageSpec(stored.current.page));
   const [zoom, setZoom] = useState<number>(stored.current.zoom ?? 1);
   const [zoomDraft, setZoomDraft] = useState<string>(
     String(Math.round((stored.current.zoom ?? 1) * 100)),
@@ -270,6 +279,7 @@ export const CodePanel = ({
         customWidth: Math.round(ptToUnit(size.widthPt, page.unit) * 10) / 10,
         customHeight: Math.round(ptToUnit(size.heightPt, page.unit) * 10) / 10,
         unit: page.unit,
+        margins: page.margins,
       });
       return;
     }
@@ -280,11 +290,18 @@ export const CodePanel = ({
     if (unit === page.unit) return;
     const widthPt = unitToPt(page.customWidth, page.unit);
     const heightPt = unitToPt(page.customHeight, page.unit);
+    const round = (value: number): number => Math.round(value * 10) / 10;
     setPage({
       ...page,
       unit,
-      customWidth: Math.round(ptToUnit(widthPt, unit) * 10) / 10,
-      customHeight: Math.round(ptToUnit(heightPt, unit) * 10) / 10,
+      customWidth: round(ptToUnit(widthPt, unit)),
+      customHeight: round(ptToUnit(heightPt, unit)),
+      margins: {
+        top: round(ptToUnit(unitToPt(page.margins.top, page.unit), unit)),
+        right: round(ptToUnit(unitToPt(page.margins.right, page.unit), unit)),
+        bottom: round(ptToUnit(unitToPt(page.margins.bottom, page.unit), unit)),
+        left: round(ptToUnit(unitToPt(page.margins.left, page.unit), unit)),
+      },
     });
   };
 
@@ -370,6 +387,36 @@ export const CodePanel = ({
             </p>
           </section>
           <ColoredLine color="var(--line)" />
+          {/* ) : null} */}
+          <section>
+            <div className="code-margin-block">
+              <div className="code-section-title">Page margins ({page.unit})</div>
+              <div className="code-margin-grid">
+                {MARGIN_SIDES.map((side) => (
+                  <label className="code-margin-field" key={side}>
+                    <span>{MARGIN_LABELS[side]}</span>
+                    <input
+                      id={`code-margin-${side}`}
+                      name={`code-margin-${side}`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={page.margins[side]}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value) && value >= 0) {
+                          setPage({
+                            ...page,
+                            margins: { ...page.margins, [side]: value },
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </section>
 
           <section className="code-section">
             <div className="code-section-title">Page Format & Placement</div>
@@ -501,7 +548,7 @@ export const CodePanel = ({
                     className="code-input-action"
                     onClick={() => setLabel("")}
                     onMouseDown={(event) => event.preventDefault()}
-                    aria-label="Clear label"  
+                    aria-label="Clear label"
                     title="Clear label"
                   >
                     <ClearIcon />
@@ -591,7 +638,7 @@ export const CodePanel = ({
             </div>
             {!previewCollapsed ? (
               <>
-                
+
                 <div className="code-preview-page" aria-label="Rendered Typst page preview">
                   {ready ? (
                     <div

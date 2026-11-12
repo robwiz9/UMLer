@@ -47,6 +47,7 @@ import {
   defaultDiagramId,
   fitDiagramToPage,
   normalizeResourceFolder,
+  pageMarginsPt,
   pageSize,
   toDiagramLabel,
   type ExportSettings,
@@ -1162,6 +1163,7 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
     selectedEdgeId,
   );
   const page = pageSize(settings.page);
+  const margins = pageMarginsPt(settings.page);
   const caption = settings.label === undefined ? scene.meta.title : settings.label;
   const hasCaption = caption.trim().length > 0;
   const fit = fitDiagramToPage(
@@ -1170,6 +1172,7 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
     page,
     settings.zoom,
     hasCaption,
+    margins,
   );
   const folder = normalizeResourceFolder(settings.resourceFolder);
   const assets = options.assets ?? scene.assets;
@@ -1341,7 +1344,7 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
   // two lines never appear in the copied code.
   const previewCode = [
     `#import "@preview/cetz:${CETZ_PREVIEW_VERSION}": canvas, draw`,
-    `#set page(width: ${num(page.widthPt)}pt, height: ${num(page.heightPt)}pt, margin: 0pt)`,
+    `#set page(width: ${num(page.widthPt)}pt, height: ${num(page.heightPt)}pt, margin: (top: ${num(margins.top)}pt, right: ${num(margins.right)}pt, bottom: ${num(margins.bottom)}pt, left: ${num(margins.left)}pt))`,
     `#set text(font: ${fontFamilyExpr("Latin Modern Roman")}, size: ${num(10.5 * fit.scale)}pt, fill: rgb("#111111"))`,
     "",
     code,
