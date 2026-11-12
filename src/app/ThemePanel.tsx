@@ -86,7 +86,7 @@ export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
     <section className="panel theme-panel">
       <div className="panel-heading">
         <span>Theme</span>
-        <span className="panel-hint">defaults</span>
+        {/* <span className="panel-hint">defaults</span> */}
       </div>
 
       <div className="theme-grid">
@@ -188,7 +188,7 @@ export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
             ));
           }}
         />
-        Transparent line-label background
+        Transparent label background
       </label>
 
       <button

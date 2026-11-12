@@ -1283,7 +1283,7 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
 
   writer.push(0, "#figure(");
   writer.push(1, "placement: none,");
-  writer.push(1, "numbering: none,");
+  // writer.push(1, "numbering: none,");
   if (hasCaption) {
     writer.push(1, "gap: 6pt,");
     writer.push(1, `caption: ${textExprForCaption(caption, 9.5, scene.theme.colors.muted)},`);

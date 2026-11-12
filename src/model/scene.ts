@@ -23,13 +23,13 @@ export type DiagramKind =
   | "uml-state-machine";
 
 export const DIAGRAM_KIND_LABELS: Record<DiagramKind, string> = {
-  er: "Entity–Relationship",
-  "uml-use-case": "UML Use Case",
-  "uml-class": "UML Class",
-  "uml-object": "UML Object",
-  "uml-sequence": "UML Sequence",
-  "uml-communication": "UML Communication",
-  "uml-state-machine": "UML State Machine",
+  er: "Entity-Relation",
+  "uml-use-case": "Use Case",
+  "uml-class": "Class",
+  "uml-object": "Object",
+  "uml-sequence": "Sequence",
+  "uml-communication": "Communication",
+  "uml-state-machine": "State Machine",
 };
 
 export interface SceneMeta {

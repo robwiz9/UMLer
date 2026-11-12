@@ -116,10 +116,10 @@ const PAGE_OPTIONS: readonly {
   readonly label: string;
   readonly icon: "portrait" | "landscape" | "custom";
 }[] = [
-  { preset: "a4-portrait", label: "A4 vertical", icon: "portrait" },
-  { preset: "a4-landscape", label: "A4 horizontal", icon: "landscape" },
-  { preset: "custom", label: "Custom", icon: "custom" },
-];
+    { preset: "a4-portrait", label: "A4 vertical", icon: "portrait" },
+    { preset: "a4-landscape", label: "A4 horizontal", icon: "landscape" },
+    { preset: "custom", label: "Custom", icon: "custom" },
+  ];
 
 const copyToClipboard = async (text: string): Promise<void> => {
   try {
@@ -322,367 +322,366 @@ export const CodePanel = ({
   return (
     <>
       <aside className="code-panel" aria-label="Typst and CeTZ export">
-      <header className="code-panel-head">
-        <div>
-          <div className="code-panel-kicker">Step 4 · Export</div>
-          <h2>Typst / CeTZ</h2>
-        </div>
-        <button
-          type="button"
-          className="code-panel-close"
-          onClick={onClose}
-          title="Close export panel"
-          aria-label="Close export panel"
-        >
-          ×
-        </button>
-      </header>
-
-      <div className="code-panel-scroll">
-        <section className="code-section">
-          <div className="code-section-title">Objects</div>
-          <div className="code-segmented" role="group" aria-label="Export scope">
-            <button
-              type="button"
-              className={scope === "diagram" ? "active" : ""}
-              onClick={() => setScope("diagram")}
-            >
-              Whole diagram
-            </button>
-            <button
-              type="button"
-              className={scope === "selection" ? "active" : ""}
-              disabled={selectionCount === 0}
-              onClick={() => setScope("selection")}
-              title={
-                selectionCount === 0
-                  ? "Select one or more objects on the canvas first"
-                  : `Export ${selectionCount} selected object${selectionCount === 1 ? "" : "s"}`
-              }
-            >
-              Selection{selectionCount > 0 ? ` · ${selectionCount}` : ""}
-            </button>
+        <header className="code-panel-head">
+          <div>
+            {/* <div className="code-panel-kicker"></div> */}
+            <h2>Typst</h2>
           </div>
-          <p className="code-hint">
-            {scope === "selection"
-              ? "Only the selected objects and the connectors fully inside the selection are exported."
-              : "Every visible object in the scene is exported."}
-          </p>
-        </section>
+          <button
+            type="button"
+            className="code-panel-close"
+            onClick={onClose}
+            title="Close export panel"
+            aria-label="Close export panel"
+          >
+            ×
+          </button>
+        </header>
 
-        <section className="code-section">
-          <div className="code-section-title">Page format</div>
-          <div className="code-page-options" role="group" aria-label="Document size">
-            {PAGE_OPTIONS.map((option) => (
+        <div className="code-panel-scroll">
+          <section className="code-section">
+            <div className="code-section-title">Export Objects</div>
+            <div className="code-segmented" role="group" aria-label="Export scope">
               <button
-                key={option.preset}
                 type="button"
-                className={page.preset === option.preset ? "active" : ""}
-                onClick={() => setPreset(option.preset)}
-                aria-pressed={page.preset === option.preset}
+                className={scope === "diagram" ? "active" : ""}
+                onClick={() => setScope("diagram")}
               >
-                <PageIcon kind={option.icon} />
-                <span>{option.label}</span>
+                Whole diagram
               </button>
-            ))}
-          </div>
-          {page.preset === "custom" ? (
-            <div className="code-dimension-row">
-              <label className="code-inline-field">
-                <span>Width</span>
-                <input
-                  id="code-page-width"
-                  name="code-page-width"
-                  type="number"
-                  min={10}
-                  step={1}
-                  value={page.customWidth}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (Number.isFinite(value) && value > 0) {
-                      setPage({ ...page, customWidth: value });
-                    }
-                  }}
-                />
-              </label>
-              <label className="code-inline-field code-unit-field">
-                <span className="sr-only">Page unit</span>
-                <select
-                  id="code-page-unit"
-                  name="code-page-unit"
-                  value={page.unit}
-                  onChange={(event) => changeUnit(event.target.value as PageUnit)}
-                >
-                  <option value="mm">mm</option>
-                  <option value="pt">pt</option>
-                </select>
-              </label>
-              <span className="code-times">×</span>
-              <label className="code-inline-field">
-                <span>Height</span>
-                <input
-                  id="code-page-height"
-                  name="code-page-height"
-                  type="number"
-                  min={10}
-                  step={1}
-                  value={page.customHeight}
-                  onChange={(event) => {
-                    const value = Number(event.target.value);
-                    if (Number.isFinite(value) && value > 0) {
-                      setPage({ ...page, customHeight: value });
-                    }
-                  }}
-                />
-              </label>
+              <button
+                type="button"
+                className={scope === "selection" ? "active" : ""}
+                disabled={selectionCount === 0}
+                onClick={() => setScope("selection")}
+                title={
+                  selectionCount === 0
+                    ? "Select one or more objects on the canvas first"
+                    : `Export ${selectionCount} selected object${selectionCount === 1 ? "" : "s"}`
+                }
+              >
+                Selection{selectionCount > 0 ? ` · ${selectionCount}` : ""}
+              </button>
             </div>
-          ) : null}
-        </section>
+            <p className="code-hint">
+              {scope === "selection"
+                ? "Only the selected objects and the connectors fully inside the selection are exported."
+                : null}
+            </p>
+          </section>
+          <ColoredLine color="var(--line)" />
 
-        <section className="code-section">
-          <div className="code-section-title">Placement</div>
-          <div className="code-field">
-            <span>Diagram zoom</span>
-            <label className="code-number-field">
-              <input
-                id="code-diagram-zoom-value"
-                name="code-diagram-zoom-value"
-                type="number"
-                min={10}
-                max={300}
-                step={1}
-                value={zoomDraft}
-                onChange={(event) => setZoomDraft(event.target.value)}
-                onBlur={commitZoom}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    commitZoom();
-                  } else if (event.key === "Escape") {
-                    setZoomDraft(String(Math.round(zoom * 100)));
-                  }
-                }}
-                aria-label="Diagram zoom percentage"
-              />
-              <span>%</span>
-            </label>
-          </div>
-          <div className="code-align-row">
-            <div className="code-segmented" role="group" aria-label="Horizontal alignment">
-              {ALIGN_OPTIONS.map((option) => (
+          <section className="code-section">
+            <div className="code-section-title">Page Format & Placement</div>
+            <div className="code-page-options" role="group" aria-label="Document size">
+              {PAGE_OPTIONS.map((option) => (
                 <button
-                  key={option.value}
+                  key={option.preset}
                   type="button"
-                  className={align === option.value ? "active" : ""}
-                  onClick={() => setAlign(option.value)}
+                  className={page.preset === option.preset ? "active" : ""}
+                  onClick={() => setPreset(option.preset)}
+                  aria-pressed={page.preset === option.preset}
                 >
-                  <AlignIcon align={option.value} />
+                  <PageIcon kind={option.icon} />
                   <span>{option.label}</span>
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="code-summary">
-            <div className="code-summary-line">
-              <span>
-                {Math.round(result.selection.naturalWidth)} ×{" "}
-                {Math.round(result.selection.naturalHeight)} pt
-              </span>
-              <span>
-                {Math.round(result.fit.scale * 100)}% · {pagePresetLabel(page)}
-              </span>
-            </div>
-            <div className="code-summary-line code-summary-muted">
-              <span>
-                {result.stats.nodes} nodes · {result.stats.edges} connectors · {result.stats.labels} labels
-              </span>
-              <span>{result.code.split("\n").length} lines</span>
-            </div>
-            {result.fit.fitReduced ? (
-              <div className="code-fit-chip">
-                Scaled down to fit document (requested{" "}
-                {Math.round(result.fit.requested * 100)}%, reduced to{" "}
-                {Math.round(result.fit.scale * 100)}%)
+            {page.preset === "custom" ? (
+              <div className="code-dimension-row">
+                <label className="code-inline-field">
+                  <span>Width</span>
+                  <input
+                    id="code-page-width"
+                    name="code-page-width"
+                    type="number"
+                    min={10}
+                    step={1}
+                    value={page.customWidth}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value) && value > 0) {
+                        setPage({ ...page, customWidth: value });
+                      }
+                    }}
+                  />
+                </label>
+                <label className="code-inline-field code-unit-field">
+                  <span className="sr-only">Page unit</span>
+                  <select
+                    id="code-page-unit"
+                    name="code-page-unit"
+                    value={page.unit}
+                    onChange={(event) => changeUnit(event.target.value as PageUnit)}
+                  >
+                    <option value="mm">mm</option>
+                    <option value="pt">pt</option>
+                  </select>
+                </label>
+                <span className="code-times">×</span>
+                <label className="code-inline-field">
+                  <span>Height</span>
+                  <input
+                    id="code-page-height"
+                    name="code-page-height"
+                    type="number"
+                    min={10}
+                    step={1}
+                    value={page.customHeight}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value) && value > 0) {
+                        setPage({ ...page, customHeight: value });
+                      }
+                    }}
+                  />
+                </label>
               </div>
             ) : null}
-            {result.warnings.length > 0 ? (
-              <ul className="code-warnings">
-                {result.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+            {/* </section>
 
-          <label className="code-field">
-            <span>Label below</span>
-            <span className="code-input-with-action">
-              <input
-                id="code-label"
-                name="code-label"
-                type="text"
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                placeholder="No label"
-              />
-              {label.length > 0 ? (
-                <button
-                  type="button"
-                  className="code-input-action"
-                  onClick={() => setLabel("")}
-                  onMouseDown={(event) => event.preventDefault()}
-                  aria-label="Clear label"
-                  title="Clear label"
-                >
-                  <ClearIcon />
-                </button>
-              ) : null}
-            </span>
-          </label>
-        </section>
-
-        <section className="code-section">
-          <div className="code-section-title">Reference</div>
-          <label className="code-field">
-            <span>Diagram id</span>
-            <input
-              id="code-diagram-id"
-              name="code-diagram-id"
-              type="text"
-              value={diagramId}
-              onChange={(event) => setDiagramId(event.target.value)}
-              spellCheck={false}
-              placeholder="fig-scene-name"
-            />
-          </label>
-          <p className="code-hint code-mono-hint">
-            Reference with <code>@{(result.label)}</code>
-          </p>
-          <label className="code-field">
-            <span>Resources folder</span>
-            <input
-              id="code-resource-folder"
-              name="code-resource-folder"
-              type="text"
-              value={resourceFolder}
-              onChange={(event) => setResourceFolder(event.target.value)}
-              spellCheck={false}
-              placeholder="assets"
-            />
-          </label>
-          <p className="code-hint">
-            Images are referenced, never embedded:
-            <code> {resourceFolder.length > 0 ? resourceFolder.replace(/\/+$/, "") : "."}/file.ext</code>
-          </p>
-          {result.images.length > 0 ? (
-            <div className="code-resource-list">
-              <div className="code-section-title">Referenced files</div>
-              <ul>
-                {result.images.map((image) => (
-                  <li key={`${image.nodeId}:${image.path}`}>
-                    <code>{image.path}</code>
-                    {image.missing ? <span>missing</span> : null}
-                  </li>
-                ))}
-              </ul>
+        <section className="code-section"> */}
+            {/* <div className="code-section-title">Placement</div> */}
+            <div className="code-field">
+              <span>Diagram zoom</span>
+              <label className="code-number-field">
+                <input
+                  id="code-diagram-zoom-value"
+                  name="code-diagram-zoom-value"
+                  type="number"
+                  min={10}
+                  max={300}
+                  step={1}
+                  value={zoomDraft}
+                  onChange={(event) => setZoomDraft(event.target.value)}
+                  onBlur={commitZoom}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitZoom();
+                    } else if (event.key === "Escape") {
+                      setZoomDraft(String(Math.round(zoom * 100)));
+                    }
+                  }}
+                  aria-label="Diagram zoom percentage"
+                />
+                <span>%</span>
+              </label>
             </div>
-          ) : null}
-        </section>
+            <div className="code-align-row">
+              <div className="code-segmented" role="group" aria-label="Horizontal alignment">
+                {ALIGN_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={align === option.value ? "active" : ""}
+                    onClick={() => setAlign(option.value)}
+                  >
+                    <AlignIcon align={option.value} />
+                    <span>{option.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <section className="code-section">
-          <div className="code-section-head">
-            <div className="code-section-title">Preview</div>
-            <div className="code-preview-actions">
-              <span className={`code-preview-status ${previewCollapsed ? "idle" : preview.status}`}>
-                {previewCollapsed ? "Paused" : previewStatus}
+            <label className="code-field">
+              <span>Label below</span>
+              <span className="code-input-with-action">
+                <input
+                  id="code-label"
+                  name="code-label"
+                  type="text"
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  placeholder="No label"
+                />
+                {label.length > 0 ? (
+                  <button
+                    type="button"
+                    className="code-input-action"
+                    onClick={() => setLabel("")}
+                    onMouseDown={(event) => event.preventDefault()}
+                    aria-label="Clear label"  
+                    title="Clear label"
+                  >
+                    <ClearIcon />
+                  </button>
+                ) : null}
               </span>
-              {!previewCollapsed ? (
+            </label>
+          </section>
+          <ColoredLine color="var(--line)" />
+          <section className="code-section">
+            <div className="code-section-title">Reference</div>
+            <label className="code-field">
+              <span>Diagram ID</span>
+              <input
+                id="code-diagram-id"
+                name="code-diagram-id"
+                type="text"
+                value={diagramId}
+                onChange={(event) => setDiagramId(event.target.value)}
+                spellCheck={false}
+                placeholder="fig-scene-name"
+              />
+            </label>
+            <p className="code-hint code-mono-hint">
+              Reference diagram with <code>@{(result.label)}</code>
+            </p>
+            <label className="code-field">
+              <span>Resources folder</span>
+              <input
+                id="code-resource-folder"
+                name="code-resource-folder"
+                type="text"
+                value={resourceFolder}
+                onChange={(event) => setResourceFolder(event.target.value)}
+                spellCheck={false}
+                placeholder="assets"
+              />
+            </label>
+            <p className="code-hint">
+              Place used images in the folder:
+              <code>{resourceFolder.length > 0 ? resourceFolder.replace(/\/+$/, "") : "."}/file.ext</code>
+            </p>
+            {result.images.length > 0 ? (
+              <div className="code-resource-list">
+                <div className="code-section-title">Referenced files</div>
+                <ul>
+                  {result.images.map((image) => (
+                    <li key={`${image.nodeId}:${image.path}`}>
+                      <code>{image.path}</code>
+                      {image.missing ? <span>missing</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+          <ColoredLine color="var(--line)" />
+          <section className="code-section">
+            <div className="code-section-head">
+              <div className="code-section-title">Preview</div>
+              <div className="code-preview-actions">
+                <span className={`code-preview-status ${previewCollapsed ? "idle" : preview.status}`}>
+                  {previewCollapsed ? "Paused" : previewStatus}
+                </span>
+                {!previewCollapsed ? (
+                  <button
+                    type="button"
+                    className="code-expand-button"
+                    onClick={openPreview}
+                    disabled={!ready}
+                    title={ready ? "Open a larger page preview" : "Preview is still compiling"}
+                  >
+                    Expand
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  className="code-expand-button"
-                  onClick={openPreview}
-                  disabled={!ready}
-                  title={ready ? "Open a larger page preview" : "Preview is still compiling"}
+                  className="code-collapse-button"
+                  onClick={() => setPreviewCollapsed((value) => !value)}
+                  aria-expanded={!previewCollapsed}
+                  aria-label={previewCollapsed ? "Expand preview section" : "Collapse preview section"}
+                  title={previewCollapsed ? "Expand preview" : "Collapse preview"}
                 >
-                  Expand
+                  <ChevronIcon open={!previewCollapsed} />
                 </button>
-              ) : null}
+              </div>
+            </div>
+            {!previewCollapsed ? (
+              <>
+                
+                <div className="code-preview-page" aria-label="Rendered Typst page preview">
+                  {ready ? (
+                    <div
+                      className="code-preview-svg"
+                      // Typst emits a self-contained SVG for one page. User text is
+                      // escaped as Typst markup in the generated source.
+                      dangerouslySetInnerHTML={{ __html: preview.svg ?? "" }}
+                    />
+                  ) : (
+                    <div className="code-preview-empty">
+                      {preview.status === "error"
+                        ? "The preview could not compile."
+                        : "Compiling Typst…"}
+                    </div>
+                  )}
+                </div>
+                {preview.status === "error" ? (
+                  <pre className="code-preview-error">{preview.error ?? "Unknown Typst error"}</pre>
+                ) : null}
+                {missingPreviewImages.length > 0 ? (
+                  <p className="code-hint code-warning-hint">
+                    {missingPreviewImages.length} image
+                    {missingPreviewImages.length === 1 ? "" : "s"} lack bytes in this session; the
+                    preview shows a placeholder while the exported path stays correct.
+                  </p>
+                ) : null}
+                <div className="code-summary">
+                  <div className="code-summary-line">
+                    <span>
+                      {Math.round(result.selection.naturalWidth)} ×{" "}
+                      {Math.round(result.selection.naturalHeight)} pt
+                    </span>
+                    <span>
+                      {Math.round(result.fit.scale * 100)}% · {pagePresetLabel(page)}
+                    </span>
+                  </div>
+                  <div className="code-summary-line code-summary-muted">
+                    <span>
+                      {result.stats.nodes} nodes · {result.stats.edges} connectors · {result.stats.labels} labels
+                    </span>
+                    {/* <span>{result.code.split("\n").length} lines</span> */}
+                  </div>
+                  {result.fit.fitReduced ? (
+                    <div className="code-fit-chip">
+                      Scaled down to fit document (requested{" "}
+                      {Math.round(result.fit.requested * 100)}%, reduced to{" "}
+                      {Math.round(result.fit.scale * 100)}%)
+                    </div>
+                  ) : null}
+                  {result.warnings.length > 0 ? (
+                    <ul className="code-warnings">
+                      {result.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+          </section>
+
+          <ColoredLine color="var(--line)" />
+
+          <section className="code-section code-source-section">
+            <div className="code-section-head">
+              <div className="code-section-title">Typst Code</div>
               <button
                 type="button"
-                className="code-collapse-button"
-                onClick={() => setPreviewCollapsed((value) => !value)}
-                aria-expanded={!previewCollapsed}
-                aria-label={previewCollapsed ? "Expand preview section" : "Collapse preview section"}
-                title={previewCollapsed ? "Expand preview" : "Collapse preview"}
+                className={`code-copy-button ${copyState}`}
+                onClick={() => void copyCode()}
               >
-                <ChevronIcon open={!previewCollapsed} />
+                <CopyIcon />
+                <span>
+                  {copyState === "copied"
+                    ? "Copied"
+                    : copyState === "error"
+                      ? "Copy failed"
+                      : "Copy code"}
+                </span>
               </button>
             </div>
-          </div>
-          {!previewCollapsed ? (
-            <>
-              <div className="code-preview-page" aria-label="Rendered Typst page preview">
-                {ready ? (
-                  <div
-                    className="code-preview-svg"
-                    // Typst emits a self-contained SVG for one page. User text is
-                    // escaped as Typst markup in the generated source.
-                    dangerouslySetInnerHTML={{ __html: preview.svg ?? "" }}
-                  />
-                ) : (
-                  <div className="code-preview-empty">
-                    {preview.status === "error"
-                      ? "The preview could not compile."
-                      : "Compiling Typst…"}
-                  </div>
-                )}
-              </div>
-              {preview.status === "error" ? (
-                <pre className="code-preview-error">{preview.error ?? "Unknown Typst error"}</pre>
-              ) : null}
-              {missingPreviewImages.length > 0 ? (
-                <p className="code-hint code-warning-hint">
-                  {missingPreviewImages.length} image
-                  {missingPreviewImages.length === 1 ? "" : "s"} lack bytes in this session; the
-                  preview shows a placeholder while the exported path stays correct.
-                </p>
-              ) : null}
-              <p className="code-hint code-preview-note">
-                Preview compiled with CeTZ {CETZ_PREVIEW_VERSION} (Typst 0.14); the exported
-                code targets CeTZ {CETZ_EXPORT_VERSION}.
-              </p>
-            </>
-          ) : null}
-        </section>
-
-        <section className="code-section code-source-section">
-          <div className="code-section-head">
-            <div className="code-section-title">CeTZ source</div>
-            <button
-              type="button"
-              className={`code-copy-button ${copyState}`}
-              onClick={() => void copyCode()}
-            >
-              <CopyIcon />
-              <span>
-                {copyState === "copied"
-                  ? "Copied"
-                  : copyState === "error"
-                    ? "Copy failed"
-                    : "Copy code"}
-              </span>
-            </button>
-          </div>
-          <div className="code-import-card">
-            <code>#import "@preview/cetz:{CETZ_EXPORT_VERSION}": canvas, draw</code>
-            <span>The snippet sets no page size and no global text styles.</span>
-          </div>
-          <pre className="code-block" tabIndex={0}>
-            <code>{result.code}</code>
-          </pre>
-        </section>
-      </div>
+            <div className="code-import-card">
+              <code>#import "@preview/cetz:{CETZ_EXPORT_VERSION}": canvas, draw</code>
+              <span>Required import in your .typ file</span>
+            </div>
+            <pre className="code-block" tabIndex={0}>
+              <code>{result.code}</code>
+            </pre>
+          </section>
+        </div>
       </aside>
 
       {previewOpen && ready ? (
@@ -755,3 +754,16 @@ export const CodePanel = ({
     </>
   );
 };
+
+const ColoredLine = ({ color = "black" }) => (
+  <hr
+    style={{
+      color: color,
+      backgroundColor: "transparent",
+      height: 1,
+      width: "100%",
+      margin: "1px",
+      border: "1px dashed",
+    }}
+  />
+);

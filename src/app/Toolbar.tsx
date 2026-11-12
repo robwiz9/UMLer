@@ -109,7 +109,7 @@ export const Toolbar = ({
     />
 
     <div className="topbar-group scene-picker">
-      <label htmlFor="scene-select">Scene</label>
+      {/* <label htmlFor="scene-select">Scene</label> */}
       <select
         id="scene-select"
         value={activeSceneId}
@@ -166,7 +166,7 @@ export const Toolbar = ({
         title="Toggle the Typst / CeTZ export panel"
         aria-pressed={codePanelVisible}
       >
-        {"</> Code"}
+        {"</> Typst"}
       </button>
       <label className="grid-size">
         step

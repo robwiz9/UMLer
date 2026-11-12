@@ -138,7 +138,7 @@ button {
   place-items: center;
   width: 34px;
   height: 34px;
-  border-radius: 11px;
+  border-radius: 8px;
   background: var(--ink);
   color: white;
   font-weight: 700;
@@ -183,10 +183,15 @@ button {
   background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 10px center;
   font-size: 13px;
 }
+.line {
+  color: var(--line);
+  height: 2px;
+}
 
 .kind-chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
@@ -195,6 +200,8 @@ button {
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+  min-width: 9em;
+  /* text-align: center; */
 }
 
 .toolbar-actions {
@@ -2586,7 +2593,7 @@ button {
 }
 
 .code-section-title {
-  color: var(--muted);
+  /* color: var(--muted); */
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -2966,7 +2973,7 @@ button {
 .code-preview-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .code-collapse-button {

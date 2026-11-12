@@ -121,7 +121,7 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   New use-case frames are tighter (`138 × 45`) to avoid excessive space around short labels.
 - **Theme card** above Layout sets the defaults for new objects and un-overridden text: **tint** (header and
   attribute-chip fill, with a transparent option), **object background** (with a transparent toggle), **font
-  colour**, **font size**, and an optional **transparent line-label background**. Theme changes restyle existing
+  colour**, **font size**, and an optional **transparent label background**. Theme changes restyle existing
   nodes; new objects inherit the active scene theme; **Reset theme** restores the built-in tokens.
 - **Background overrides** for table headers, individual sections and comments, each with colour, transparent
   and reset-to-theme states. Section fills paint beneath content and the table border is repainted last.
@@ -365,7 +365,7 @@ Text style controls, B/I/M + size/colour overrides, live theme tint and size cha
 background, Reset theme, badge baseline centring, and the tighter new-use-case default; confirmed new objects
 inherit the active theme and per-row overrides beat theme defaults. Latest checks covered transparent tint,
 header/section/comment background overrides, deferred colour commits while dragging, and the compact text-style
-size field. Latest fixes verified transparent line-label plates, a colour-only row override, a freshly created
+size field. Latest fixes verified transparent label plates, a colour-only row override, a freshly created
 entity’s black header text, Delete-on-header clearing only the header, ER center-label conversion into a tethered
 relation attribute, the Tight/Normal/Wide layout-spacing presets, and relation-attribute auto-layout placing
 tables on opposite sides of their parent relationship without crossing tethers. TB layout now also flips

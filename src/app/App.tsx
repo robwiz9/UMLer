@@ -2136,8 +2136,8 @@ export const App = () => {
               <aside className="code-panel code-panel-loading" aria-label="Loading export panel">
                 <div className="code-panel-head">
                   <div>
-                    <div className="code-panel-kicker">Step 4 · Export</div>
-                    <h2>Typst / CeTZ</h2>
+                    {/* <div className="code-panel-kicker">Export</div> */}
+                    <h2>Export to Typst</h2>
                   </div>
                 </div>
                 <div className="code-panel-scroll">

@@ -113,7 +113,7 @@ objects that do not carry their own text overrides:
 - **Background** — entity/class/shape background, with a **Transparent object background** toggle;
 - **Text** — default diagram font colour;
 - **Size** — scales table/shape text, header text and edge-label text together;
-- **Transparent line-label background** — removes the white plate behind connector labels;
+- **Transparent label background** — removes the white plate behind connector labels;
 - **Reset theme** restores the built-in token set.
 
 Theme changes restyle existing nodes and new objects adopt `scene.theme` at creation. Per-object typography
@@ -675,7 +675,7 @@ Browser checks:
   respective fills, and **Reset theme** restores the built-in colours and sizes;
 - drag a theme colour picker continuously and confirm the canvas updates only after the drag pauses rather than
   rebuilding the layout on every frame;
-- toggle **Transparent line-label background** and confirm connector label plates disappear without removing
+- toggle **Transparent label background** and confirm connector label plates disappear without removing
   their text;
 - override only an attribute row’s font colour (leaving bold/italic/mono/size at their defaults) and confirm the
   new colour is applied; create a new entity and confirm its header text uses the current default black rather

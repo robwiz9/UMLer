@@ -76,8 +76,7 @@ scale    = min(requestedDocumentZoom, fitLimit)
   padding is the only built-in gutter.
 - Horizontal alignment is `#align(left|center|right)` around the figure body.
   This is a local wrapper, not a global setter.
-- The figure uses `placement: none` and `numbering: none`, so the label is plain
-  text rather than “Figure 1: …”. The label is editable; its default is the
+- The figure uses `placement: none`, so the label is plain. The label is editable; its default is the
   scene name and an empty label removes the caption entirely.
 
 Page presets:

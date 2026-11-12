@@ -26,7 +26,7 @@ export const LayoutPanel = ({
   <section className="panel layout-panel">
     <div className="panel-heading">
       <span>Layout</span>
-      <span className="panel-hint">{engine}</span>
+      {/* <span className="panel-hint">{engine}</span> */}
     </div>
     <div className="layout-direction" role="group" aria-label="Layout direction">
       <button
