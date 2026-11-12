@@ -17,7 +17,6 @@ interface LayoutPanelProps {
 export const LayoutPanel = ({
   direction,
   spacing,
-  engine,
   note,
   onDirectionChange,
   onSpacingChange,

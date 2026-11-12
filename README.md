@@ -20,7 +20,7 @@ A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequenc
 ```bash
 npm install
 cp .env.example .env.local   # optional: add a GitHub OAuth App client id
-npm run dev      # http://127.0.0.1:5173/
+npm run dev      # editor: http://127.0.0.1:5173/ · landing: /landing/
 npm run check    # typecheck + scene validation + layout/persistence/GitHub/storage/CeTZ tests
 npm run build
 ```
@@ -56,6 +56,7 @@ src/app/          React shell, theme/text-style panels, history, table/edge edit
 src/res/          bundled Latin Modern Roman and Mono font assets
 src/fixtures/     six example scenes (ER, class, sequence, use case, state, communication)
 scripts/          fixture validator, layout/persistence/GitHub/storage/CeTZ tests, Typst bootstrap
+public/landing/   plain HTML/CSS project landing page linked to the GitHub repository
 docs/             research, mapping, architecture, Step 1/2/3/4 specifications
 docs/assets/      CeTZ notation proof + app screenshots
 examples/         generated JSON example for the ER fixture
@@ -74,8 +75,10 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   zoom (10–300%), left/center/right alignment, an **editable label** (scene name by default, empty = no
   label, trailing cross to clear), a sanitized diagram id for `@fig-…` references, a resources-folder field
   plus a list of referenced images, a whole-diagram vs. selection scope, a Placement size/scale card above
-  the label, a **collapsible** rendered preview with an Expand modal that zooms, compile diagnostics, and a
-  Copy button with a leading icon.
+  the label, a **collapsible** rendered preview with an Expand modal that zooms, compile diagnostics, and
+  two mutually exclusive output modes: **Export .typ File** (default; download plus a copyable
+  `#include` instruction) and **View Source Code** (manual-paste import, copy action and code block). The
+  downloaded file prepends the versioned CeTZ import so it can be included directly.
 - **Page fitting never stretches implicitly.** At 100% a small diagram keeps its natural size; it is only
   reduced (aspect ratio preserved) when it would not fit the page. An explicit zoom above 100% is honoured
   until the page limit. Selection export keeps absolute object sizes; only the origin moves.

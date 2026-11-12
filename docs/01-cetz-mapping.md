@@ -131,34 +131,44 @@ CeTZ built-ins cover the primitives we need: `triangle`, `stealth`, `diamond`, `
 ```typst
 register-mark("uml-hollow-triangle", style => {
   let (l, w) = (style.length, style.width)
-  line((0, 0), (l, -w/2), (l, w/2), close: true,
+  draw.line((0, 0), (l, -w/2), (l, w/2), close: true,
        fill: white, stroke: style.stroke)
-  anchor("tip", (0, 0))
-  anchor("base", (l, 0))
+  draw.anchor("tip", (0, 0))
+  draw.anchor("base", (l / 1000, 0))
 })
 
 register-mark("uml-open-arrow", style => {
   let (l, w) = (style.length, style.width)
-  line((0, 0), (l,  w/2), stroke: style.stroke)
-  line((0, 0), (l, -w/2), stroke: style.stroke)
-  anchor("tip", (0, 0))
-  anchor("base", (0, 0))   // base == tip: do not shorten the path
+  draw.line((0, 0), (l,  w/2), stroke: style.stroke)
+  draw.line((0, 0), (l, -w/2), stroke: style.stroke)
+  draw.anchor("tip", (0, 0))
+  draw.anchor("base", (l / 1000, 0))
 })
 ```
 
-Mark local frame, learned from the working proof sheet:
+Mark local frame:
 
-- `tip` is at `(0, 0)`; local `+x` points **back along the path**.
-- `base` controls how much of the path is consumed. A hollow triangle/diamond uses `base = (length, 0)`.
-- An open arrow must set `base = tip`, otherwise the line stops behind the arrow and a gap appears.
+- `tip` is at `(0, 0)`; the glyph body is drawn along local `+x`, i.e. from the
+  entity edge out towards the connector.
+- `base` is placed immediately after `tip` (`l / 1000`), **not** at the far edge
+  of the glyph. CeTZ uses `tip → base` both to choose the mark rotation and to
+  shorten the path. A base at the far edge makes a short final stub rotate
+  around the previous corner (a crow's foot comes out skewed) and makes a mark
+  at a path start point back into the object. The near-zero base keeps the
+  terminal segment's tangent, so the same registered mark works at either end.
+- Because `base` is near `tip`, the connector is left essentially
+  unshortened. Filled/hollow glyphs cover the line with their fill; for open
+  glyphs the centre prong coincides with the line.
+- `er-one` draws one bar at `l / 3`. The canvas also draws only that bar; the
+  bar at the entity edge would sit behind the node border and disappear.
 - Hollow shapes need `fill: white` (or the canvas background), not `fill: none`, or the line shows through.
 - The crow’s-foot marks are custom composites:
 
 | Semantic | CeTZ symbol | Construction |
 |---|---|---|
-| one | `er-one` | one bar at the entity |
+| one | `er-one` | one bar outboard of the entity |
 | many | `er-many` | three prongs meeting at the entity |
-| zero or one | `er-zero-one` | bar at entity + outboard hollow circle |
+| zero or one | `er-zero-one` | outboard hollow circle + outboard bar |
 | one or many | `er-one-many` | crow’s foot at entity + outboard bar |
 | zero or many | `er-zero-many` | crow’s foot at entity + outboard hollow circle |
 

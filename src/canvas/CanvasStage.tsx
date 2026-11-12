@@ -37,6 +37,33 @@ import {
   type SnapGuide,
 } from "../layout/snap.ts";
 
+const LABEL_DOUBLE_PRESS_MS = 400;
+/** Uniform terminal hover radius in scene units for every marker family. */
+const TERMINAL_HOVER_RADIUS = 15;
+/** Keep the terminal target usable at low zoom without shrinking the ring. */
+const TERMINAL_HOVER_MIN_SCREEN_RADIUS = 14;
+
+const sameNodeFocus = (a: NodeFocus | null, b: NodeFocus | null): boolean => {
+  if (a === b) return true;
+  if (a === null || b === null || a.kind !== b.kind || a.nodeId !== b.nodeId) return false;
+  if (a.kind === "row" && b.kind === "row") return a.rowId === b.rowId;
+  if (a.kind === "section" && b.kind === "section") return a.sectionId === b.sectionId;
+  if (a.kind === "lifelineSpine" && b.kind === "lifelineSpine") return a.y === b.y;
+  return true;
+};
+
+/** Move an endpoint marker's hit/ring centre out of the attached object. */
+const outwardPoint = (origin: Point, toward: Point, distance: number): Point => {
+  const dx = toward.x - origin.x;
+  const dy = toward.y - origin.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= 0.0001) return origin;
+  return {
+    x: origin.x + (dx / length) * distance,
+    y: origin.y + (dy / length) * distance,
+  };
+};
+
 interface CanvasStageProps {
   readonly scene: SceneDocument;
   readonly layout: LayoutSnapshot;
@@ -308,29 +335,49 @@ const EdgeHitLayer = ({
   readonly onReroute: (edgeId: string) => void;
 }) => (
   <g>
-    {edges.map((edge) => (
-      <polyline
-        key={edge.id}
-        data-edge-hit={edge.id}
-        points={edge.points.map((p) => `${p.x},${p.y}`).join(" ")}
-        fill="none"
-        stroke="transparent"
-        strokeWidth={14}
-        vectorEffect="non-scaling-stroke"
-        style={{ cursor: "pointer" }}
-        pointerEvents="stroke"
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          event.stopPropagation();
-          onSelect(edge.id, event);
-        }}
-        onDoubleClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onReroute(edge.id);
-        }}
-      />
-    ))}
+    {edges.map((edge) => {
+      const points = edge.points.map((p) => `${p.x},${p.y}`).join(" ");
+      return (
+        <g key={edge.id} className="edge-hover-group">
+          <polyline
+            className="edge-hover-halo"
+            points={points}
+            fill="none"
+            strokeWidth={7}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+          <polyline
+            className="edge-hover-core"
+            points={points}
+            fill="none"
+            strokeWidth={1.5}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+          <polyline
+            data-edge-hit={edge.id}
+            points={points}
+            fill="none"
+            stroke="transparent"
+            strokeWidth={14}
+            vectorEffect="non-scaling-stroke"
+            style={{ cursor: "pointer" }}
+            pointerEvents="stroke"
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.stopPropagation();
+              onSelect(edge.id, event);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onReroute(edge.id);
+            }}
+          />
+        </g>
+      );
+    })}
   </g>
 );
 
@@ -398,6 +445,7 @@ const CenterLabelHitLayer = ({
         <rect
           key={`center-label-hit-${id}`}
           data-center-label-hit={id}
+          className="edge-label-hover"
           x={label.frame.x - 3 / zoom}
           y={label.frame.y - 3 / zoom}
           width={label.frame.width + 6 / zoom}
@@ -426,12 +474,22 @@ const TerminalHitLayer = ({
   edges,
   zoom,
   onPress,
+  onHoverTerminal,
   onLabelDragStart,
   onDoublePress,
 }: {
-  readonly edges: readonly { readonly id: string; readonly layout: EdgeLayout }[];
+  readonly edges: readonly {
+    readonly id: string;
+    readonly layout: EdgeLayout;
+  }[];
   readonly zoom: number;
   readonly onPress: (edgeId: string, end: EdgeEnd) => void;
+  readonly onHoverTerminal: (
+    edgeId: string,
+    end: EdgeEnd | null,
+    center?: Point,
+    radius?: number,
+  ) => void;
   readonly onLabelDragStart: (
     edgeId: string,
     labelId: string,
@@ -444,19 +502,33 @@ const TerminalHitLayer = ({
     {edges.map(({ id, layout }) => {
       const source = layout.points[0];
       const target = layout.points[layout.points.length - 1];
+      const second = layout.points[1];
+      const previous = layout.points[layout.points.length - 2];
+      const terminalRadius = Math.max(
+        TERMINAL_HOVER_RADIUS,
+        TERMINAL_HOVER_MIN_SCREEN_RADIUS / zoom,
+      );
+      const sourceCenter = source === undefined || second === undefined
+        ? source
+        : outwardPoint(source, second, terminalRadius);
+      const targetCenter = target === undefined || previous === undefined
+        ? target
+        : outwardPoint(target, previous, terminalRadius);
       const sourceLabel = layout.labels.find((label) => label.zone === "source");
       const targetLabel = layout.labels.find((label) => label.zone === "target");
       return (
         <g key={`terminal-hit-${id}`}>
-          {source === undefined ? null : (
+          {sourceCenter === undefined ? null : (
             <circle
               data-terminal-hit={`${id}:source`}
-              cx={source.x}
-              cy={source.y}
-              r={22 / zoom}
+              cx={sourceCenter.x}
+              cy={sourceCenter.y}
+              r={terminalRadius}
               fill="transparent"
               pointerEvents="all"
               style={{ cursor: "pointer" }}
+              onPointerEnter={() => onHoverTerminal(id, "source", sourceCenter, terminalRadius)}
+              onPointerLeave={() => onHoverTerminal(id, null)}
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
                 event.stopPropagation();
@@ -469,15 +541,17 @@ const TerminalHitLayer = ({
               }}
             />
           )}
-          {target === undefined ? null : (
+          {targetCenter === undefined ? null : (
             <circle
               data-terminal-hit={`${id}:target`}
-              cx={target.x}
-              cy={target.y}
-              r={22 / zoom}
+              cx={targetCenter.x}
+              cy={targetCenter.y}
+              r={terminalRadius}
               fill="transparent"
               pointerEvents="all"
               style={{ cursor: "pointer" }}
+              onPointerEnter={() => onHoverTerminal(id, "target", targetCenter, terminalRadius)}
+              onPointerLeave={() => onHoverTerminal(id, null)}
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
                 event.stopPropagation();
@@ -496,6 +570,7 @@ const TerminalHitLayer = ({
               <rect
                 key={`${id}-terminal-label-hit-${index}`}
                 data-terminal-label-hit={`${id}:${label.zone}`}
+                className="edge-label-hover"
                 x={label.frame.x - 3 / zoom}
                 y={label.frame.y - 3 / zoom}
                 width={label.frame.width + 6 / zoom}
@@ -613,6 +688,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const [guides, setGuides] = useState<readonly SnapGuide[]>([]);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [hoveredPort, setHoveredPort] = useState<PortGeometry | null>(null);
+  const [hoveredNodePart, setHoveredNodePart] = useState<NodeFocus | null>(null);
+  const [hoveredTerminal, setHoveredTerminal] = useState<{
+    readonly edgeId: string;
+    readonly end: EdgeEnd;
+    readonly center: Point;
+    readonly radius: number;
+  } | null>(null);
   const [panning, setPanning] = useState(false);
   const [activeEndpoint, setActiveEndpoint] = useState<EdgeEnd | null>(null);
   const [linePopover, setLinePopover] = useState<{ edgeId: string; x: number; y: number } | null>(null);
@@ -638,6 +720,17 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     readonly edgeId: string;
     readonly labelId: string;
     readonly delta: Point;
+  } | null>(null);
+  /**
+   * Label drags capture the pointer on the SVG, so the browser retargets the
+   * following pointerup/click/dblclick to the SVG rather than the label hit
+   * rectangle. Track the press here and open the editor directly on the second
+   * press instead of relying on a dblclick handler that never fires.
+   */
+  const labelPressRef = useRef<{
+    readonly edgeId: string;
+    readonly labelId: string;
+    readonly time: number;
   } | null>(null);
   const panMovedRef = useRef(false);
   const [activationDraft, setActivationDraft] = useState<{
@@ -1003,6 +1096,31 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (svg === null || label === undefined) return;
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    const now = performance.now();
+    const previousPress = labelPressRef.current;
+    if (
+      previousPress !== null &&
+      previousPress.edgeId === edgeId &&
+      previousPress.labelId === labelId &&
+      now - previousPress.time <= LABEL_DOUBLE_PRESS_MS
+    ) {
+      labelPressRef.current = null;
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      onSelectActivation(null);
+      onSelectNode(null);
+      onSelectEdge(edgeId);
+      onClearNodeFocus();
+      if (menu === "line") {
+        openLineMenuAt(edgeId, world, true, true);
+      } else if (end !== undefined) {
+        openTerminalMenu(edgeId, end, true);
+      }
+      return;
+    }
+    labelPressRef.current = { edgeId, labelId, time: now };
     const startOffset = {
       x: label.frame.x + label.frame.width / 2 - label.anchorPoint.x,
       y: label.frame.y + label.frame.height / 2 - label.anchorPoint.y,
@@ -1243,22 +1361,91 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (focusField) setTerminalFocusToken((value) => value + 1);
   };
 
-  const openLineMenuAt = (edgeId: string, world: Point, focusField: boolean): void => {
+  const openLineMenuAt = (
+    edgeId: string,
+    world: Point,
+    focusField: boolean,
+    fromLabel = false,
+  ): void => {
     const screen = {
       x: world.x * zoom + camera.x,
       y: world.y * zoom + camera.y,
     };
     const centerLabel = layout.edges[edgeId]?.labels.find((label) => label.zone === "center");
-    const halfWidth = (centerLabel?.frame.width ?? 0) / 2;
-    const right = screen.x + halfWidth + 14 + 320 <= viewport.width - 10;
-    setActiveEndpoint(null);
-    setLinePopover({
-      edgeId,
-      x: right
+    const menuWidth = 320;
+    const menuHeight = 390;
+    const clamp = (value: number, min: number, max: number): number =>
+      Math.max(min, Math.min(value, max));
+    let left: number;
+    let top: number;
+
+    if (fromLabel && centerLabel !== undefined) {
+      const labelLeft = centerLabel.frame.x * zoom + camera.x;
+      const labelRight = (centerLabel.frame.x + centerLabel.frame.width) * zoom + camera.x;
+      const labelTop = centerLabel.frame.y * zoom + camera.y;
+      const labelBottom = (centerLabel.frame.y + centerLabel.frame.height) * zoom + camera.y;
+      const labelCenterX = (labelLeft + labelRight) / 2;
+      const labelCenterY = (labelTop + labelBottom) / 2;
+      const anchor = centerLabel.anchorPoint;
+      const lineX = anchor.x * zoom + camera.x;
+      const lineY = anchor.y * zoom + camera.y;
+
+      // Pick the segment under the label so vertical lines get a side menu
+      // and horizontal lines get a menu below or above the label.
+      let horizontal = true;
+      const points = layout.edges[edgeId]?.points ?? [];
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (let index = 0; index + 1 < points.length; index += 1) {
+        const a = points[index];
+        const b = points[index + 1];
+        if (a === undefined || b === undefined) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lengthSquared = dx * dx + dy * dy;
+        const t = lengthSquared === 0
+          ? 0
+          : clamp(((anchor.x - a.x) * dx + (anchor.y - a.y) * dy) / lengthSquared, 0, 1);
+        const distance = Math.hypot(anchor.x - (a.x + dx * t), anchor.y - (a.y + dy * t));
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          horizontal = Math.abs(dx) >= Math.abs(dy);
+        }
+      }
+
+      if (horizontal) {
+        left = clamp(
+          labelCenterX - menuWidth / 2,
+          10,
+          Math.max(10, viewport.width - menuWidth - 10),
+        );
+        top = Math.max(labelBottom, lineY) + 16;
+        if (top + menuHeight > viewport.height - 10) {
+          top = Math.min(labelTop, lineY) - menuHeight - 16;
+        }
+        top = clamp(top, 10, Math.max(10, viewport.height - menuHeight - 10));
+      } else {
+        left = Math.max(labelRight, lineX) + 16;
+        if (left + menuWidth > viewport.width - 10) {
+          left = Math.min(labelLeft, lineX) - menuWidth - 16;
+        }
+        left = clamp(left, 10, Math.max(10, viewport.width - menuWidth - 10));
+        top = clamp(
+          labelCenterY - menuHeight / 2,
+          10,
+          Math.max(10, viewport.height - menuHeight - 10),
+        );
+      }
+    } else {
+      const halfWidth = ((centerLabel?.frame.width ?? 0) / 2) * zoom;
+      const right = screen.x + halfWidth + 14 + menuWidth <= viewport.width - 10;
+      left = right
         ? screen.x + halfWidth + 14
-        : Math.max(10, screen.x - halfWidth - 14 - 320),
-      y: screen.y - 170,
-    });
+        : Math.max(10, screen.x - halfWidth - 14 - menuWidth);
+      top = screen.y - 170;
+    }
+
+    setActiveEndpoint(null);
+    setLinePopover({ edgeId, x: left, y: top });
     onSelectNode(null);
     onSelectEdge(edgeId);
     if (focusField) setLineFocusToken((value) => value + 1);
@@ -1579,7 +1766,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             y: interaction.startOffset.y + interaction.lastDelta.y,
           });
         } else if (interaction.menu === "line") {
-          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, false, true);
         } else if (interaction.end !== undefined) {
           openTerminalMenu(interaction.edgeId, interaction.end, false);
         }
@@ -1717,6 +1904,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       interaction.moved = moved;
       interaction.lastDelta = delta;
       if (moved) {
+        labelPressRef.current = null;
         setLabelDraft({
           edgeId: interaction.edgeId,
           labelId: interaction.labelId,
@@ -2131,6 +2319,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             edges={terminalHitItems}
             zoom={zoom}
             onPress={(edgeId, end) => openTerminalMenu(edgeId, end, false)}
+            onHoverTerminal={(edgeId, end, center, radius) =>
+              setHoveredTerminal(
+                end === null || center === undefined || radius === undefined
+                  ? null
+                  : { edgeId, end, center, radius },
+              )}
             onLabelDragStart={(edgeId, labelId, event, end) =>
               beginLabelDrag(edgeId, labelId, event, "terminal", end)}
             onDoublePress={(edgeId, end) => openTerminalMenu(edgeId, end, true)}
@@ -2140,7 +2334,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             zoom={zoom}
             onDragStart={(edgeId, labelId, event) =>
               beginLabelDrag(edgeId, labelId, event, "line")}
-            onDoublePress={(edgeId, world) => openLineMenuAt(edgeId, world, true)}
+            onDoublePress={(edgeId, world) => openLineMenuAt(edgeId, world, true, true)}
           />
           {sortedNodes.map((nodeLayout) => {
             const node = scene.nodes[nodeLayout.nodeId];
@@ -2153,6 +2347,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 theme={scene.theme}
                 selected={selectedNodeIds.includes(node.id)}
                 skeleton={false}
+                hoveredPart={hoveredNodePart?.nodeId === node.id ? hoveredNodePart : null}
+                onHoverPart={(focus) =>
+                  setHoveredNodePart((current) =>
+                    sameNodeFocus(current, focus) ? current : focus,
+                  )}
                 imageAsset={
                   node.kind === "image" && node.assetId !== undefined
                     ? imageAssets[node.assetId]
@@ -2256,6 +2455,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               hiddenLabelId={labelDraft?.labelId}
             />
           )}
+          {hoveredTerminal !== null ? (
+            <circle
+              className="terminal-hover-ring"
+              cx={hoveredTerminal.center.x}
+              cy={hoveredTerminal.center.y}
+              r={hoveredTerminal.radius}
+            />
+          ) : null}
           {sequenceMovePreview !== null ? (() => {
             const previewLayout = layout.edges[sequenceMovePreview.edgeId];
             if (previewLayout === undefined) return null;
@@ -2315,15 +2522,35 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           sequenceMovePreview === null &&
           reattachPreview === null ? (
             <>
-              <polyline
-                points={edgeLinePoints(selectedEdgeLayout, selectedEdge?.markers ?? { source: { family: "none", kind: "none" }, target: { family: "none", kind: "none" } }).map((p) => `${p.x},${p.y}`).join(" ")}
-                fill="none"
-                stroke={scene.theme.colors.selection}
-                strokeWidth={2.4}
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-                opacity={0.85}
-              />
+              {activeEndpoint === null ? (
+                <polyline
+                  points={edgeLinePoints(selectedEdgeLayout, selectedEdge?.markers ?? { source: { family: "none", kind: "none" }, target: { family: "none", kind: "none" } }).map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
+                  stroke={scene.theme.colors.selection}
+                  strokeWidth={2.4}
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                  opacity={0.85}
+                />
+              ) : (() => {
+                const points = selectedEdgeLayout.points;
+                const terminal = activeEndpoint === "source" ? points[0] : points[points.length - 1];
+                const neighbor = activeEndpoint === "source" ? points[1] : points[points.length - 2];
+                if (terminal === undefined || neighbor === undefined) return null;
+                const radius = Math.max(
+                  TERMINAL_HOVER_RADIUS,
+                  TERMINAL_HOVER_MIN_SCREEN_RADIUS / zoom,
+                );
+                const center = outwardPoint(terminal, neighbor, radius);
+                return (
+                  <circle
+                    className="terminal-selected-ring"
+                    cx={center.x}
+                    cy={center.y}
+                    r={radius}
+                  />
+                );
+              })()}
               {selectedEdgeLayout.points[0] !== undefined ? (
                 <EndpointHandle
                   point={selectedEdgeLayout.points[0]}
@@ -2594,10 +2821,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         <span>
           x {cursorWorld.x.toFixed(1)} · y {cursorWorld.y.toFixed(1)}
         </span>
-        <span className="hud-divider" />
-        <span>grid {gridSize}pt</span>
-        <span className="hud-divider" />
-        <span>{hoveredPort?.label ?? "no port"}</span>
+        {/* <span className="hud-divider" />
+        <span>grid {gridSize}pt</span> */}
+        {/* <span className="hud-divider" />
+        <span>{hoveredPort?.label ?? "no port"}</span> */}
       </div>
     </div>
   );

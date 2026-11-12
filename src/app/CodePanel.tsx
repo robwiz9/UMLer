@@ -4,7 +4,6 @@ import type { SceneDocument } from "../model/scene.ts";
 import type { ImageAsset } from "../model/nodes.ts";
 import {
   CETZ_EXPORT_VERSION,
-  CETZ_PREVIEW_VERSION,
   serializeSceneToCetz,
 } from "../export/cetz.ts";
 import {
@@ -21,7 +20,10 @@ import {
   type PageUnit,
 } from "../export/page.ts";
 import type { PreviewImage } from "../export/typst-preview.ts";
+import { downloadTextFile } from "./file-transfer.ts";
 import { useTypstPreview } from "./use-typst-preview.ts";
+
+const IMPORT_STATEMENT = `#import "@preview/cetz:${CETZ_EXPORT_VERSION}": canvas, draw`;
 
 export interface CodePanelProps {
   readonly scene: SceneDocument;
@@ -99,10 +101,41 @@ const CopyIcon = () => (
   </svg>
 );
 
+const DownloadIcon = () => (
+  <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
+    <path d="M9 2.5v8.5M5.8 8l3.2 3.2L12.2 8" />
+    <path d="M3 13.2v1.3A1.5 1.5 0 0 0 4.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-1.3" />
+  </svg>
+);
+
 const ChevronIcon = ({ open }: { readonly open: boolean }) => (
   <svg className={`code-icon code-chevron ${open ? "open" : ""}`} viewBox="0 0 18 18" aria-hidden="true">
     <path d="M5 7l4 4 4-4" />
   </svg>
+);
+
+const SectionToggle = ({
+  title,
+  collapsed,
+  onToggle,
+}: {
+  readonly title: string;
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
+}) => (
+  <div className="code-section-head">
+    <div className="code-section-title">{title}</div>
+    <button
+      type="button"
+      className="code-collapse-button"
+      onClick={onToggle}
+      aria-expanded={!collapsed}
+      aria-label={`${collapsed ? "Expand" : "Collapse"} ${title} section`}
+      title={`${collapsed ? "Expand" : "Collapse"} ${title}`}
+    >
+      <ChevronIcon open={!collapsed} />
+    </button>
+  </div>
 );
 
 const ClearIcon = () => (
@@ -172,10 +205,20 @@ export const CodePanel = ({
   );
   const [diagramId, setDiagramId] = useState<string>(() => defaultDiagramId(scene.meta.title));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [importState, setImportState] = useState<"idle" | "copied" | "error">("idle");
+  const [fileState, setFileState] = useState<"idle" | "copied" | "error">("idle");
+  const [downloadState, setDownloadState] = useState<"idle" | "saved" | "error">("idle");
+  const [codeMode, setCodeMode] = useState<"export" | "source">("export");
+  const [objectsCollapsed, setObjectsCollapsed] = useState(false);
+  const [placementCollapsed, setPlacementCollapsed] = useState(false);
+  const [referenceCollapsed, setReferenceCollapsed] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const copyTimer = useRef<number | null>(null);
+  const importTimer = useRef<number | null>(null);
+  const fileTimer = useRef<number | null>(null);
+  const downloadTimer = useRef<number | null>(null);
 
   const selectionCount = selectedNodeIds.length + (selectedEdgeId === null ? 0 : 1);
 
@@ -183,6 +226,7 @@ export const CodePanel = ({
     setDiagramId(defaultDiagramId(scene.meta.title));
     setLabel(scene.meta.title);
     setScope("diagram");
+    setCodeMode("export");
   }, [scene.id, scene.meta.title]);
 
   useEffect(() => {
@@ -217,6 +261,9 @@ export const CodePanel = ({
   useEffect(
     () => () => {
       if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      if (importTimer.current !== null) window.clearTimeout(importTimer.current);
+      if (fileTimer.current !== null) window.clearTimeout(fileTimer.current);
+      if (downloadTimer.current !== null) window.clearTimeout(downloadTimer.current);
     },
     [],
   );
@@ -255,6 +302,9 @@ export const CodePanel = ({
       }),
     [scene, layout, settings, selectedNodeIds, selectedEdgeId, assets],
   );
+
+  const fileName = `${result.label}.typ`;
+  const fileCommand = `#include "${fileName}"`;
 
   const previewImages = useMemo<PreviewImage[]>(
     () =>
@@ -324,6 +374,43 @@ export const CodePanel = ({
     copyTimer.current = window.setTimeout(() => setCopyState("idle"), 1800);
   };
 
+  const copyImport = async (): Promise<void> => {
+    try {
+      await copyToClipboard(IMPORT_STATEMENT);
+      setImportState("copied");
+    } catch {
+      setImportState("error");
+    }
+    if (importTimer.current !== null) window.clearTimeout(importTimer.current);
+    importTimer.current = window.setTimeout(() => setImportState("idle"), 1800);
+  };
+
+  const copyFileCommand = async (): Promise<void> => {
+    try {
+      await copyToClipboard(fileCommand);
+      setFileState("copied");
+    } catch {
+      setFileState("error");
+    }
+    if (fileTimer.current !== null) window.clearTimeout(fileTimer.current);
+    fileTimer.current = window.setTimeout(() => setFileState("idle"), 1800);
+  };
+
+  const downloadCode = (): void => {
+    try {
+      downloadTextFile(
+        fileName,
+        `${IMPORT_STATEMENT}\n\n${result.code}`,
+        "text/plain;charset=utf-8",
+      );
+      setDownloadState("saved");
+    } catch {
+      setDownloadState("error");
+    }
+    if (downloadTimer.current !== null) window.clearTimeout(downloadTimer.current);
+    downloadTimer.current = window.setTimeout(() => setDownloadState("idle"), 1800);
+  };
+
   const ready = preview.status === "ready" && preview.svg !== undefined;
   const previewStatus =
     preview.status === "error"
@@ -357,69 +444,54 @@ export const CodePanel = ({
 
         <div className="code-panel-scroll">
           <section className="code-section">
-            <div className="code-section-title">Export Objects</div>
-            <div className="code-segmented" role="group" aria-label="Export scope">
-              <button
-                type="button"
-                className={scope === "diagram" ? "active" : ""}
-                onClick={() => setScope("diagram")}
-              >
-                Whole diagram
-              </button>
-              <button
-                type="button"
-                className={scope === "selection" ? "active" : ""}
-                disabled={selectionCount === 0}
-                onClick={() => setScope("selection")}
-                title={
-                  selectionCount === 0
-                    ? "Select one or more objects on the canvas first"
-                    : `Export ${selectionCount} selected object${selectionCount === 1 ? "" : "s"}`
-                }
-              >
-                Selection{selectionCount > 0 ? ` · ${selectionCount}` : ""}
-              </button>
-            </div>
-            <p className="code-hint">
-              {scope === "selection"
-                ? "Only the selected objects and the connectors fully inside the selection are exported."
-                : null}
-            </p>
+            <SectionToggle
+              title="Export Objects"
+              collapsed={objectsCollapsed}
+              onToggle={() => setObjectsCollapsed((value) => !value)}
+            />
+            {!objectsCollapsed ? (
+              <>
+                <div className="code-segmented" role="group" aria-label="Export scope">
+                  <button
+                    type="button"
+                    className={scope === "diagram" ? "active" : ""}
+                    onClick={() => setScope("diagram")}
+                  >
+                    Whole diagram
+                  </button>
+                  <button
+                    type="button"
+                    className={scope === "selection" ? "active" : ""}
+                    disabled={selectionCount === 0}
+                    onClick={() => setScope("selection")}
+                    title={
+                      selectionCount === 0
+                        ? "Select one or more objects on the canvas first"
+                        : `Export ${selectionCount} selected object${selectionCount === 1 ? "" : "s"}`
+                    }
+                  >
+                    Selection{selectionCount > 0 ? ` · ${selectionCount}` : ""}
+                  </button>
+                </div>
+                <p className="code-hint">
+                  {scope === "selection"
+                    ? "Only the selected objects and the connectors fully inside the selection are exported."
+                    : null}
+                </p>
+              </>
+            ) : null}
           </section>
           <ColoredLine color="var(--line)" />
           {/* ) : null} */}
-          <section>
-            <div className="code-margin-block">
-              <div className="code-section-title">Page margins ({page.unit})</div>
-              <div className="code-margin-grid">
-                {MARGIN_SIDES.map((side) => (
-                  <label className="code-margin-field" key={side}>
-                    <span>{MARGIN_LABELS[side]}</span>
-                    <input
-                      id={`code-margin-${side}`}
-                      name={`code-margin-${side}`}
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={page.margins[side]}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isFinite(value) && value >= 0) {
-                          setPage({
-                            ...page,
-                            margins: { ...page.margins, [side]: value },
-                          });
-                        }
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-          </section>
 
           <section className="code-section">
-            <div className="code-section-title">Page Format & Placement</div>
+            <SectionToggle
+              title="Page Format & Placement"
+              collapsed={placementCollapsed}
+              onToggle={() => setPlacementCollapsed((value) => !value)}
+            />
+            {!placementCollapsed ? (
+              <>
             <div className="code-page-options" role="group" aria-label="Document size">
               {PAGE_OPTIONS.map((option) => (
                 <button
@@ -532,7 +604,47 @@ export const CodePanel = ({
             </div>
 
             <label className="code-field">
-              <span>Label below</span>
+              <span>Page margins ({page.unit})</span>
+              <div className="code-section-title"></div>
+              <div className="code-margin-grid">
+                {MARGIN_SIDES.map((side) => (
+                  <label className="code-margin-field" key={side}>
+                    <span>{MARGIN_LABELS[side]}</span>
+                    <input
+                      id={`code-margin-${side}`}
+                      name={`code-margin-${side}`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={page.margins[side]}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value) && value >= 0) {
+                          setPage({
+                            ...page,
+                            margins: { ...page.margins, [side]: value },
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </label>
+              </>
+            ) : null}
+          </section>
+          <ColoredLine color="var(--line)" />
+          <section className="code-section">
+            <SectionToggle
+              title="Reference"
+              collapsed={referenceCollapsed}
+              onToggle={() => setReferenceCollapsed((value) => !value)}
+            />
+            {!referenceCollapsed ? (
+              <>
+            <label className="code-field">
+              <span>Label text</span>
               <span className="code-input-with-action">
                 <input
                   id="code-label"
@@ -556,10 +668,6 @@ export const CodePanel = ({
                 ) : null}
               </span>
             </label>
-          </section>
-          <ColoredLine color="var(--line)" />
-          <section className="code-section">
-            <div className="code-section-title">Reference</div>
             <label className="code-field">
               <span>Diagram ID</span>
               <input
@@ -604,6 +712,8 @@ export const CodePanel = ({
                 </ul>
               </div>
             ) : null}
+              </>
+            ) : null}
           </section>
           <ColoredLine color="var(--line)" />
           <section className="code-section">
@@ -611,7 +721,7 @@ export const CodePanel = ({
               <div className="code-section-title">Preview</div>
               <div className="code-preview-actions">
                 <span className={`code-preview-status ${previewCollapsed ? "idle" : preview.status}`}>
-                  {previewCollapsed ? "Paused" : previewStatus}
+                  {previewCollapsed ? null : previewStatus}
                 </span>
                 {!previewCollapsed ? (
                   <button
@@ -658,13 +768,7 @@ export const CodePanel = ({
                 {preview.status === "error" ? (
                   <pre className="code-preview-error">{preview.error ?? "Unknown Typst error"}</pre>
                 ) : null}
-                {missingPreviewImages.length > 0 ? (
-                  <p className="code-hint code-warning-hint">
-                    {missingPreviewImages.length} image
-                    {missingPreviewImages.length === 1 ? "" : "s"} lack bytes in this session; the
-                    preview shows a placeholder while the exported path stays correct.
-                  </p>
-                ) : null}
+                
                 <div className="code-summary">
                   <div className="code-summary-line">
                     <span>
@@ -681,15 +785,16 @@ export const CodePanel = ({
                     </span>
                     {/* <span>{result.code.split("\n").length} lines</span> */}
                   </div>
-                  {result.fit.fitReduced ? (
-                    <div className="code-fit-chip">
-                      Scaled down to fit document (requested{" "}
-                      {Math.round(result.fit.requested * 100)}%, reduced to{" "}
-                      {Math.round(result.fit.scale * 100)}%)
-                    </div>
-                  ) : null}
+
                   {result.warnings.length > 0 ? (
                     <ul className="code-warnings">
+                      {result.fit.fitReduced ? (
+                        <li>
+                          Scaled down to fit document (requested{" "}
+                          {Math.round(result.fit.requested * 100)}%, reduced to{" "}
+                          {Math.round(result.fit.scale * 100)}%)
+                        </li>
+                      ) : null}
                       {result.warnings.map((warning) => (
                         <li key={warning}>{warning}</li>
                       ))}
@@ -705,28 +810,120 @@ export const CodePanel = ({
           <section className="code-section code-source-section">
             <div className="code-section-head">
               <div className="code-section-title">Typst Code</div>
+            </div>
+            {missingPreviewImages.length > 0 ? (
+                  <p className="code-hint code-warning-hint">
+                    {missingPreviewImages.length} image
+                    {missingPreviewImages.length === 1 ? "" : "s"} lack bytes in this session; the
+                    preview shows a placeholder while the exported path stays correct.
+                  </p>
+                ) : null}
+            <div
+              className="code-segmented code-mode-switch"
+              role="group"
+              aria-label="Typst output"
+            >
               <button
                 type="button"
-                className={`code-copy-button ${copyState}`}
-                onClick={() => void copyCode()}
+                className={codeMode === "export" ? "active" : ""}
+                aria-pressed={codeMode === "export"}
+                onClick={() => setCodeMode("export")}
               >
-                <CopyIcon />
-                <span>
-                  {copyState === "copied"
-                    ? "Copied"
-                    : copyState === "error"
-                      ? "Copy failed"
-                      : "Copy code"}
-                </span>
+                Export .typ File
+              </button>
+              <button
+                type="button"
+                className={codeMode === "source" ? "active" : ""}
+                aria-pressed={codeMode === "source"}
+                onClick={() => setCodeMode("source")}
+              >
+                View Source Code
               </button>
             </div>
-            <div className="code-import-card">
-              <code>#import "@preview/cetz:{CETZ_EXPORT_VERSION}": canvas, draw</code>
-              <span>Required import in your .typ file</span>
-            </div>
-            <pre className="code-block" tabIndex={0}>
-              <code>{result.code}</code>
-            </pre>
+
+            {codeMode === "export" ? (
+              <>
+                <p className="code-hint code-export-hint">
+                  <strong>Recommended.</strong> Download the standalone{" "}
+                  <code>.typ</code> file, then include it where the diagram
+                  should appear.
+                </p>
+                <button
+                  type="button"
+                  className={`code-download-button code-download-wide ${downloadState}`}
+                  onClick={downloadCode}
+                  title={`Download ${fileName}`}
+                >
+                  <DownloadIcon />
+                  <span>
+                    {downloadState === "saved"
+                      ? "Downloaded"
+                      : downloadState === "error"
+                        ? "Download failed"
+                        : `Download ${fileName}`}
+                  </span>
+                </button>
+                <div className="code-import-card">
+                  <div className="code-import-head">
+                    <code>{fileCommand}</code>
+                    <button
+                      type="button"
+                      className={`code-import-copy ${fileState}`}
+                      onClick={() => void copyFileCommand()}
+                      aria-label="Copy command for the downloaded file"
+                      title={fileState === "copied" ? "Copied" : "Copy file include command"}
+                    >
+                      <CopyIcon />
+                    </button>
+                  </div>
+                  <span>
+                    Include the file where the figure should appear.
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* <p className="code-hint code-export-hint">
+                  Import CeTZ package, then paste the source below into
+                  the document.
+                </p> */}
+                <div className="code-import-card">
+                  <div className="code-import-head">
+                    <code>{IMPORT_STATEMENT}</code>
+                    <button
+                      type="button"
+                      className={`code-import-copy ${importState}`}
+                      onClick={() => void copyImport()}
+                      aria-label="Copy CeTZ import"
+                      title={importState === "copied" ? "Copied" : "Copy CeTZ import"}
+                    >
+                      <CopyIcon />
+                    </button>
+                  </div>
+                  <span>Import CeTZ package, then paste the source below into
+                  the document.</span>
+                </div>
+                <div className="code-block-wrap">
+                  <button
+                    type="button"
+                    className={`code-copy-button code-copy-overlay ${copyState}`}
+                    onClick={() => void copyCode()}
+                  >
+                    <CopyIcon />
+                    <span>
+                      {copyState === "copied"
+                        ? "Copied"
+                        : copyState === "error"
+                          ? "Copy failed"
+                          : "Copy code"}
+                    </span>
+                  </button>
+                  <pre className="code-block" tabIndex={0}>
+                    <code>{result.code}</code>
+                  </pre>
+                </div>
+              </>
+            )}
           </section>
         </div>
       </aside>
@@ -774,7 +971,7 @@ export const CodePanel = ({
                     onClick={() => setPreviewZoom(1)}
                     title="Reset preview zoom"
                   >
-                    100%
+                    Fit
                   </button>
                 </div>
                 <button

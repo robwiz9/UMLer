@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fbfaf7" />
+    <meta
+      name="description"
+      content="UMLer is a browser-based ER and UML diagram editor with a live Typst / CeTZ export."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231f2933'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Arial' font-size='19' font-weight='700' fill='white'%3EU%3C/text%3E%3C/svg%3E"
+    />
+    <title>UMLer — diagrams that go straight to Typst</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <a class="brand" href="https://github.com/robwiz9/UMLer" aria-label="UMLer on GitHub">
+          <span class="brand-mark" aria-hidden="true">U</span>
+          <span>UMLer</span>
+        </a>
+        <a class="github-link" href="https://github.com/robwiz9/UMLer">
+          GitHub
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </a>
+      </header>
+
+      <main class="hero">
+        <p class="eyebrow">ER &amp; UML editor <span>·</span> Typst-native</p>
+        <h1>Diagrams that go<br /><em>straight to Typst.</em></h1>
+        <p class="lede">
+          A browser-based ER and UML editor with a live CeTZ export.
+          Draw the model, keep the source clean, and typeset it with Typst.
+        </p>
+
+        <div class="actions">
+          <a class="button" href="https://github.com/robwiz9/UMLer">
+            View on GitHub
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </a>
+          <span class="repo">robwiz9 / UMLer</span>
+        </div>
+
+        <figure class="diagram" aria-hidden="true">
+          <svg viewBox="0 0 560 270" role="presentation">
+            <g class="diagram-line">
+              <path d="M222 118 H338" />
+              <path d="M338 118 V202 H398" />
+              <path d="M338 118 H398" />
+            </g>
+
+            <g class="node">
+              <rect x="62" y="72" width="160" height="92" rx="2" />
+              <line x1="62" y1="100" x2="222" y2="100" />
+              <text x="142" y="90" class="node-title">customers</text>
+              <text x="74" y="118" class="node-text">id: uuid</text>
+              <text x="74" y="135" class="node-text">email: citext</text>
+              <text x="74" y="152" class="node-text">name: text</text>
+            </g>
+
+            <g class="node">
+              <rect x="398" y="72" width="150" height="92" rx="2" />
+              <line x1="398" y1="100" x2="548" y2="100" />
+              <text x="473" y="90" class="node-title">orders</text>
+              <text x="410" y="118" class="node-text">id: uuid</text>
+              <text x="410" y="135" class="node-text">total: numeric</text>
+              <text x="410" y="152" class="node-text">placed_at: date</text>
+            </g>
+
+            <g class="node node-small">
+              <rect x="398" y="202" width="150" height="48" />
+              <text x="473" y="222" class="node-title">order_line</text>
+              <text x="410" y="240" class="node-text">quantity: int</text>
+            </g>
+
+            <circle cx="338" cy="118" r="3.5" class="terminal" />
+            <path d="M338 118 l-10 -5 M338 118 l-10 5" class="terminal-line" />
+            <text x="256" y="108" class="edge-label">1</text>
+            <text x="348" y="108" class="edge-label">0..*</text>
+          </svg>
+          <figcaption>
+            <span>fig-er-commerce</span>
+            <span>Typst / CeTZ</span>
+          </figcaption>
+        </figure>
+      </main>
+
+      <footer>
+        <span>Built with React, Typst and CeTZ.</span>
+        <a href="https://github.com/robwiz9/UMLer">Source on GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

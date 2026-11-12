@@ -155,7 +155,13 @@ object is exactly as large in a one-object selection as in the full diagram.
 
 Key properties:
 
-- **No import, no page setup, no global setters.** The snippet starts at
+- **The copied snippet has no import; the downloaded file does.** The
+  **Download .typ** action writes the same figure with a versioned
+  `#import "@preview/cetz:0.5.3": canvas, draw` prepended, so the file can be
+  included or compiled directly. The **Copy code** and **Copy CeTZ import**
+  actions remain the manual-paste path. The panel also shows a copyable
+  `#include "<diagram-id>.typ"` command for the downloaded file.
+- **No page setup, no global setters.** The snippet starts at
   `#figure`. It assumes the host document imported CeTZ as `cetz` and does not
   change the host's page, text style, font or numbering. `#align` and `#figure`
   are local wrappers, not document-wide state.
@@ -178,7 +184,14 @@ Key properties:
   Latin Modern default so the preview matches the editor's measurements.
 - **Marks are registered once per canvas**, only when used. Hollow UML marks
   fill with white; composition and generic filled arrows use
-  `style.stroke.paint`.
+  `style.stroke.paint`. Every registered mark anchors `base` immediately after
+  `tip`, so CeTZ orients the glyph along the terminal segment. A base at the far
+  glyph edge makes a crow's foot lean around the previous corner when the final
+  stub is short, and makes a mark at a path start point back into its object.
+  The connector is consequently left unshortened under the mark; filled glyphs
+  cover it and open glyphs coincide with the centre prong. `er-one` draws a
+  single bar at `l / 3`, matching the canvas, instead of an extra bar hidden
+  behind the node border.
 - **Node groups expose row and perimeter anchors** (`row_<n>_west/east`,
   `north`, `east`, `south`, `west`) for later Typst references.
 - **The lock badge is never emitted.** Lock is an editor/layout constraint, not
@@ -231,6 +244,7 @@ fails, the diagnostics are shown and the code remains copyable.
 
 | Control | Behaviour |
 |---|---|
+| Sections | **Export Objects**, **Page Format & Placement**, **Reference** and **Preview** are collapsible via their chevron; **Typst Code** stays open. All start expanded. |
 | Whole diagram / Selection | Scope; selection is disabled with zero selected objects. |
 | Document size | A4 vertical, A4 horizontal or custom width × height. Used only for fit and preview; never emitted. |
 | Page margins | Top / Right / Bottom / Left in the page unit. Used only for fit and preview. |
@@ -241,7 +255,11 @@ fails, the diagnostics are shown and the code remains copyable.
 | Label below | Editable text, defaulting to the scene name; a trailing cross clears it and empty means no label. |
 | Diagram id | Sanitized to a Typst label such as `fig-er-commerce`; referenced as `@fig-er-commerce`. |
 | Resources folder | Relative image folder; referenced files listed under Reference. |
-| Copy code | Copies the snippet through the button only; selecting text anywhere uses the browser's native Ctrl+C. No global shortcut copies the export. |
+| Export mode | Two mutually exclusive buttons: **Export .typ File** (default) and **View Source Code**. The first shows the download and `#include` instructions; the second shows the manual-paste import, copy action and source block. |
+| Copy code | Source mode: overlays the code block's top-right corner; copies the import-free snippet through the button only. Selecting text anywhere uses the browser's native Ctrl+C. No global shortcut copies the export. |
+| Download .typ | Export mode: saves `<diagram-id>.typ`; the file starts with the versioned CeTZ import so it can be included or compiled directly. |
+| Copy CeTZ import | Source mode: icon-only copy of `#import "@preview/cetz:0.5.3": canvas, draw` for the manual-paste path. |
+| Copy file command | Export mode: icon-only copy of `#include "<diagram-id>.typ"` for pulling the downloaded figure into a host document. |
 | Preview | Collapsible live one-page Typst render. Expanding opens a modal with 25–400% zoom and a 100% reset. |
 
 Settings other than the per-scene diagram id and label are remembered in
@@ -249,12 +267,13 @@ Settings other than the per-scene diagram id and label are remembered in
 
 ## 9. Verification
 
-- `npm run test:cetz` — 150 assertions: all six fixtures, balanced delimiters,
+- `npm run test:cetz` — 161 assertions: all six fixtures, balanced delimiters,
   no import/page/global-text setters in the result, preview host wrapper,
   selection rules (including edge-to-edge tethers), fit-down, no implicit
   upscale, explicit zoom, A4 landscape, per-side and asymmetric margin fitting,
   editable/empty/whitespace label, id sanitizing, resource folder normalization,
-  external image references, literal text escaping.
+  external image references, literal text escaping, and terminal-mark anchoring
+  for all five ER endpoints.
 - Browser (Chrome DevTools): opened the panel on every fixture; all six compiled
   and rendered in 0.5–3 s; verified A4 vertical, A4 horizontal, custom 120 × 210
   mm, typed zoom in the number field, left/center/right alignment, the editable

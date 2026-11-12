@@ -878,13 +878,33 @@ interface MarkDefinition {
   readonly body: readonly string[];
 }
 
+/**
+ * Registered marks are placed at both ends of a connector. CeTZ measures from
+ * the mark's `tip` to its `base` along the *whole* path to choose the mark's
+ * rotation, then shortens the line by that distance. A `base` at the far edge
+ * of a glyph therefore has two side effects that disagree with the canvas:
+ *
+ *   - on a short final stub it walks around the previous corner, so the mark
+ *     is drawn at an angle (for example a crow's foot on a 9 pt stub), and
+ *   - at a path start it points the glyph back into the object instead of out
+ *     along the connector.
+ *
+ * A near-zero `base` keeps the tangent of the terminal segment for orientation
+ * while moving the shortening distance out of the way. The mark body itself
+ * still draws from the entity edge outwards, so both ends match the SVG
+ * renderer. The connector is left unshortened under the glyph: for filled
+ * shapes the fill hides it, and for open shapes the centre prong coincides
+ * with the line.
+ */
+const MARK_BASE = "(l / 1000, 0)";
+
 const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
   "uml-hollow-triangle": {
     body: [
       "let (l, w) = (style.length, style.width)",
       "draw.line((0, 0), (l, -w / 2), (l, w / 2), close: true, fill: white, stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "uml-hollow-diamond": {
@@ -892,7 +912,7 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "let (l, w) = (style.length, style.width)",
       "draw.line((0, 0), (l / 2, w / 2), (l, 0), (l / 2, -w / 2), close: true, fill: white, stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "uml-filled-diamond": {
@@ -900,7 +920,7 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "let (l, w) = (style.length, style.width)",
       "draw.line((0, 0), (l / 2, w / 2), (l, 0), (l / 2, -w / 2), close: true, fill: style.stroke.paint, stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "uml-open-arrow": {
@@ -909,7 +929,7 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "draw.line((0, 0), (l, w / 2), stroke: style.stroke)",
       "draw.line((0, 0), (l, -w / 2), stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (0, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "generic-filled-arrow": {
@@ -917,16 +937,17 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "let (l, w) = (style.length, style.width)",
       "draw.line((0, 0), (l, -w / 2), (l, w / 2), close: true, fill: style.stroke.paint, stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "er-one": {
     body: [
       "let (l, w) = (style.length, style.width)",
-      "draw.line((0, -w / 2), (0, w / 2), stroke: style.stroke)",
+      // The canvas draws one bar, l/3 out from the entity. A second bar at the
+      // entity itself was previously hidden by the node border on every edge.
       "draw.line((l / 3, -w / 2), (l / 3, w / 2), stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (0, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "er-many": {
@@ -936,17 +957,16 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "draw.line((l, 0), (0, 0), stroke: style.stroke)",
       "draw.line((l, 0), (0, -w / 2), stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "er-zero-one": {
     body: [
       "let (l, w) = (style.length, style.width)",
-      "line((0, -w / 2), (0, w / 2), stroke: style.stroke)",
       "draw.circle((l * 5 / 12, 0), radius: w * 0.34, fill: white, stroke: style.stroke)",
-      "line((l * 13 / 12, -w / 2), (l * 13 / 12, w / 2), stroke: style.stroke)",
+      "draw.line((l * 13 / 12, -w / 2), (l * 13 / 12, w / 2), stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l * 0.5, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "er-one-many": {
@@ -955,9 +975,9 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "draw.line((l, 0), (0, w / 2), stroke: style.stroke)",
       "draw.line((l, 0), (0, 0), stroke: style.stroke)",
       "draw.line((l, 0), (0, -w / 2), stroke: style.stroke)",
-      "line((l * 4 / 3, -w / 2), (l * 4 / 3, w / 2), stroke: style.stroke)",
+      "draw.line((l * 4 / 3, -w / 2), (l * 4 / 3, w / 2), stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l * 4 / 3, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
   "er-zero-many": {
@@ -968,7 +988,7 @@ const MARK_DEFINITIONS: Record<string, MarkDefinition> = {
       "draw.line((l, 0), (0, -w / 2), stroke: style.stroke)",
       "draw.circle((l * 4 / 3, 0), radius: w * 0.34, fill: white, stroke: style.stroke)",
       'draw.anchor("tip", (0, 0))',
-      'draw.anchor("base", (l * 4 / 3 + w * 0.34, 0))',
+      `draw.anchor("base", ${MARK_BASE})`,
     ],
   },
 };

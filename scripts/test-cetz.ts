@@ -19,6 +19,7 @@ import {
 } from "../src/export/page.ts";
 import type { SceneDocument } from "../src/model/scene.ts";
 import type { SceneNode } from "../src/model/nodes.ts";
+import { NO_MARKER } from "../src/model/edges.ts";
 
 let passed = 0;
 const failures: string[] = [];
@@ -175,6 +176,51 @@ if (relationshipEdge !== undefined) {
     check(tetherSelection.selection.nodes.length === 3, "tether selection follows its host relationship");
     check(tetherSelection.selection.edges.length === 2, "tether selection includes host and tether");
   }
+
+  // Endpoint glyphs must not measure their rotation around the previous
+  // corner (short final stubs made crow's feet lean) and they must not be
+  // emitted as bare `line(...)` calls inside a mark body.
+  const erMarkerKinds = ["one", "many", "zeroOrOne", "oneOrMany", "zeroOrMany"] as const;
+  for (const kind of erMarkerKinds) {
+    const markerScene: SceneDocument = {
+      ...er.scene,
+      edges: {
+        ...er.scene.edges,
+        [relationshipEdge.id]: {
+          ...relationshipEdge,
+          markers: {
+            source: { family: "er", kind },
+            target: NO_MARKER,
+          },
+        },
+      },
+    };
+    const markerCode = serialize(markerScene).code;
+    check(
+      markerCode.includes('draw.anchor("base", (l / 1000, 0))'),
+      `ER ${kind} marker uses the terminal tangent for orientation`,
+    );
+    check(
+      !/^\s+line\(/m.test(markerCode),
+      `ER ${kind} mark body uses draw.line rather than an unqualified line`,
+    );
+  }
+
+  const oneCode = serialize({
+    ...er.scene,
+    edges: {
+      ...er.scene.edges,
+      [relationshipEdge.id]: {
+        ...relationshipEdge,
+        markers: {
+          source: { family: "er", kind: "one" },
+          target: NO_MARKER,
+        },
+      },
+    },
+  }).code;
+  check(oneCode.includes("draw.line((l / 3, -w / 2)"), "ER one keeps its single visible bar");
+  check(!oneCode.includes("draw.line((0, -w / 2)"), "ER one omits the bar hidden by the node border");
 }
 
 const zoomed = serialize(er.scene, {

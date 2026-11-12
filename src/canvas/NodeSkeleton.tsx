@@ -2,6 +2,7 @@ import type React from "react";
 import type { CommentNodeLayout, NodeLayout, RowBand, SectionBand, ShapeNodeLayout, TableNodeLayout } from "../model/layout.ts";
 import type { ImageAsset, SceneNode } from "../model/nodes.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
+import { asRowId, asSectionId } from "../model/ids.ts";
 import type { CanvasTextTarget } from "../model/text-targets.ts";
 import { rectBottom, rectCenter, rectRight, type Point, type Rect } from "../model/geometry.ts";
 import type { Theme } from "../model/styles.ts";
@@ -12,6 +13,8 @@ interface NodeSkeletonProps {
   readonly theme: Theme;
   readonly selected: boolean;
   readonly skeleton: boolean;
+  readonly hoveredPart?: NodeFocus | null;
+  readonly onHoverPart?: (focus: NodeFocus | null) => void;
   readonly imageAsset?: ImageAsset;
   readonly onPointerDown: (event: React.PointerEvent<SVGGElement>) => void;
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
@@ -98,57 +101,59 @@ const TableBody = ({
         height={layout.frame.height}
         fill={style.fill.color ?? "none"}
       />
-      <rect
-        data-table-header={nodeId}
-        x={layout.frame.x}
-        y={layout.frame.y}
-        width={layout.frame.width}
-        height={layout.header.frame.height}
-        fill={headerBackground === undefined
-          ? style.headerFill.color ?? "none"
-          : headerBackground ?? "none"}
-        onClick={(event) => {
-          event.stopPropagation();
-          onPartClick?.({ kind: "table", nodeId });
-        }}
-      />
-      <text
-        x={layout.header.textFrame.x + layout.header.textFrame.width / 2}
-        y={headerTextY}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        {...textStyle(headerText)}
-        onClick={(event) => {
-          event.stopPropagation();
-          onPartClick?.({ kind: "table", nodeId });
-        }}
-        onDoubleClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onTextDoubleClick?.({ kind: "nodeName" });
-        }}
-      >
-        {headerText.text}
-      </text>
-      {stereotype !== undefined && stereotypeFrame !== undefined ? (
+      <g data-header-hover="true">
+        <rect
+          data-table-header={nodeId}
+          x={layout.frame.x}
+          y={layout.frame.y}
+          width={layout.frame.width}
+          height={layout.header.frame.height}
+          fill={headerBackground === undefined
+            ? style.headerFill.color ?? "none"
+            : headerBackground ?? "none"}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPartClick?.({ kind: "table", nodeId });
+          }}
+        />
         <text
-          x={stereotypeFrame.x + stereotypeFrame.width / 2}
-          y={stereotypeY}
+          x={layout.header.textFrame.x + layout.header.textFrame.width / 2}
+          y={headerTextY}
           textAnchor="middle"
           dominantBaseline="middle"
-          {...textStyle(stereotype)}
+          {...textStyle(headerText)}
           onClick={(event) => {
             event.stopPropagation();
             onPartClick?.({ kind: "table", nodeId });
           }}
           onDoubleClick={(event) => {
-            event.preventDefault(); event.stopPropagation();
-            onTextDoubleClick?.({ kind: "stereotype" });
+            event.preventDefault();
+            event.stopPropagation();
+            onTextDoubleClick?.({ kind: "nodeName" });
           }}
         >
-          {stereotype.text}
+          {headerText.text}
         </text>
-      ) : null}
+        {stereotype !== undefined && stereotypeFrame !== undefined ? (
+          <text
+            x={stereotypeFrame.x + stereotypeFrame.width / 2}
+            y={stereotypeY}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            {...textStyle(stereotype)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPartClick?.({ kind: "table", nodeId });
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault(); event.stopPropagation();
+              onTextDoubleClick?.({ kind: "stereotype" });
+            }}
+          >
+            {stereotype.text}
+          </text>
+        ) : null}
+      </g>
       {layout.sections.map((section) => {
         const background = sectionBackgrounds[section.sectionId];
         return typeof background === "string" ? (
@@ -217,7 +222,7 @@ const SectionBody = ({
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
 }) => (
-  <>
+  <g data-section-hover={section.sectionId}>
     <rect
       data-section-hit={section.sectionId}
       x={section.frame.x}
@@ -291,7 +296,7 @@ const SectionBody = ({
         opacity={0.55}
       />
     ) : null}
-  </>
+  </g>
 );
 
 const RowBody = ({
@@ -311,7 +316,7 @@ const RowBody = ({
 }) => {
   if (skeleton) return null;
   return (
-    <>
+    <g data-row-hover={row.rowId}>
       <rect
         data-row-hit={row.rowId}
         x={row.frame.x}
@@ -381,7 +386,7 @@ const RowBody = ({
           </text>
         </g>
       ))}
-    </>
+    </g>
   );
 };
 
@@ -900,6 +905,8 @@ export const NodeSkeleton = ({
   theme,
   selected,
   skeleton,
+  hoveredPart,
+  onHoverPart,
   imageAsset,
   onPointerDown,
   onTextDoubleClick,
@@ -973,6 +980,66 @@ export const NodeSkeleton = ({
       body = <ShapeBody layout={layout} node={node} theme={theme} skeleton={skeleton} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
   }
 
+  const hoverFrame: Rect | null = (() => {
+    const part = hoveredPart ?? null;
+    if (part === null || part.nodeId !== node.id) return null;
+    if (part.kind === "table") {
+      return layout.kind === "table" || layout.kind === "relationAttribute"
+        ? layout.header.frame
+        : null;
+    }
+    if (part.kind === "section") {
+      return layout.kind === "table" || layout.kind === "relationAttribute"
+        ? layout.sections.find((section) => section.sectionId === part.sectionId)?.frame ?? null
+        : null;
+    }
+    if (part.kind === "row") {
+      return layout.kind === "table" || layout.kind === "relationAttribute"
+        ? layout.sections
+            .flatMap((section) => section.rows)
+            .find((row) => row.rowId === part.rowId)?.frame ?? null
+        : null;
+    }
+    if (part.kind === "lifelineSpine") {
+      return layout.kind === "lifeline" ? layout.headFrame : null;
+    }
+    return layout.kind === "lifeline" ? layout.headFrame : layout.frame;
+  })();
+
+  const handleNodePointerMove = (event: React.PointerEvent<SVGGElement>): void => {
+    if (onHoverPart === undefined) return;
+    const target = event.target as Element;
+    const rowElement = target.closest("[data-row-hover]");
+    if (rowElement !== null) {
+      const rowId = rowElement.getAttribute("data-row-hover");
+      if (rowId !== null && (layout.kind === "table" || layout.kind === "relationAttribute")) {
+        onHoverPart({ kind: "row", nodeId: node.id, rowId: asRowId(rowId) });
+        return;
+      }
+    }
+    const sectionElement = target.closest("[data-section-hover]");
+    if (sectionElement !== null) {
+      const sectionId = sectionElement.getAttribute("data-section-hover");
+      if (sectionId !== null && (layout.kind === "table" || layout.kind === "relationAttribute")) {
+        onHoverPart({ kind: "section", nodeId: node.id, sectionId: asSectionId(sectionId) });
+        return;
+      }
+    }
+    if (target.closest("[data-header-hover]") !== null) {
+      onHoverPart(
+        layout.kind === "table" || layout.kind === "relationAttribute"
+          ? { kind: "table", nodeId: node.id }
+          : { kind: "object", nodeId: node.id },
+      );
+      return;
+    }
+    onHoverPart(
+      layout.kind === "table" || layout.kind === "relationAttribute"
+        ? { kind: "table", nodeId: node.id }
+        : { kind: "object", nodeId: node.id },
+    );
+  };
+
   return (
     <g
       data-node-id={node.id}
@@ -980,6 +1047,8 @@ export const NodeSkeleton = ({
       data-table-kind={node.kind === "table" ? node.tableKind : undefined}
       data-selected={selected ? "true" : undefined}
       onPointerDown={onPointerDown}
+      onPointerMove={handleNodePointerMove}
+      onPointerLeave={() => onHoverPart?.(null)}
       onClick={(event) => {
         event.stopPropagation();
         onPartClick?.(layout.kind === "table" || layout.kind === "relationAttribute"
@@ -1068,6 +1137,16 @@ export const NodeSkeleton = ({
             rx={layout.kind === "table" || layout.kind === "relationAttribute" ? 0 : 3}
           />
         )
+      ) : null}
+      {hoverFrame !== null ? (
+        <rect
+          className="node-hover-outline"
+          x={hoverFrame.x}
+          y={hoverFrame.y}
+          width={hoverFrame.width}
+          height={hoverFrame.height}
+          rx={layout.kind === "state" ? Math.min(12, hoverFrame.height / 4) : 0}
+        />
       ) : null}
       {node.locked ? (
         // Editor-only overlay. The Typst/CeTZ serializer must never draw this
