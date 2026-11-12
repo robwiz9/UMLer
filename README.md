@@ -3,14 +3,6 @@
 A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequence, Communication and State Machine
 — with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
 
-> **Current checkpoint: Step 4 complete — live Typst / CeTZ export.**
-> The repository contains the notation research and scene schema (Step 1), the SVG grid canvas and
-> measurement/snap pipeline (Step 2), the Step 3 editor layer (sparse orthogonal A* routing, layered
-> crossing-reduction layout, table content editing, endpoint marker popovers and label collision
-> avoidance), and the Step 4 exporter: a selectable, fit-aware Typst + CeTZ snippet serializer with a
-> live WASM-rendered preview, copyable source, document presets used only for fitting, typed diagram zoom,
-> alignment, an editable label (scene name by default) and an external image-resources folder.
-
 ![UMLer Step 3 editor](docs/assets/step3-editor.png)
 
 ![UMLer Step 4 Typst / CeTZ export panel](docs/assets/step4-export.png)
@@ -25,15 +17,7 @@ npm run check    # typecheck + scene validation + layout/persistence/GitHub/stor
 npm run build
 ```
 
-GitHub features work in `npm run dev` and `npm run preview`. OAuth uses the device flow, so no
-client secret is stored or shipped; set `GITHUB_OAUTH_CLIENT_ID` (or paste the public client id
-in the dialog once) after enabling **Device flow** on a GitHub OAuth App.
-
-The Vite config uses `--configLoader native`. Vite's bundled config loader spawns a helper process that the
-current Windows sandbox blocks with `spawn EPERM`; the native loader is a supported Vite option and the app
-builds and runs normally.
-
-## Read this first
+GitHub features work in `npm run dev` and `npm run preview`. Optionally, replace the `GITHUB_OAUTH_CLIENT_ID` in `.env.local` with your GitHub App Client ID. **Device flow** Must be enabled when creating the new app.
 
 | Document | What it covers |
 |---|---|
@@ -62,8 +46,42 @@ docs/assets/      CeTZ notation proof + app screenshots
 examples/         generated `.uscn` scene and `.umler` project examples
 cetz.pdf          supplied CeTZ 0.5.3 manual
 ```
+# Features
+## Save project to GitHub
+
+**File → Open from GitHub…** signs in with the OAuth, lets you pick a
+repository, branch and folder, lists existing `.umler` projects for direct selection, can target a new folder
+(created when the project is saved), then loads the project if that file exists. If the file is
+absent, it creates a blank ER project there; if the current project has unsaved changes, it offers
+**Create blank project** or **Upload current project** instead. A bound project shows its repository path
+and sync state in the status bar; **Save to GitHub** / `Ctrl/Cmd+S` writes all scenes and the active scene.
+
+The first time, either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` or use **Set up GitHub OAuth** in the
+dialog to paste the public client id (stored in this browser). Create an OAuth App at
+[github.com/settings/developers](https://github.com/settings/developers), enable **Device flow**, and use any
+callback URL. A personal access token with `repo` scope is available as a fallback; it is kept in memory only.
+
+Every load/save records the file blob SHA. If the remote changed, or was deleted, UMLer does not auto-merge:
+the dialog offers **Replace local with remote**, **Overwrite remote** (or **Recreate remote**) and **Cancel**.
+Remote JSON is validated before it replaces the local project; a bad remote file never reaches the canvas.
+
+The open project, its GitHub path/SHA and the last sync baseline are autosaved locally, so a page refresh
+reopens the same project and repository location instead of the built-in demo. The GitHub token is kept in
+`sessionStorage` (refresh-safe, tab-scoped); signing out removes it.
+
+A bound project also auto-saves to GitHub every 2 minutes when it has changes. The progress toast shows while a
+save is running. If the remote changed, auto-save does not open a modal: it shows a sticky warning toast and does
+nothing else until you click it, at which point the normal **Replace local with remote / Overwrite remote**
+chooser opens.
 
 ## What works now
+> **Current checkpoint: Step 4 complete — live Typst / CeTZ export.**
+> The repository contains the notation research and scene schema (Step 1), the SVG grid canvas and
+> measurement/snap pipeline (Step 2), the Step 3 editor layer (sparse orthogonal A* routing, layered
+> crossing-reduction layout, table content editing, endpoint marker popovers and label collision
+> avoidance), and the Step 4 exporter: a selectable, fit-aware Typst + CeTZ snippet serializer with a
+> live WASM-rendered preview, copyable source, document presets used only for fitting, typed diagram zoom,
+> alignment, an editable label (scene name by default) and an external image-resources folder.
 
 - **Live Typst / CeTZ export panel** toggled by **`</> Code`** in the toolbar. It serializes the committed
   scene/layout into a clean **pasteable snippet** and renders it in-browser through **typst.ts 0.7** (Typst
@@ -248,33 +266,6 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   avoiding the small diagonal V/spike where the route met the curve.
 - Sequence sync/reply arrowheads, sequence-aware fit bounds and correct label layering above nodes.
 - Inspector with frame, row, port, route and fit diagnostics.
-
-## GitHub projects
-
-**File → Open from GitHub…** signs in with the OAuth **device flow** (no client secret), lets you pick a
-repository, branch and folder, lists existing `.umler` projects for direct selection, can target a new folder
-(created when the project is saved), then loads the project if that file exists. If the file is
-absent, it creates a blank ER project there; if the current project has unsaved changes, it offers
-**Create blank project** or **Upload current project** instead. A bound project shows its repository path
-and sync state in the status bar; **Save to GitHub** / `Ctrl/Cmd+S` writes all scenes and the active scene.
-
-The first time, either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` or use **Set up GitHub OAuth** in the
-dialog to paste the public client id (stored in this browser). Create an OAuth App at
-[github.com/settings/developers](https://github.com/settings/developers), enable **Device flow**, and use any
-callback URL. A personal access token with `repo` scope is available as a fallback; it is kept in memory only.
-
-Every load/save records the file blob SHA. If the remote changed, or was deleted, UMLer does not auto-merge:
-the dialog offers **Replace local with remote**, **Overwrite remote** (or **Recreate remote**) and **Cancel**.
-Remote JSON is validated before it replaces the local project; a bad remote file never reaches the canvas.
-
-The open project, its GitHub path/SHA and the last sync baseline are autosaved locally, so a page refresh
-reopens the same project and repository location instead of the built-in demo. The GitHub token is kept in
-`sessionStorage` (refresh-safe, tab-scoped); signing out removes it.
-
-A bound project also auto-saves to GitHub every 2 minutes when it has changes. The progress toast shows while a
-save is running. If the remote changed, auto-save does not open a modal: it shows a sticky warning toast and does
-nothing else until you click it, at which point the normal **Replace local with remote / Overwrite remote**
-chooser opens.
 
 ## Verification
 
