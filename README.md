@@ -3,10 +3,6 @@
 A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequence, Communication and State Machine
 — with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
 
-![UMLer Step 3 editor](docs/assets/step3-editor.png)
-
-![UMLer Step 4 Typst / CeTZ export panel](docs/assets/step4-export.png)
-
 ## Run it
 
 ```bash
@@ -18,6 +14,10 @@ npm run build
 ```
 
 GitHub features work in `npm run dev` and `npm run preview`. Optionally, replace the `GITHUB_OAUTH_CLIENT_ID` in `.env.local` with your GitHub App Client ID. **Device flow** Must be enabled when creating the new app.
+
+![UMLer Step 3 editor](docs/assets/step3-editor.png)
+
+![UMLer Step 4 Typst / CeTZ export panel](docs/assets/step4-export.png)
 
 | Document | What it covers |
 |---|---|
