@@ -14,6 +14,8 @@ interface ToolbarProps {
   readonly onSceneChange: (sceneId: string) => void;
   readonly panelVisible: boolean;
   readonly onTogglePanel: () => void;
+  readonly codePanelVisible: boolean;
+  readonly onToggleCodePanel: () => void;
   readonly onExportScene: () => void;
   readonly onImportScene: () => void;
   readonly onExportProject: () => void;
@@ -52,6 +54,8 @@ export const Toolbar = ({
   onSceneChange,
   panelVisible,
   onTogglePanel,
+  codePanelVisible,
+  onToggleCodePanel,
   onExportScene,
   onImportScene,
   onExportProject,
@@ -154,6 +158,15 @@ export const Toolbar = ({
         title="Toggle layout panel"
       >
         ◧ Panel
+      </button>
+      <button
+        type="button"
+        className={`tool-toggle ${codePanelVisible ? "on" : ""}`}
+        onClick={onToggleCodePanel}
+        title="Toggle the Typst / CeTZ export panel"
+        aria-pressed={codePanelVisible}
+      >
+        {"</> Code"}
       </button>
       <label className="grid-size">
         step

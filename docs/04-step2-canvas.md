@@ -42,8 +42,9 @@ LayoutSnapshot
    └─ Phase 2 input for the Step 4 Typst/CeTZ serializer
 ```
 
-Phase 2 (Typst WASM compilation and final SVG swap) is still deferred to Step 4. The contract is in place:
-the serializer will consume the same `LayoutSnapshot` and reject stale `sceneRevision` results.
+Phase 2 (Typst/CeTZ serialization and WASM-rendered SVG preview) is implemented in Step 4. The serializer
+consumes the same `LayoutSnapshot`; the preview hook discards stale results with a version guard (see
+[06 — Step 4](06-step4-export.md)).
 
 ## 3. Layout / measurement pass
 
@@ -181,7 +182,8 @@ The screenshot at the top of this document is the actual running app at 1440 × 
 - Framed/container-aware auto-layout and sequence lane editing remain deferred.
 - Label dragging/pinning, multiline/wrapped labels and live CeTZ glyph previews remain deferred.
 - Actor ports follow the frame rectangle; silhouette clipping is a UI decision left open.
-- Phase 2 Typst compilation / final SVG swap is Step 4.
+- Phase 2 Typst/CeTZ serialization and live SVG preview were added in Step 4; PDF/SVG file export remains
+  deferred.
 - Undo/redo, persistence and multi-user sync are outside the four requested steps.
 
 ## 8. Run it

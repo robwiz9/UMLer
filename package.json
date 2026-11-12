@@ -1,6 +1,6 @@
 {
   "name": "umler",
-  "version": "0.3.0-step3",
+  "version": "0.4.0-step4",
   "private": true,
   "type": "module",
   "description": "Skeleton-to-CeTZ ER and UML diagram editor",
@@ -16,8 +16,9 @@
     "test:convert": "node --experimental-strip-types --no-warnings scripts/test-convert.ts",
     "test:github": "node --experimental-strip-types --no-warnings scripts/test-github.ts",
     "test:storage": "node --experimental-strip-types --no-warnings scripts/test-storage.ts",
+    "test:cetz": "node --experimental-strip-types --no-warnings scripts/test-cetz.ts",
     "bootstrap:typst": "node scripts/bootstrap-typst-packages.mjs",
-    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:github && npm run test:storage",
+    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:github && npm run test:storage && npm run test:cetz",
     "proof": "typst compile --package-path .typst/packages --format png --ppi 96 docs/assets/notation-proof.typ docs/assets/notation-proof.png"
   },
   "keywords": [
@@ -37,8 +38,10 @@
     "vite": "^8.3.7"
   },
   "dependencies": {
+    "@myriaddreamin/typst-ts-renderer": "0.7.0",
+    "@myriaddreamin/typst-ts-web-compiler": "0.7.0",
+    "@myriaddreamin/typst.ts": "^0.7.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   }
 }
-

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { ER_COMMERCE, STEP1_FIXTURES } from "../fixtures/index.ts";
 import type { Rect } from "../model/geometry.ts";
 import type { DiagramKind, LayoutSpacing, SceneDocument } from "../model/scene.ts";
@@ -99,6 +108,15 @@ import {
   updateRow,
   updateSection,
 } from "../model/edits.ts";
+
+/**
+ * typst.ts and the compiler/renderer wrappers are sizeable and only needed
+ * while the export panel is open, so keep them out of the editor's initial
+ * bundle. The 28 MB WASM is still requested only on first preview compile.
+ */
+const CodePanel = lazy(() =>
+  import("./CodePanel.tsx").then((module) => ({ default: module.CodePanel })),
+);
 
 const cloneSceneAs = (source: SceneDocument, title: string): SceneDocument => {
   const now = new Date().toISOString();
@@ -243,6 +261,7 @@ export const App = () => {
   const [githubBusy, setGithubBusy] = useState<"open" | "save" | null>(null);
   const [githubDecision, setGithubDecision] = useState<GitHubDecision | null>(null);
   const [panelVisible, setPanelVisible] = useState(true);
+  const [codePanelVisible, setCodePanelVisible] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
@@ -350,6 +369,10 @@ export const App = () => {
   const layout = useMemo(
     () => buildLayoutSnapshot(effectiveScene, measurer),
     [effectiveScene, measurer, fontTick],
+  );
+  const exportAssets = useMemo(
+    () => ({ ...scene.assets, ...assetLibrary }),
+    [scene.assets, assetLibrary],
   );
 
   const loadScene = useCallback((sceneId: string) => {
@@ -1619,7 +1642,16 @@ export const App = () => {
       const key = event.key.toLowerCase();
       if (key !== "c" && key !== "x" && key !== "v") return;
       const target = event.target;
+      // Text selected anywhere (including the generated-code block) belongs to
+      // the browser's native clipboard. Never turn Ctrl+C into an object copy
+      // while the user is selecting text.
+      if (key === "c" && (window.getSelection()?.toString().length ?? 0) > 0) return;
       if (target instanceof HTMLElement) {
+        // The export panel is a read/copy surface: object copy, cut and paste
+        // shortcuts must not run while its inputs or code block are focused.
+        if (target.closest(".code-panel") !== null || target.closest(".code-preview-modal") !== null) {
+          return;
+        }
         const tag = target.tagName.toLowerCase();
         const editable =
           tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
@@ -1962,6 +1994,8 @@ export const App = () => {
         onSceneChange={loadScene}
         panelVisible={panelVisible}
         onTogglePanel={() => setPanelVisible((value) => !value)}
+        codePanelVisible={codePanelVisible}
+        onToggleCodePanel={() => setCodePanelVisible((value) => !value)}
         onExportScene={handleExportScene}
         onImportScene={() => requestImport("scene")}
         onExportProject={handleExportProject}
@@ -1988,7 +2022,15 @@ export const App = () => {
         onGridSizeChange={changeGridSize}
       />
 
-      <main className={`workspace ${panelVisible ? "" : "panel-hidden"}`}>
+      <main
+        className={[
+          "workspace",
+          panelVisible ? "" : "panel-hidden",
+          codePanelVisible ? "code-open" : "",
+        ]
+          .filter((item) => item.length > 0)
+          .join(" ")}
+      >
         {panelVisible ? (
           <section className="scene-rail">
             <button
@@ -2087,6 +2129,33 @@ export const App = () => {
           onCommitFrames={commitFrames}
           onViewport={setViewport}
         />
+
+        {codePanelVisible ? (
+          <Suspense
+            fallback={
+              <aside className="code-panel code-panel-loading" aria-label="Loading export panel">
+                <div className="code-panel-head">
+                  <div>
+                    <div className="code-panel-kicker">Step 4 · Export</div>
+                    <h2>Typst / CeTZ</h2>
+                  </div>
+                </div>
+                <div className="code-panel-scroll">
+                  <p className="code-hint">Loading the Typst compiler…</p>
+                </div>
+              </aside>
+            }
+          >
+            <CodePanel
+              scene={scene}
+              layout={layout}
+              selectedNodeIds={selectedNodeIds}
+              selectedEdgeId={selectedEdgeId}
+              assets={exportAssets}
+              onClose={() => setCodePanelVisible(false)}
+            />
+          </Suspense>
+        ) : null}
       </main>
 
       <footer className="statusbar">

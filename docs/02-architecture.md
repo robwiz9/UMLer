@@ -1,8 +1,8 @@
 # 02 — Architecture: skeleton-first editor with CeTZ as the render core
 
 **Status:** architecture note. Step 2 implements the Phase 1 canvas, Step 3 implements A* routing, layered
-auto-layout, endpoint menus and table editing (see [05 — Step 3](05-step3-editor.md)). Phase 2 Typst compilation
-and final preview remain Step 4.
+auto-layout, endpoint menus and table editing (see [05 — Step 3](05-step3-editor.md)), and Step 4 implements
+the Phase 2 Typst/CeTZ serializer and live preview (see [06 — Step 4](06-step4-export.md)).
 
 ## 1. Why two phases
 
@@ -67,7 +67,7 @@ compile keep up with a 120 Hz drag.
 | Semantic scene (`SceneDocument`) | yes | document store / undo stack |
 | Manual frames, waypoints, label offsets, locks | yes | document store |
 | Measured text, row bands, ports, routed points | no | `LayoutSnapshot` |
-| Typst source | no (derived) | serializer (Step 4) |
+| Typst source | no (derived) | serializer (`src/export/cetz.ts`) |
 | Compiled SVG/PDF | no (cache) | compiler worker |
 | Camera/zoom/selection | session (optional autosave) | `EditorSession` |
 

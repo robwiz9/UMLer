@@ -3,13 +3,17 @@
 A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequence, Communication and State Machine
 — with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
 
-> **Current checkpoint: Step 3 complete — editing, routing, auto-layout and GitHub project sync.**
+> **Current checkpoint: Step 4 complete — live Typst / CeTZ export.**
 > The repository contains the notation research and scene schema (Step 1), the SVG grid canvas and
-> measurement/snap pipeline (Step 2), and the Step 3 editor layer: sparse orthogonal A* routing with
-> point-and-double-click reroute, layered crossing-reduction layout with lock constraints, table content
-> editing, edge/endpoint marker popovers, label quick-select and label collision avoidance.
+> measurement/snap pipeline (Step 2), the Step 3 editor layer (sparse orthogonal A* routing, layered
+> crossing-reduction layout, table content editing, endpoint marker popovers and label collision
+> avoidance), and the Step 4 exporter: a selectable, fit-aware Typst + CeTZ snippet serializer with a
+> live WASM-rendered preview, copyable source, document presets used only for fitting, typed diagram zoom,
+> alignment, an editable label (scene name by default) and an external image-resources folder.
 
 ![UMLer Step 3 editor](docs/assets/step3-editor.png)
+
+![UMLer Step 4 Typst / CeTZ export panel](docs/assets/step4-export.png)
 
 ## Run it
 
@@ -17,7 +21,7 @@ A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequenc
 npm install
 cp .env.example .env.local   # optional: add a GitHub OAuth App client id
 npm run dev      # http://127.0.0.1:5173/
-npm run check    # typecheck + scene validation + layout/persistence/GitHub/storage tests
+npm run check    # typecheck + scene validation + layout/persistence/GitHub/storage/CeTZ tests
 npm run build
 ```
 
@@ -39,6 +43,7 @@ builds and runs normally.
 | [03 — Step 1 scene graph](docs/03-step1-scene-graph.md) | TypeScript schema, invariants, fixtures, review decisions |
 | [04 — Step 2 canvas](docs/04-step2-canvas.md) | Camera/grid/measurement/snap pipeline and Step 2 verification |
 | [05 — Step 3 editor](docs/05-step3-editor.md) | A* router, layered auto-layout, endpoint menus, table editor, label rules, verification |
+| [06 — Step 4 export](docs/06-step4-export.md) | Visual conventions vs CeTZ, selection bounds, page fitting, serializer, image resources, live WASM preview |
 
 ## Repository layout
 
@@ -46,11 +51,12 @@ builds and runs normally.
 src/model/        framework-agnostic scene graph + derived layout types + validation + edits + file formats
 src/layout/       text measurer, Phase 1 layout pass, A* router, auto-layout, snap/index helpers
 src/canvas/       SVG grid, node/edge skeleton renderers, endpoint popover, camera and port handles
-src/app/          React shell, theme/text-style panels, history, table and edge editors
+src/export/       selection resolver, page-fit math, Typst/CeTZ serializer and typst.ts preview bridge
+src/app/          React shell, theme/text-style panels, history, table/edge editors and the export panel
 src/res/          bundled Latin Modern Roman and Mono font assets
 src/fixtures/     six example scenes (ER, class, sequence, use case, state, communication)
-scripts/          fixture validator, layout/persistence/GitHub/storage tests, Typst bootstrap
-docs/             research, mapping, architecture, Step 1/2/3 specifications
+scripts/          fixture validator, layout/persistence/GitHub/storage/CeTZ tests, Typst bootstrap
+docs/             research, mapping, architecture, Step 1/2/3/4 specifications
 docs/assets/      CeTZ notation proof + app screenshots
 examples/         generated JSON example for the ER fixture
 cetz.pdf          supplied CeTZ 0.5.3 manual
@@ -58,6 +64,26 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
 
 ## What works now
 
+- **Live Typst / CeTZ export panel** toggled by **`</> Code`** in the toolbar. It serializes the committed
+  scene/layout into a clean **pasteable snippet** and renders it in-browser through **typst.ts 0.7** (Typst
+  0.14.2) with **CeTZ 0.5.2**. The snippet assumes the host project already imports CeTZ's `canvas` and
+  `draw` names (`: canvas, draw` or `: *`); it contains no
+  package import, no `#set page`, no `#set text` and no other global setter. The panel offers A4 vertical /
+  A4 horizontal / custom page sizes (mm or pt) used only for fit calculation, a **single typed number**
+  for document zoom (10–300%), left/center/right alignment, an **editable label** (scene name by default,
+  empty = no label, trailing cross to clear), a sanitized diagram id for `@fig-…` references, a
+  resources-folder field plus a list of referenced images, a whole-diagram vs. selection scope, a Placement
+  size/scale card above the label, a **collapsible** rendered preview with an Expand modal that zooms,
+  compile diagnostics, and a Copy button with a leading icon.
+- **Page fitting never stretches implicitly.** At 100% a small diagram keeps its natural size; it is only
+  reduced (aspect ratio preserved) when it would not fit the page. An explicit zoom above 100% is honoured
+  until the page limit. Selection export keeps absolute object sizes; only the origin moves.
+- **Typst output is safe and readable**: it uses the host's imported `canvas` and `draw` names
+  (`#import "@preview/cetz:0.5.3": canvas, draw` or `: *`), literal `#("…")` text escaping, **body text
+  inheriting the host document font** (only explicit monospace overrides name a family), explicit
+  row/perimeter anchors, registered UML/ER marks, `mark:` on resolved polylines, no editor-only lock
+  badges, no generated-by/size banner, and image nodes emitted as `image("assets/file.ext")` references
+  rather than embedded bytes.
 - Infinite pan/zoom SVG canvas with fit (max 150% for small diagrams); pan on right- or middle-drag.
 - Configurable 9 pt grid (3–72 pt), major lines every 4 cells.
 - Grid snapping and node-to-node alignment guides.
@@ -271,6 +297,8 @@ Conversion checks passed (29 assertions).
 GitHub project checks passed (30 assertions).
 
 Storage checks passed (16 assertions).
+
+CeTZ serializer checks passed (144 assertions).
 ```
 
 Browser verification (Chrome DevTools): clicked table headers, sections, rows and other object text and
@@ -353,8 +381,22 @@ accelerated the two-minute timer, confirmed a remote change produced only the st
 and confirmed clicking the toast opened the conflict chooser; a delayed PUT showed the persistent **Saving to
 GitHub…** progress toast until success. Reload-guard check: edited a project and confirmed the browser
 confirmation blocked the reload on **Cancel** and allowed it on **Reload**.
-Earlier Step 2 checks covered drag/resize, right-drag panning, stereotype centring, uniform table borders and
-sequence fit bounds.
+Step 4 export checks (Chrome DevTools): toggled the `</> Code` panel and confirmed the import-free,
+setter-free snippet, live Typst preview and copyable source; compiled all six fixtures in the browser
+through typst.ts + CeTZ 0.5.2 (0.5–3 s each, no fatal diagnostics); switched A4 vertical → A4 horizontal →
+custom 120 × 210 mm and confirmed the page size changed only the fit/preview, never the snippet; typed 150%
+in the zoom number field and confirmed the fit-down to 97%; toggled left/center/right alignment; replaced the
+default scene-name label with custom text, verified an empty label removed the caption, and restored the
+default; selected one object and confirmed the selection scope and an export without unselected connectors;
+changed the diagram id to `My Scene/1` and confirmed `<fig-my-scene-1>`; set the resources folder to `img/`
+and confirmed the normalized path and Referenced files list; verified the copy button feedback; verified
+the page/alignment/copy leading icons, the trailing label-clear cross, and the size card sitting above the
+label; collapsed the preview (status Paused, no page or further live render), expanded it again (compile
+resumed), opened the expanded modal, zoomed it to 156% and used the 100% reset; and confirmed the
+preview still compiled with a fixture image whose bytes are unavailable (placeholder VFS entry) and that
+body text no longer carries a forced font. Also confirmed Ctrl+C with selected text is left to the browser
+and that clipboard shortcuts do not run while the export panel is focused. Earlier Step 2 checks covered
+drag/resize, right-drag panning, stereotype centring, uniform table borders and sequence fit bounds.
 
 ## Toolchain notes
 
@@ -362,21 +404,26 @@ sequence fit bounds.
 - **React 19.3**, **Vite 8.3**, **TypeScript 5.9.3**.
 - **Typst 0.15.1** installed system-wide.
 - **CeTZ 0.5.3** and **oxifmt 1.0.0** pinned into the workspace-local `.typst/packages` path.
+- **typst.ts 0.7.0** with `typst-ts-web-compiler` and `typst-ts-renderer` 0.7.0; its embedded Typst is
+  **0.14.2**, so the live preview fetches **CeTZ 0.5.2** from `packages.typst.org` at runtime. The
+  exported source still targets **CeTZ 0.5.3**; the drawing calls are shared.
 
 The Typst CLI's package downloader fails in this environment with
 `native_tls connect failed: SEC_E_NO_CREDENTIALS`. The packages were fetched with Node and installed locally;
-`npm run bootstrap:typst` reproduces that setup. The application's future Step 4 compiler should bundle a
-versioned WASM compiler/packages rather than depending on the CLI downloader.
+`npm run bootstrap:typst` reproduces that setup for CLI proof builds. Step 4's browser compiler does not use the
+CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ/oxifmt are fetched from
+`packages.typst.org` (which sends permissive CORS headers) by typst.ts' package registry.
 
-## Not implemented yet (Step 4 and later)
+## Not implemented yet (Step 5 and later)
 
-- Typst/CeTZ serializer, WASM compilation and final SVG/PDF preview swap.
+- PDF / SVG file export and a multi-page document builder that combines several scenes.
 - Recent-file history.
 - Container-aware auto-layout for framed diagrams; sequence lane editing.
 - Label dragging/pinning and multiline label wrapping.
-- CeTZ-renderer glyph previews in terminal menus (the editor menu already uses SVG previews).
+- Typst-aware syntax highlighting in the generated-code block.
 
 ## Next
 
-**Step 4 — CeTZ Render + Export:** serialize the committed scene/layout snapshot to Typst + CeTZ, compile in a
-WASM worker, swap the final SVG preview behind a stale-revision guard, and add PDF/SVG export.
+**Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
+document builder, and an optional image-resources manifest. Keep the serializer as the single source of
+geometry; the preview and any file export must consume the same `CetzExportResult`.

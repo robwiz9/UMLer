@@ -263,22 +263,26 @@ Text measurement is the only place the two renderers can legitimately diverge. T
    node/port/label coordinates with a tolerance of 0.25 pt. Pixel comparison is a later, font-dependent
    layer.
 
-## 9. What Step 4 will emit (not implemented yet)
+## 9. What Step 4 emits
 
-The serializer will walk `SceneDocument` → `LayoutSnapshot` → a `CetzProgram` of statements:
+The implemented serializer walks `SceneDocument` → `LayoutSnapshot` → a pasteable Typst **snippet**, not a
+separate geometry AST and not a standalone document. Selection, page fitting and the y flip are the only
+transformations; all drawing calls come from the same resolved points the SVG skeleton uses.
 
-```ts
-type CetzStatement =
-  | { kind: "register-mark"; name: string; body: string }
-  | { kind: "node"; name: string; body: readonly CetzStatement[] }
-  | { kind: "shape"; call: string; args: string }
-  | { kind: "content"; at: Point; body: string; anchor: "center" }
-  | { kind: "connector"; points: readonly Point[]; style: EdgeStyle; markers: EdgeMarkerSet }
-  | { kind: "tether"; from: Point; to: Point };
-```
+The concrete output is documented in [06 — Step 4 export](06-step4-export.md), including:
 
-The exact AST is intentionally deferred to Step 4. Step 1 only fixes the vocabulary, naming and geometry
-contract so the serializer cannot invent a second source of truth.
+- `#figure(... ) <fig-id>` with an optional, editable label (default: scene name);
+- `draw.group(name: "n_…")` nodes with `row_<n>_west/east` and compass anchors;
+- one `draw.rect` frame plus separator `line`/`content` rows per table;
+- explicit polyline `draw.line(...)` connectors with registered UML/ER `mark` symbols;
+- literal `#("…")` text inside `text(...)`, so row prefixes and brackets never become Typst markup;
+- external `image("<resources>/<file>")` references, never embedded bytes;
+- **no** `#import`, `#set page`, `#set text` or other global setter; the host project imports
+  `canvas`/`draw` from CeTZ and provides the page, and the snippet only uses local `#figure`/`#align`
+  wrappers.
+
+`ortho` remains deliberately unused: orthogonal routing is resolved in TypeScript and emitted as polyline
+points.
 
 ## 10. Validation evidence
 

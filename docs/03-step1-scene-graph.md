@@ -3,7 +3,8 @@
 **Deliverable status:** Step 1 schema accepted into Step 2. The canvas core is documented in
 [04 — Step 2](04-step2-canvas.md) and the Step 3 editor layer in
 [05 — Step 3](05-step3-editor.md); this document remains the schema/invariant record. The A* router and
-layered auto-layout are implemented; the Typst/CeTZ serializer remains Step 4.
+layered auto-layout are implemented; the Typst/CeTZ serializer and live preview are implemented in Step 4
+(see [06 — Step 4](06-step4-export.md)).
 
 ## 1. What is in the repository
 
@@ -248,7 +249,8 @@ The full mapping table and working snippets are in `01-cetz-mapping.md`.
 - ~~Port hit-testing and snap-handle rendering (Step 2).~~ Implemented in Step 2.
 - ~~Entity-table editing UI, endpoint popovers, A* router, Sugiyama layout (Step 3).~~ Implemented in Step 3;
   framed/container-aware layout remains deferred.
-- Typst serializer, WASM worker, PDF/SVG export, diagnostics mapping (Step 4).
+- ~~Typst/CeTZ serializer and live WASM preview (Step 4).~~ Implemented in Step 4; PDF/SVG file export and
+  multi-scene document assembly remain deferred.
 - Multi-user/undo persistence, clipboard, import/export UI (not in the requested four steps).
 
 ## 8. Feedback incorporated

@@ -831,6 +831,7 @@ Browser checks:
 - Framed/container-aware auto-layout and sequence lane editing are deferred.
 - Label dragging/pinning and automatic word wrapping are deferred; current labels are moved by the collision
   pass. Comments support explicit newlines, with per-line truncation and a resizable frame.
-- Terminal menus use SVG marker glyph previews; the CeTZ renderer’s own glyph preview remains Step 4.
+- Terminal menus use SVG marker glyph previews; the CeTZ renderer’s own glyph preview remains deferred.
 - Recent-file history is deferred; image bytes live in the project JSON rather than a binary sidecar.
-- Typst/CeTZ serialization and WASM compilation are Step 4.
+- Typst/CeTZ serialization and live WASM compilation moved to Step 4 (see
+  [06 — Step 4](06-step4-export.md)).
