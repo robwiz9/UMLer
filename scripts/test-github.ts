@@ -17,9 +17,12 @@ import {
   githubFolderOf,
   githubParentFolder,
   githubTargetLabel,
+  isGitHubProjectFile,
+  joinGitHubFolder,
   joinGitHubPath,
   normalizeGitHubFilePath,
   normalizeGitHubFolder,
+  normalizeGitHubFolderName,
   projectDigest,
   projectTitleFromPath,
 } from "../src/model/github-project.ts";
@@ -42,8 +45,8 @@ const assertThrows = (action: () => void, message: string): void => {
 };
 
 assert(
-  normalizeGitHubFilePath(" diagrams\\nested//umler-project.json ") ===
-    "diagrams/nested/umler-project.json",
+  normalizeGitHubFilePath(" diagrams\\nested//umler-project.umler ") ===
+    "diagrams/nested/umler-project.umler",
   "file paths should normalize slashes and surrounding space",
 );
 assert(
@@ -52,16 +55,24 @@ assert(
 );
 assert(normalizeGitHubFolder("") === "", "repository root should stay empty");
 assert(
-  joinGitHubPath("diagrams/nested", "umler-project.json") ===
-    "diagrams/nested/umler-project.json",
+  joinGitHubPath("diagrams/nested", "umler-project.umler") ===
+    "diagrams/nested/umler-project.umler",
   "folder and file should join",
 );
 assert(
-  githubFolderOf("diagrams/nested/umler-project.json") === "diagrams/nested",
+  joinGitHubFolder("diagrams", "nested") === "diagrams/nested",
+  "new folder should join the current folder",
+);
+assert(
+  isGitHubProjectFile("order-model.umler") && !isGitHubProjectFile("order-model.uscn"),
+  "only .umler files should be listed as projects",
+);
+assert(
+  githubFolderOf("diagrams/nested/umler-project.umler") === "diagrams/nested",
   "folder extraction failed",
 );
 assert(
-  githubFileNameOf("diagrams/nested/umler-project.json") === "umler-project.json",
+  githubFileNameOf("diagrams/nested/umler-project.umler") === "umler-project.umler",
   "file extraction failed",
 );
 assert(
@@ -69,7 +80,7 @@ assert(
   "parent folder extraction failed",
 );
 assert(
-  projectTitleFromPath("diagrams/order-model.json") === "order-model",
+  projectTitleFromPath("diagrams/order-model.umler") === "order-model",
   "project title should use the file stem",
 );
 assert(
@@ -77,19 +88,19 @@ assert(
     owner: "acme",
     repo: "diagrams",
     branch: "main",
-    path: "models/order.json",
-  }) === "acme/diagrams · main · models/order.json",
+    path: "models/order.umler",
+  }) === "acme/diagrams · main · models/order.umler",
   "target label should include owner, repo, branch and path",
 );
 
-assertThrows(() => normalizeGitHubFilePath("umler.txt"), "non-JSON file should fail");
+assertThrows(() => normalizeGitHubFilePath("umler.txt"), "non-project extension should fail");
 assertThrows(() => normalizeGitHubFilePath(""), "empty file should fail");
 assertThrows(
-  () => normalizeGitHubFilePath("../umler-project.json"),
+  () => normalizeGitHubFilePath("../umler-project.umler"),
   "parent traversal should fail",
 );
 assertThrows(
-  () => normalizeGitHubFilePath("diagrams/./umler-project.json"),
+  () => normalizeGitHubFilePath("diagrams/./umler-project.umler"),
   "current-directory segment should fail",
 );
 assertThrows(
@@ -97,8 +108,12 @@ assertThrows(
   "folder traversal should fail",
 );
 assertThrows(
-  () => joinGitHubPath("diagrams", "nested/umler-project.json"),
+  () => joinGitHubPath("diagrams", "nested/umler-project.umler"),
   "file names should not contain folders",
+);
+assertThrows(
+  () => normalizeGitHubFolderName("nested/sub"),
+  "a single folder name should not contain slashes",
 );
 
 const scenes = STEP1_FIXTURES.map((fixture) => fixture.scene);
@@ -198,3 +213,4 @@ assert(
 );
 
 console.log(`GitHub project checks passed (${checked} assertions).`);
+

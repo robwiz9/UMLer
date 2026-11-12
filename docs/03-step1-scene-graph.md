@@ -151,7 +151,7 @@ line** (`family: "none"`) are available without UML/ER semantics.
 ## 4. Example: ER commerce fixture
 
 `src/fixtures/index.ts` contains `ER_COMMERCE`; its serialized document is
-[`examples/er-commerce.scene.json`](../examples/er-commerce.scene.json).
+[`examples/er-commerce.uscn`](../examples/er-commerce.uscn).
 
 ```ts
 edge(

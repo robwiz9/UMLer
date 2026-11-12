@@ -9,7 +9,8 @@
 import type { ImageAsset } from "./nodes.ts";
 import type { SceneDocument } from "./scene.ts";
 
-export const DEFAULT_GITHUB_PROJECT_FILE = "umler-project.json";
+export const DEFAULT_GITHUB_PROJECT_FILE = "umler-project.umler";
+export const GITHUB_PROJECT_EXTENSION = ".umler";
 
 export interface GitHubTarget {
   readonly owner: string;
@@ -110,17 +111,39 @@ const splitPath = (raw: string, label: string): string[] => {
 export const normalizeGitHubFolder = (raw: string): string =>
   splitPath(raw, "Folder").join("/");
 
+export const normalizeGitHubFolderName = (raw: string): string => {
+  const normalized = normalizeGitHubFolder(raw);
+  if (normalized.length === 0) {
+    throw new Error("Enter a folder name.");
+  }
+  if (normalized.includes("/")) {
+    throw new Error("A folder name cannot contain other folders.");
+  }
+  return normalized;
+};
+
+export const joinGitHubFolder = (folder: string, name: string): string => {
+  const normalizedFolder = normalizeGitHubFolder(folder);
+  const folderName = normalizeGitHubFolderName(name);
+  return normalizedFolder.length === 0
+    ? folderName
+    : `${normalizedFolder}/${folderName}`;
+};
+
 export const normalizeGitHubFilePath = (raw: string): string => {
   const segments = splitPath(raw, "Project path");
   const fileName = segments[segments.length - 1];
   if (fileName === undefined) {
     throw new Error("Choose a project file name.");
   }
-  if (!fileName.toLowerCase().endsWith(".json")) {
-    throw new Error("The project file must end with .json.");
+  if (!fileName.toLowerCase().endsWith(GITHUB_PROJECT_EXTENSION)) {
+    throw new Error(`The project file must end with ${GITHUB_PROJECT_EXTENSION}.`);
   }
   return segments.join("/");
 };
+
+export const isGitHubProjectFile = (fileName: string): boolean =>
+  fileName.toLowerCase().endsWith(GITHUB_PROJECT_EXTENSION);
 
 export const joinGitHubPath = (folder: string, fileName: string): string => {
   const normalizedFolder = normalizeGitHubFolder(folder);
@@ -150,7 +173,7 @@ export const githubParentFolder = (folder: string): string => {
 /** A readable scene title for a project created at `path`. */
 export const projectTitleFromPath = (path: string): string => {
   const fileName = githubFileNameOf(path);
-  const stem = fileName.replace(/\.json$/i, "").trim();
+  const stem = fileName.replace(/\.umler$/i, "").trim();
   return stem.length > 0 ? stem : "Untitled project";
 };
 

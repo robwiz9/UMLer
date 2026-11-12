@@ -455,7 +455,7 @@ export const listBranches = async (
     .map((branch) => ({ name: branch.name }));
 };
 
-export const listDirectories = async (
+export const listDirectoryContents = async (
   token: string,
   target: GitHubTarget,
 ): Promise<GitHubDirectoryEntry[]> => {
@@ -495,8 +495,10 @@ export const listDirectories = async (
   return data
     .map(readDirectoryEntry)
     .filter((entry): entry is GitHubDirectoryEntry => entry !== null)
-    .filter((entry) => entry.type === "dir")
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) => {
+      if (left.type !== right.type) return left.type === "dir" ? -1 : 1;
+      return left.name.localeCompare(right.name);
+    });
 };
 
 export const getProjectFile = async (

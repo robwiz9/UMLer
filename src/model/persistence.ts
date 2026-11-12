@@ -275,7 +275,7 @@ export const serializeProjectFile = (
 
 /**
  * Accepts a scene envelope or a bare `SceneDocument`. The latter keeps the
- * existing `examples/*.json` scene documents importable.
+ * existing `examples/*.uscn` scene documents importable.
  */
 export const deserializeSceneFile = (text: string): SceneDocument => {
   const root = requireRecord(parseJson(text), "File");
@@ -335,6 +335,6 @@ const fileStem = (value: string): string => {
 };
 
 export const sceneFileName = (title: string): string =>
-  `${fileStem(title)}.scene.json`;
+  `${fileStem(title)}.uscn`;
 
-export const projectFileName = (): string => "umler-project.json";
+export const projectFileName = (): string => "umler-project.umler";

@@ -2243,7 +2243,7 @@ export const App = () => {
         name="scene-file-input"
         className="file-input"
         type="file"
-        accept=".json,application/json"
+        accept=".umler,.uscn,.json,application/json"
         tabIndex={-1}
         aria-hidden="true"
         onChange={(event) => {

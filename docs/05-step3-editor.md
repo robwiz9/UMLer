@@ -34,12 +34,14 @@ column and the canvas refits to the larger area.
 
 The **File** menu’s scene/project file actions are:
 
-- **Export scene…** downloads the active scene as `<scene title>.scene.json`. The wrapped document contains a
+- **Export scene…** downloads the active scene as `<scene title>.uscn`. The wrapped document contains a
   format marker, version, export timestamp and one `SceneDocument`.
-- **Import scene…** validates the chosen JSON and adds it as a new scene, so it never overwrites the current
+- **Import scene…** validates the chosen document and adds it as a new scene, so it never overwrites the current
   project. A new scene id is allocated and a duplicate title gets the same ` (2)`, ` (3)`, … suffix as
   duplication. The imported scene becomes active.
-- **Export project…** downloads `umler-project.json` with every scene and the active scene id.
+- **Export project…** downloads `umler-project.umler` with every scene and the active scene id.
+- **Open from GitHub…** browses repository folders, lists existing `.umler` projects for direct selection,
+  and can target a new folder. The folder is created implicitly when the `.umler` project file is saved.
 - **Import project…** validates all scenes, asks for confirmation, replaces the in-session project with the
   file’s scenes and restores its active scene. It is a project open, not a merge.
 - **Purge unused images** removes uploaded image assets that no image node references from the browser library;
@@ -52,7 +54,7 @@ duplicate project scene ids are rejected. Project imports reset the undo history
 
 Image bytes are part of the project document. Project JSON keeps a top-level `assets` map with each image’s data
 URL exactly once; scene copies carry only the asset metadata and image nodes reference the asset id. A standalone
-`.scene.json` still embeds its assets so the scene remains self-contained.
+`.uscn` still embeds its assets so the scene remains self-contained.
 
 ### GitHub projects
 
@@ -801,7 +803,7 @@ Browser checks:
   import broken JSON and confirm the error toast;
 - use **File → New project…**; confirm it replaces all open scenes with one new scene,
   clears the GitHub path, and warns before discarding the project;
-- with mocked GitHub REST responses, create `models/umler-project.json`, edit the grid, save, reload, and confirm
+- with mocked GitHub REST responses, create `models/umler-project.umler`, edit the grid, save, reload, and confirm
   the project and repository path return instead of the demo; reopen the path and confirm a non-empty ER project
   loads with its nodes; exercise both **Replace local with remote** and **Overwrite remote** on load/save
   conflicts and **Recreate remote** after a deletion;

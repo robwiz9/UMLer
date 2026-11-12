@@ -59,7 +59,7 @@ scripts/          fixture validator, layout/persistence/GitHub/storage/CeTZ test
 public/landing/   plain HTML/CSS project landing page linked to the GitHub repository
 docs/             research, mapping, architecture, Step 1/2/3/4 specifications
 docs/assets/      CeTZ notation proof + app screenshots
-examples/         generated JSON example for the ER fixture
+examples/         generated `.uscn` scene and `.umler` project examples
 cetz.pdf          supplied CeTZ 0.5.3 manual
 ```
 
@@ -170,7 +170,7 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   editing inside text fields.
 - **File / Scene menus** in the top bar. File can start a **New project**,
   open from GitHub, save to GitHub (`Ctrl/Cmd+S`), purge unused image uploads, export/import a single scene
-  (`.scene.json`) or the whole project (`umler-project.json`, all scenes plus the active scene); imports are
+  (`.uscn`) or the whole project (`umler-project.umler`, all scenes plus the active scene); imports are
   validated, scene imports get a
   fresh id and unique title, and a project import asks for confirmation before replacing the in-session scenes.
   Scene can create a scene with
@@ -252,7 +252,8 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
 ## GitHub projects
 
 **File → Open from GitHub…** signs in with the OAuth **device flow** (no client secret), lets you pick a
-repository, branch, folder and project file, then loads the project if that file exists. If the file is
+repository, branch and folder, lists existing `.umler` projects for direct selection, can target a new folder
+(created when the project is saved), then loads the project if that file exists. If the file is
 absent, it creates a blank ER project there; if the current project has unsaved changes, it offers
 **Create blank project** or **Upload current project** instead. A bound project shows its repository path
 and sync state in the status bar; **Save to GitHub** / `Ctrl/Cmd+S` writes all scenes and the active scene.
@@ -375,7 +376,7 @@ relation attribute, the Tight/Normal/Wide layout-spacing presets, and relation-a
 tables on opposite sides of their parent relationship without crossing tethers. TB layout now also flips
 rectangular endpoints to south/north and re-anchors tether sources, matching the clean LR result.
 GitHub checks: opened the picker with mocked account/repo/branch/directory responses, created a new
-`models/umler-project.json`, marked the grid edit dirty, recreated a deleted remote, exercised
+`models/umler-project.umler`, marked the grid edit dirty, recreated a deleted remote, exercised
 **Replace local with remote** and **Overwrite remote** for both load and save conflicts, and confirmed the
 status-bar sync dot/path. Live OAuth requires a real OAuth App client id; the device-flow proxy and error
 surface were verified with an invalid client id. Refresh checks: edited the grid, reloaded and confirmed the

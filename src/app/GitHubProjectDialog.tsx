@@ -5,6 +5,8 @@ import {
   githubFileNameOf,
   githubFolderOf,
   githubParentFolder,
+  isGitHubProjectFile,
+  joinGitHubFolder,
   joinGitHubPath,
 } from "../model/github-project.ts";
 import { deserializeProjectFile } from "../model/persistence.ts";
@@ -12,7 +14,7 @@ import {
   describeGitHubError,
   getProjectFile,
   listBranches,
-  listDirectories,
+  listDirectoryContents,
   listRepositories,
   loadGitHubOAuthConfig,
   loadSessionFromToken,
@@ -101,6 +103,8 @@ export const GitHubProjectDialog = ({
   const [directories, setDirectories] = useState<GitHubDirectoryEntry[]>([]);
   const [loadingDirectories, setLoadingDirectories] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [folderError, setFolderError] = useState<string | null>(null);
 
   const [fileStatus, setFileStatus] = useState<FileStatus>({ kind: "idle" });
   const [openBusy, setOpenBusy] = useState(false);
@@ -244,7 +248,7 @@ export const GitHubProjectDialog = ({
     let cancelled = false;
     setLoadingDirectories(true);
     setDirectoryError(null);
-    void listDirectories(session.token, {
+    void listDirectoryContents(session.token, {
       owner: selectedRepo.owner,
       repo: selectedRepo.name,
       branch,
@@ -428,14 +432,31 @@ export const GitHubProjectDialog = ({
     setBranches([]);
     setFolder("");
     setFileName(DEFAULT_GITHUB_PROJECT_FILE);
+    setNewFolderName("");
+    setFolderError(null);
     setOpenError(null);
   }, [repos]);
 
   const chooseBranch = useCallback((name: string) => {
     setBranch(name);
     setFolder("");
+    setNewFolderName("");
+    setFolderError(null);
     setOpenError(null);
   }, []);
+
+  const useNewFolder = useCallback(() => {
+    setFolderError(null);
+    try {
+      if (newFolderName.trim().length === 0) return;
+      setFolder(joinGitHubFolder(folder, newFolderName));
+      setNewFolderName("");
+    } catch (error) {
+      setFolderError(
+        error instanceof Error ? error.message : "The folder could not be used.",
+      );
+    }
+  }, [folder, newFolderName]);
 
   const openProject = useCallback(async () => {
     if (currentTarget === null) return;
@@ -463,6 +484,17 @@ export const GitHubProjectDialog = ({
 
   const segments = breadcrumbSegments(folder);
   const atRoot = segments.length === 0;
+  const subfolders = useMemo(
+    () => directories.filter((entry) => entry.type === "dir"),
+    [directories],
+  );
+  const projectFiles = useMemo(
+    () =>
+      directories.filter(
+        (entry) => entry.type === "file" && isGitHubProjectFile(entry.name),
+      ),
+    [directories],
+  );
   const canOpen =
     currentTarget !== null &&
     pathError === null &&
@@ -768,7 +800,7 @@ export const GitHubProjectDialog = ({
 
             <div className="gh-dir-list">
               {loadingDirectories ? (
-                <span className="gh-note">Loading folders…</span>
+                <span className="gh-note">Loading contents…</span>
               ) : directoryError !== null ? (
                 <p className="gh-error">{directoryError}</p>
               ) : (
@@ -783,7 +815,7 @@ export const GitHubProjectDialog = ({
                       <span>Parent folder</span>
                     </button>
                   ) : null}
-                  {directories.map((entry) => (
+                  {subfolders.map((entry) => (
                     <button
                       type="button"
                       className="gh-dir"
@@ -794,12 +826,51 @@ export const GitHubProjectDialog = ({
                       <span>{entry.name}</span>
                     </button>
                   ))}
-                  {directories.length === 0 && atRoot ? (
-                    <span className="gh-note">No subfolders.</span>
+                  {projectFiles.map((entry) => (
+                    <button
+                      type="button"
+                      className={`gh-dir gh-project-file ${fileName === entry.name ? "on" : ""}`}
+                      key={entry.path}
+                      onClick={() => {
+                        setFileName(entry.name);
+                        setOpenError(null);
+                      }}
+                    >
+                      <span className="gh-dir-icon">▪</span>
+                      <span>{entry.name}</span>
+                    </button>
+                  ))}
+                  {subfolders.length === 0 && projectFiles.length === 0 ? (
+                    <span className="gh-note">No folders or .umler projects here.</span>
                   ) : null}
                 </>
               )}
             </div>
+
+            <div className="gh-new-folder">
+              <input
+                id="gh-new-folder"
+                name="gh-new-folder"
+                value={newFolderName}
+                onChange={(event) => {
+                  setNewFolderName(event.target.value);
+                  setFolderError(null);
+                }}
+                placeholder="New folder name"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={useNewFolder}
+                disabled={newFolderName.trim().length === 0}
+              >
+                New folder
+              </button>
+            </div>
+            <span className="gh-note">
+              The folder is created when the project file is saved.
+            </span>
+            {folderError !== null ? <p className="gh-error">{folderError}</p> : null}
 
             <label className="field-label">
               Project file
