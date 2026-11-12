@@ -13,6 +13,7 @@ import { serializeSceneToCetz } from "../src/export/cetz.ts";
 import {
   DEFAULT_EXPORT_SETTINGS,
   pageSize,
+  ZERO_MARGINS,
   type ExportSettings,
   type PageSpec,
 } from "../src/export/page.ts";
@@ -188,6 +189,7 @@ const bigPage: PageSpec = {
   customWidth: 2000,
   customHeight: 2000,
   unit: "mm",
+  margins: ZERO_MARGINS,
 };
 const huge = serialize(er.scene, { settings: { page: bigPage } });
 check(huge.fit.scale === 1, "a huge page does not stretch the diagram");
@@ -198,12 +200,49 @@ const tinyPage: PageSpec = {
   customWidth: 80,
   customHeight: 80,
   unit: "mm",
+  margins: ZERO_MARGINS,
 };
 const tiny = serialize(er.scene, { settings: { page: tinyPage } });
 check(tiny.fit.fitReduced, "tiny page forces a fit-down");
 check(tiny.fit.scale < 1, "tiny page scale is below one");
 check(tiny.fit.scale * tiny.selection.naturalWidth <= tiny.page.widthPt + 0.01, "fit respects page width");
 check(tiny.fit.scale * tiny.selection.naturalHeight <= tiny.fit.availableHeightPt + 0.01, "fit respects page height");
+
+const marginPage: PageSpec = {
+  ...DEFAULT_EXPORT_SETTINGS.page,
+  margins: { top: 20, right: 20, bottom: 20, left: 20 },
+};
+const withMargins = serialize(er.scene, { settings: { page: marginPage } });
+check(withMargins.fit.scale < 0.9, "uniform page margins reduce the scale");
+check(
+  withMargins.fit.scale * withMargins.selection.naturalWidth <=
+    withMargins.fit.availableWidthPt + 0.01,
+  "margin-aware fit respects available width",
+);
+check(
+  withMargins.fit.scale * withMargins.selection.naturalHeight <=
+    withMargins.fit.availableHeightPt + 0.01,
+  "margin-aware fit respects available height",
+);
+check(
+  withMargins.previewCode.includes("margin: (top: 56.693pt, right: 56.693pt, bottom: 56.693pt, left: 56.693pt)"),
+  "preview host page mirrors page margins",
+);
+
+const asymmetricPage: PageSpec = {
+  ...DEFAULT_EXPORT_SETTINGS.page,
+  margins: { top: 10, right: 50, bottom: 15, left: 5 },
+};
+const asymmetric = serialize(er.scene, { settings: { page: asymmetricPage } });
+check(
+  asymmetric.fit.availableWidthPt < withMargins.fit.availableWidthPt,
+  "asymmetric margins reduce available width per side",
+);
+check(
+  asymmetric.fit.scale * asymmetric.selection.naturalWidth <=
+    asymmetric.fit.availableWidthPt + 0.01,
+  "asymmetric margin fit respects the content box",
+);
 
 // ---------------------------------------------------------------------------
 // Page options and alignment.

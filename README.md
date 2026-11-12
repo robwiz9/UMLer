@@ -69,12 +69,13 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
   0.14.2) with **CeTZ 0.5.2**. The snippet assumes the host project already imports CeTZ's `canvas` and
   `draw` names (`: canvas, draw` or `: *`); it contains no
   package import, no `#set page`, no `#set text` and no other global setter. The panel offers A4 vertical /
-  A4 horizontal / custom page sizes (mm or pt) used only for fit calculation, a **single typed number**
-  for document zoom (10–300%), left/center/right alignment, an **editable label** (scene name by default,
-  empty = no label, trailing cross to clear), a sanitized diagram id for `@fig-…` references, a
-  resources-folder field plus a list of referenced images, a whole-diagram vs. selection scope, a Placement
-  size/scale card above the label, a **collapsible** rendered preview with an Expand modal that zooms,
-  compile diagnostics, and a Copy button with a leading icon.
+  A4 horizontal / custom page sizes (mm or pt) used only for fit calculation, **per-side page margins**
+  (top/right/bottom/left) so the fit respects the host content box, a **single typed number** for document
+  zoom (10–300%), left/center/right alignment, an **editable label** (scene name by default, empty = no
+  label, trailing cross to clear), a sanitized diagram id for `@fig-…` references, a resources-folder field
+  plus a list of referenced images, a whole-diagram vs. selection scope, a Placement size/scale card above
+  the label, a **collapsible** rendered preview with an Expand modal that zooms, compile diagnostics, and a
+  Copy button with a leading icon.
 - **Page fitting never stretches implicitly.** At 100% a small diagram keeps its natural size; it is only
   reduced (aspect ratio preserved) when it would not fit the page. An explicit zoom above 100% is honoured
   until the page limit. Selection export keeps absolute object sizes; only the origin moves.
@@ -298,7 +299,7 @@ GitHub project checks passed (30 assertions).
 
 Storage checks passed (16 assertions).
 
-CeTZ serializer checks passed (144 assertions).
+CeTZ serializer checks passed (150 assertions).
 ```
 
 Browser verification (Chrome DevTools): clicked table headers, sections, rows and other object text and
@@ -384,8 +385,10 @@ confirmation blocked the reload on **Cancel** and allowed it on **Reload**.
 Step 4 export checks (Chrome DevTools): toggled the `</> Code` panel and confirmed the import-free,
 setter-free snippet, live Typst preview and copyable source; compiled all six fixtures in the browser
 through typst.ts + CeTZ 0.5.2 (0.5–3 s each, no fatal diagnostics); switched A4 vertical → A4 horizontal →
-custom 120 × 210 mm and confirmed the page size changed only the fit/preview, never the snippet; typed 150%
-in the zoom number field and confirmed the fit-down to 97%; toggled left/center/right alignment; replaced the
+custom 120 × 210 mm and confirmed the page size changed only the fit/preview, never the snippet; set 20 mm
+margins on all four sides and confirmed the A4 scale dropped from 97% to 79% and the preview stayed inside
+the content box; typed 150% in the zoom number field and confirmed the fit-down; toggled left/center/right
+alignment; replaced the
 default scene-name label with custom text, verified an empty label removed the caption, and restored the
 default; selected one object and confirmed the selection scope and an export without unselected connectors;
 changed the diagram id to `My Scene/1` and confirmed `<fig-my-scene-1>`; set the resources folder to `img/`
@@ -395,8 +398,11 @@ label; collapsed the preview (status Paused, no page or further live render), ex
 resumed), opened the expanded modal, zoomed it to 156% and used the 100% reset; and confirmed the
 preview still compiled with a fixture image whose bytes are unavailable (placeholder VFS entry) and that
 body text no longer carries a forced font. Also confirmed Ctrl+C with selected text is left to the browser
-and that clipboard shortcuts do not run while the export panel is focused. Earlier Step 2 checks covered
-drag/resize, right-drag panning, stereotype centring, uniform table borders and sequence fit bounds.
+and that clipboard shortcuts do not run while the export panel is focused. Typst Playground
+(`https://typst.app/play/`, Typst 0.15 + CeTZ 0.5.3) compiled the snippet with a real A4 page and 20 mm
+margins; the 79% output fit the content box, and a 100 × 60 mm page produced a 46% output that also fit.
+Earlier Step 2 checks covered drag/resize, right-drag panning, stereotype centring, uniform table borders
+and sequence fit bounds.
 
 ## Toolchain notes
 
