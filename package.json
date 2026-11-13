@@ -17,8 +17,9 @@
     "test:github": "node --experimental-strip-types --no-warnings scripts/test-github.ts",
     "test:storage": "node --experimental-strip-types --no-warnings scripts/test-storage.ts",
     "test:cetz": "node --experimental-strip-types --no-warnings scripts/test-cetz.ts",
+    "test:oauth": "node scripts/test-oauth-proxy.mjs",
     "bootstrap:typst": "node scripts/bootstrap-typst-packages.mjs",
-    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:github && npm run test:storage && npm run test:cetz",
+    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:github && npm run test:storage && npm run test:cetz && npm run test:oauth",
     "proof": "typst compile --package-path .typst/packages --format png --ppi 96 docs/assets/notation-proof.typ docs/assets/notation-proof.png"
   },
   "keywords": [

@@ -4,7 +4,9 @@ import { defineConfig, loadEnv } from "vite";
 /**
  * GitHub's OAuth endpoints do not send browser CORS headers. The device flow
  * needs no client secret, so a tiny same-origin relay is enough for the local
- * dev and preview servers. The REST API is called directly from the browser.
+ * dev and preview servers. The same `/api/github/oauth/*` routes are implemented
+ * as Vercel Functions for production; the REST API is called directly from the
+ * browser.
  */
 const githubOAuthPlugin = (clientId) => {
   const readBody = (request) =>
@@ -34,12 +36,12 @@ const githubOAuthPlugin = (clientId) => {
   const install = (middlewares) => {
     middlewares.use((request, response, next) => {
       const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-      if (!pathname.startsWith("/github/oauth/")) {
+      if (!pathname.startsWith("/api/github/oauth/")) {
         next();
         return;
       }
 
-      if (pathname === "/github/oauth/config") {
+      if (pathname === "/api/github/oauth/config") {
         sendJson(response, 200, {
           clientId,
           proxy: true,
@@ -48,9 +50,9 @@ const githubOAuthPlugin = (clientId) => {
       }
 
       const upstream =
-        pathname === "/github/oauth/device-code"
+        pathname === "/api/github/oauth/device-code"
           ? "https://github.com/login/device/code"
-          : pathname === "/github/oauth/access-token"
+          : pathname === "/api/github/oauth/access-token"
             ? "https://github.com/login/oauth/access_token"
             : null;
 

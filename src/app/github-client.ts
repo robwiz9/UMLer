@@ -2,15 +2,16 @@
  * Minimal GitHub REST client for project files.
  *
  * OAuth uses the device flow, which needs no client secret. GitHub does not
- * send CORS headers on its OAuth endpoints, so the Vite config exposes a tiny
- * same-origin proxy under `/github/oauth`. The REST API itself is called
- * directly (api.github.com allows browser CORS).
+ * send CORS headers on its OAuth endpoints, so the app calls a tiny same-origin
+ * proxy under `/api/github/oauth`: Vite middleware in local dev/preview, and
+ * Vercel Functions in production. The REST API itself is called directly
+ * (api.github.com allows browser CORS).
  */
 
 import type { GitHubTarget } from "../model/github-project.ts";
 
 const API_ROOT = "https://api.github.com";
-const OAUTH_ROOT = "/github/oauth";
+const OAUTH_ROOT = "/api/github/oauth";
 const API_VERSION = "2022-11-28";
 
 export interface GitHubUser {
@@ -293,7 +294,7 @@ const oauthPost = async (
       );
     }
     throw new GitHubOAuthError(
-      "The local GitHub sign-in service is unavailable. Start UMLer with `npm run dev` and try again.",
+      "The GitHub sign-in service is unavailable. Check the deployment's OAuth configuration and try again.",
       "proxy_unavailable",
     );
   }
@@ -359,7 +360,7 @@ export const startDeviceAuthorization = async (
 ): Promise<GitHubDeviceAuthorization> => {
   if (config.clientId.length === 0) {
     throw new GitHubOAuthError(
-      "GitHub OAuth is not configured. Set GITHUB_OAUTH_CLIENT_ID and restart the dev server.",
+      "GitHub OAuth is not configured for this deployment. Set GITHUB_OAUTH_CLIENT_ID and redeploy.",
       "not_configured",
     );
   }

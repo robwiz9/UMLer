@@ -9,11 +9,27 @@ A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequenc
 npm install
 cp .env.example .env.local   # optional: add a GitHub OAuth App client id
 npm run dev      # editor: http://127.0.0.1:5173/ · landing: /landing/
-npm run check    # typecheck + scene validation + layout/persistence/GitHub/storage/CeTZ tests
+npm run check    # typecheck + scene validation + layout/persistence/GitHub/storage/CeTZ/OAuth tests
 npm run build
 ```
 
-GitHub features work in `npm run dev` and `npm run preview`. Optionally, replace the `GITHUB_OAUTH_CLIENT_ID` in `.env.local` with your GitHub App Client ID. **Device flow** Must be enabled when creating the new app.
+GitHub features work in `npm run dev`, `npm run preview`, and on Vercel. Locally, put the public OAuth App
+client id in `.env.local`; **Device flow** must be enabled on the app. The browser never receives a client
+secret.
+
+### Deploy to Vercel
+
+`.env.local` is gitignored and is **not** uploaded by Vercel. Add the public client id in
+**Project → Settings → Environment Variables**:
+
+```text
+GITHUB_OAUTH_CLIENT_ID=Ov23li…
+```
+
+Apply it to Production (and Preview if desired), then redeploy. The same-origin device-flow relay lives in
+[`api/github/oauth`](api/github/oauth) as Vercel Functions; it replaces the Vite dev proxy used locally.
+No `GITHUB_OAUTH_CLIENT_SECRET` is needed. If the environment variable is missing, the dialog still offers
+the manual client-id setup and personal-access-token fallback.
 
 ![UMLer Step 3 editor](docs/assets/step3-editor.png)
 
@@ -39,7 +55,8 @@ src/export/       selection resolver, page-fit math, Typst/CeTZ serializer and t
 src/app/          React shell, theme/text-style panels, history, table/edge editors and the export panel
 src/res/          bundled Latin Modern Roman and Mono font assets
 src/fixtures/     six example scenes (ER, class, sequence, use case, state, communication)
-scripts/          fixture validator, layout/persistence/GitHub/storage/CeTZ tests, Typst bootstrap
+api/              Vercel Functions for the same-origin GitHub OAuth device-flow relay
+scripts/          fixture validator, layout/persistence/GitHub/storage/CeTZ/OAuth tests, Typst bootstrap
 public/landing/   plain HTML/CSS project landing page linked to the GitHub repository
 docs/             research, mapping, architecture, Step 1/2/3/4 specifications
 docs/assets/      CeTZ notation proof + app screenshots
@@ -56,8 +73,9 @@ absent, it creates a blank ER project there; if the current project has unsaved 
 **Create blank project** or **Upload current project** instead. A bound project shows its repository path
 and sync state in the status bar; **Save to GitHub** / `Ctrl/Cmd+S` writes all scenes and the active scene.
 
-The first time, either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` or use **Set up GitHub OAuth** in the
-dialog to paste the public client id (stored in this browser). Create an OAuth App at
+The first time, either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` (or in the Vercel project environment)
+or use **Set up GitHub OAuth** in the dialog to paste the public client id (stored in this browser). Create
+an OAuth App at
 [github.com/settings/developers](https://github.com/settings/developers), enable **Device flow**, and use any
 callback URL. A personal access token with `repo` scope is available as a fallback; it is kept in memory only.
 
@@ -290,11 +308,13 @@ Clipboard checks passed (26 assertions).
 
 Conversion checks passed (29 assertions).
 
-GitHub project checks passed (30 assertions).
+GitHub project checks passed (33 assertions).
 
 Storage checks passed (16 assertions).
 
-CeTZ serializer checks passed (150 assertions).
+CeTZ serializer checks passed (161 assertions).
+
+OAuth relay checks passed (18 assertions).
 ```
 
 Browser verification (Chrome DevTools): clicked table headers, sections, rows and other object text and
@@ -370,7 +390,10 @@ GitHub checks: opened the picker with mocked account/repo/branch/directory respo
 `models/umler-project.umler`, marked the grid edit dirty, recreated a deleted remote, exercised
 **Replace local with remote** and **Overwrite remote** for both load and save conflicts, and confirmed the
 status-bar sync dot/path. Live OAuth requires a real OAuth App client id; the device-flow proxy and error
-surface were verified with an invalid client id. Refresh checks: edited the grid, reloaded and confirmed the
+surface were verified with an invalid client id. OAuth deployment checks: the dev server returned the client
+id from `GITHUB_OAUTH_CLIENT_ID` at the new `/api/github/oauth/config` path, and the Vercel-function handlers
+were exercised with mocked requests and upstream responses (configuration, missing/invalid client id, device
+code forwarding, and pending token polling) without creating a real device code. Refresh checks: edited the grid, reloaded and confirmed the
 project (not the demo) returned; restored a GitHub-bound project, its repository path and session from browser
 storage; reopened the same remote path and loaded a non-empty ER fixture with three nodes. Auto-save checks:
 accelerated the two-minute timer, confirmed a remote change produced only the sticky warning toast (no modal),

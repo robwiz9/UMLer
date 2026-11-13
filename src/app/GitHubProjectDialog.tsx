@@ -561,7 +561,7 @@ export const GitHubProjectDialog = ({
           ) : (
             <p className="gh-note gh-note-warn">
               {!config.oauthProxy
-                ? "GitHub sign-in needs the local dev server. Start UMLer with npm run dev, or use a personal access token below."
+                ? "GitHub sign-in is unavailable on this deployment. Set GITHUB_OAUTH_CLIENT_ID in the hosting environment, or use a personal access token below."
                 : "GitHub OAuth needs a one-time OAuth App setup. Add its public client id below, or use a personal access token."}
             </p>
           )}
