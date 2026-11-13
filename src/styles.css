@@ -1502,8 +1502,23 @@ button {
 
 .weak-toggle {
   margin-bottom: 6px;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
+}
+
+.square-action.weak-toggle:not(.on):not(:disabled):hover {
+  border-color: #c9c2b5;
+  background: #f7f5f0;
+  color: var(--ink);
+}
+
+.weak-toggle.on {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: var(--accent);
 }
 
 .row-move-head-actions {
