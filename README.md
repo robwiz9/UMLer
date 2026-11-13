@@ -108,7 +108,8 @@ chooser opens.
   package import, no `#set page`, no `#set text` and no other global setter. The panel offers A4 vertical /
   A4 horizontal / custom page sizes (mm or pt) used only for fit calculation, **per-side page margins**
   (top/right/bottom/left) so the fit respects the host content box, a **single typed number** for document
-  zoom (10–300%), left/center/right alignment, an **editable label** (scene name by default, empty = no
+  zoom (10–300%), left/center/right alignment, an optional **border** around the diagram with Color,
+  stroke width and padding (the figure label stays outside it), an **editable label** (scene name by default, empty = no
   label, trailing cross to clear), a sanitized diagram id for `@fig-…` references, a resources-folder field
   plus a list of referenced images, a whole-diagram vs. selection scope, a Placement size/scale card above
   the label, a **collapsible** rendered preview with an Expand modal that zooms, compile diagnostics, and
@@ -161,15 +162,15 @@ chooser opens.
   New use-case frames are tighter (`138 × 45`) to avoid excessive space around short labels.
 - **Theme card** above Layout sets the defaults for new objects and un-overridden text: **tint** (header and
   attribute-chip fill, with a transparent option), **object background** (with a transparent toggle), **font
-  colour**, **font size**, and an optional **transparent label background**. Theme changes restyle existing
+  Color**, **font size**, and an optional **transparent label background**. Theme changes restyle existing
   nodes; new objects inherit the active scene theme; **Reset theme** restores the built-in tokens.
-- **Background overrides** for table headers, individual sections and comments, each with colour, transparent
+- **Background overrides** for table headers, individual sections and comments, each with Color, transparent
   and reset-to-theme states. Section fills paint beneath content and the table border is repainted last.
 - **Text-style overrides** on table headers, sections, rows, other objects, comments and individual connector
-  labels: bold, italic, Latin Modern Mono, a compact font-size field and font colour, with a reset. Overrides
-  survive theme changes and save/import round trips. Colour pickers preview locally and commit after the drag
-  pauses, avoiding a full canvas rebuild on every colour event; colour-only overrides apply immediately because
-  the measurement cache keys the resolved colour.
+  labels: bold, italic, Latin Modern Mono, a compact font-size field and font Color, with a reset. Overrides
+  survive theme changes and save/import round trips. Color pickers preview locally and commit after the drag
+  pauses, avoiding a full canvas rebuild on every Color event; Color-only overrides apply immediately because
+  the measurement cache keys the resolved Color.
 - Comments are multi-line notes with a folded corner and a focused textarea. Images can be dragged onto the
   canvas as PNG, JPEG or SVG files; the dropped frame matches the image ratio, resizes with aspect locked, can be
   moved or deleted, and renders the actual bytes. Image bytes are stored once in a project-level asset map, so
@@ -312,7 +313,7 @@ GitHub project checks passed (33 assertions).
 
 Storage checks passed (16 assertions).
 
-CeTZ serializer checks passed (161 assertions).
+CeTZ serializer checks passed (172 assertions).
 
 OAuth relay checks passed (18 assertions).
 ```
@@ -377,11 +378,11 @@ connector alone warned instead of producing a payload, paste offset and selected
 restored the objects. Cross-diagram checks: copied an ER entity table into the class scene and confirmed the
 pasted table was a class table with its rows, then copied that class and pasted it into an object scene as
 `:orders`, and into a sequence scene as a lifeline with an `:orders` head. Latest typography checks: verified larger UI/diagram type, header/row/comment/connector
-Text style controls, B/I/M + size/colour overrides, live theme tint and size changes, transparent object
+Text style controls, B/I/M + size/Color overrides, live theme tint and size changes, transparent object
 background, Reset theme, badge baseline centring, and the tighter new-use-case default; confirmed new objects
 inherit the active theme and per-row overrides beat theme defaults. Latest checks covered transparent tint,
-header/section/comment background overrides, deferred colour commits while dragging, and the compact text-style
-size field. Latest fixes verified transparent label plates, a colour-only row override, a freshly created
+header/section/comment background overrides, deferred Color commits while dragging, and the compact text-style
+size field. Latest fixes verified transparent label plates, a Color-only row override, a freshly created
 entity’s black header text, Delete-on-header clearing only the header, ER center-label conversion into a tethered
 relation attribute, the Tight/Normal/Wide layout-spacing presets, and relation-attribute auto-layout placing
 tables on opposite sides of their parent relationship without crossing tethers. TB layout now also flips
@@ -405,7 +406,9 @@ setter-free snippet, live Typst preview and copyable source; compiled all six fi
 through typst.ts + CeTZ 0.5.2 (0.5–3 s each, no fatal diagnostics); switched A4 vertical → A4 horizontal →
 custom 120 × 210 mm and confirmed the page size changed only the fit/preview, never the snippet; set 20 mm
 margins on all four sides and confirmed the A4 scale dropped from 97% to 79% and the preview stayed inside
-the content box; typed 150% in the zoom number field and confirmed the fit-down; toggled left/center/right
+the content box; enabled the border at 4 pt stroke / 20 pt padding and confirmed the preview frame wrapped
+only the diagram while the label stayed below/outside it, with the natural size growing to 633 × 272 pt;
+typed 150% in the zoom number field and confirmed the fit-down; toggled left/center/right
 alignment; replaced the
 default scene-name label with custom text, verified an empty label removed the caption, and restored the
 default; selected one object and confirmed the selection scope and an export without unselected connectors;

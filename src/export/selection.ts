@@ -21,7 +21,9 @@ export interface ExportSelection {
   readonly edges: readonly SceneEdge[];
   readonly nodeIds: ReadonlySet<string>;
   readonly edgeIds: ReadonlySet<string>;
-  /** Content bounds plus the scene's export padding. */
+  /** Tight union of the exported nodes, edges and labels. */
+  readonly contentBounds: Rect;
+  /** Content bounds plus the scene's export padding (no border). */
   readonly bounds: Rect;
   /** Natural (unscaled) content size including padding. */
   readonly naturalWidth: number;
@@ -154,14 +156,11 @@ export const resolveExportSelection = (
     .map((edge) => layout.edges[edge.id])
     .filter((item): item is NonNullable<typeof item> => item !== undefined);
 
-  const content = unionRects([
+  const contentBounds = unionRects([
     ...nodeLayouts.map((node) => node.bounds),
     ...edgeLayouts.map((edge) => edge.bounds),
-  ]);
-  const bounds = expandRect(
-    content ?? { x: 0, y: 0, width: 1, height: 1 },
-    scene.canvas.exportPadding,
-  );
+  ]) ?? { x: 0, y: 0, width: 1, height: 1 };
+  const bounds = expandRect(contentBounds, scene.canvas.exportPadding);
 
   const hiddenCount = allNodes.length - visibleNodes.length;
   if (effectiveScope === "diagram" && hiddenCount > 0) {
@@ -178,6 +177,7 @@ export const resolveExportSelection = (
     edges: chosenEdges,
     nodeIds: new Set(chosenNodes.map((node) => node.id)),
     edgeIds: new Set(chosenEdges.map((edge) => edge.id)),
+    contentBounds,
     bounds,
     naturalWidth: Math.max(1, bounds.width),
     naturalHeight: Math.max(1, bounds.height),

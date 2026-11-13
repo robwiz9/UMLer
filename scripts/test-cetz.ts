@@ -291,6 +291,62 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// Export border. It wraps the diagram canvas; the figure caption stays outside.
+// ---------------------------------------------------------------------------
+const noBorder = serialize(er.scene);
+check(!noBorder.code.includes("// border"), "border is off by default");
+check(
+  Math.abs(noBorder.canvasWidthPt - noBorder.selection.naturalWidth) < 0.01,
+  "no-border canvas keeps the existing export bounds",
+);
+
+const borderSettings = {
+  enabled: true,
+  color: "#336699",
+  width: 2,
+  padding: 12,
+};
+const withBorder = serialize(er.scene, { settings: { border: borderSettings } });
+check(withBorder.code.includes("// border"), "enabled border is emitted");
+check(
+  Math.abs(
+    withBorder.canvasWidthPt -
+      (withBorder.selection.contentBounds.width + 2 * (borderSettings.padding + borderSettings.width)),
+  ) < 0.01,
+  "border padding and stroke widen the canvas",
+);
+check(
+  Math.abs(
+    withBorder.canvasHeightPt -
+      (withBorder.selection.contentBounds.height + 2 * (borderSettings.padding + borderSettings.width)),
+  ) < 0.01,
+  "border padding and stroke increase canvas height",
+);
+check(withBorder.code.includes('paint: rgb("#336699")'), "border color is emitted");
+check(
+  withBorder.code.indexOf("// border") < withBorder.code.indexOf("// connectors"),
+  "border is drawn before connectors and nodes",
+);
+check(
+  withBorder.code.indexOf("caption:") < withBorder.code.indexOf("#canvas") &&
+    withBorder.code.indexOf("#canvas") < withBorder.code.indexOf("// border"),
+  "caption remains outside the canvas border",
+);
+check(
+  withBorder.fit.scale * withBorder.canvasWidthPt <= withBorder.fit.availableWidthPt + 0.01,
+  "border is included in page-fit width",
+);
+
+const zeroWidthBorder = serialize(er.scene, {
+  settings: { border: { ...borderSettings, width: 0 } },
+});
+check(!zeroWidthBorder.code.includes("// border"), "zero-width border is not emitted");
+check(
+  Math.abs(zeroWidthBorder.canvasWidthPt - zeroWidthBorder.selection.naturalWidth) < 0.01,
+  "zero-width border leaves the canvas bounds unchanged",
+);
+
+// ---------------------------------------------------------------------------
 // Page options and alignment.
 // ---------------------------------------------------------------------------
 const landscape = serialize(er.scene, {

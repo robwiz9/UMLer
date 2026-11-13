@@ -10,7 +10,7 @@ interface DeferredColorInputProps {
 }
 
 /**
- * Native colour inputs fire a continuous stream of input events while the
+ * Native Color inputs fire a continuous stream of input events while the
  * picker is dragged. Keep those changes local and commit once the user pauses,
  * so a theme or text-style change does not rebuild the whole canvas every
  * frame.

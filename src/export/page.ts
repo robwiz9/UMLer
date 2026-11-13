@@ -48,9 +48,9 @@ export interface PageSize {
 
 export const ZERO_MARGINS: PageMargins = {
   top: 0,
-  right: 0,
+  right: 25,
   bottom: 0,
-  left: 0,
+  left: 25,
 };
 
 export const DEFAULT_PAGE: PageSpec = {
@@ -178,11 +178,29 @@ export const fitDiagramToPage = (
   };
 };
 
+/** A frame around the diagram canvas. The figure caption stays outside it. */
+export interface BorderSettings {
+  readonly enabled: boolean;
+  readonly color: string;
+  /** Stroke width in scene points. */
+  readonly width: number;
+  /** Gap from the diagram content to the inside edge of the border. */
+  readonly padding: number;
+}
+
+export const DEFAULT_BORDER: BorderSettings = {
+  enabled: false,
+  color: "#111111",
+  width: 0.75,
+  padding: 6,
+};
+
 export interface ExportSettings {
   readonly page: PageSpec;
   readonly zoom: number;
   readonly scope: ExportScope;
   readonly align: ExportAlign;
+  readonly border: BorderSettings;
   /**
    * Caption text. `undefined` means "use the scene name"; an empty or
    * whitespace-only string deliberately means "no label".
@@ -197,15 +215,23 @@ export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   zoom: 1,
   scope: "diagram",
   align: "center",
+  border: DEFAULT_BORDER,
   diagramId: "",
   resourceFolder: "assets",
 };
+
+/** Supports older persisted settings that predate the border fields. */
+export const normalizeBorder = (border?: Partial<BorderSettings>): BorderSettings => ({
+  ...DEFAULT_BORDER,
+  ...(border ?? {}),
+});
 
 export interface ExportSettingsPatch {
   readonly page?: Partial<PageSpec>;
   readonly zoom?: number;
   readonly scope?: ExportScope;
   readonly align?: ExportAlign;
+  readonly border?: Partial<BorderSettings>;
   readonly label?: string;
   readonly diagramId?: string;
   readonly resourceFolder?: string;
@@ -224,6 +250,10 @@ export const mergeExportSettings = (
       ...base.page.margins,
       ...(patch.page?.margins ?? {}),
     },
+  },
+  border: {
+    ...base.border,
+    ...(patch.border ?? {}),
   },
 });
 

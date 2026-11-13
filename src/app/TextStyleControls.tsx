@@ -100,7 +100,7 @@ export const TextStyleControls = ({
             }}
           />
         </label>
-        <label className="text-style-color" title="Font colour">
+        <label className="text-style-color" title="Font Color">
           <DeferredColorInput
             id={`${id}-color`}
             name={`${id}-color`}

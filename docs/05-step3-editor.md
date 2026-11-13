@@ -106,25 +106,25 @@ Default diagram sizes increased to 10.5 pt for table/shape text, 11.5 pt for tab
 labels; UI text was also raised by one pixel across the shell (the chrome stays sans-serif). The canvas measurer
 waits for `document.fonts.ready`, so text frames, row bands and label collisions use the loaded Latin Modern
 metrics.
-Contract badges use the same tint fill and font colour as table headers and are centred with a central baseline.
+Contract badges use the same tint fill and font Color as table headers and are centred with a central baseline.
 
 The side rail starts with a **Theme** card above **Layout**. Its defaults apply to new objects and to existing
 objects that do not carry their own text overrides:
 
 - **Tint** — header background and attribute-chip fill, with a **Transparent tint** toggle;
 - **Background** — entity/class/shape background, with a **Transparent object background** toggle;
-- **Text** — default diagram font colour;
+- **Text** — default diagram font Color;
 - **Size** — scales table/shape text, header text and edge-label text together;
 - **Transparent label background** — removes the white plate behind connector labels;
 - **Reset theme** restores the built-in token set.
 
 Theme changes restyle existing nodes and new objects adopt `scene.theme` at creation. Per-object typography
-overrides are stored separately, so they continue to win after a theme change. Colour pickers keep their drag
-preview local and commit once the pointer pauses, so continuously dragging a colour selector does not rebuild
+overrides are stored separately, so they continue to win after a theme change. Color pickers keep their drag
+preview local and commit once the pointer pauses, so continuously dragging a Color selector does not rebuild
 the canvas on every input event.
 
 Individual **Background** overrides are available in the table-header menu, every section menu and the comment
-menu. They support a colour, transparent, or reset-to-theme state and are stored on the scene document. Section
+menu. They support a Color, transparent, or reset-to-theme state and are stored on the scene document. Section
 backgrounds are painted beneath all section content, while the table border is repainted last so fills cannot
 clip it.
 
@@ -135,12 +135,12 @@ style** row:
 
 - **B**, **I** and **M** toggles for bold, italic and Latin Modern Mono;
 - a compact numeric font-size override (5–48 pt);
-- a font-colour override;
+- a font-Color override;
 - **Reset** to remove all overrides for that text target.
 
-Colour overrides use the same deferred-commit color input as the theme card, keeping the menu responsive while
-the colour wheel is dragged. The text measurement cache keys include the resolved colour (as well as the font
-and line metrics), so a colour-only override updates immediately without needing a bold/italic/mono/size change.
+Color overrides use the same deferred-commit color input as the theme card, keeping the menu responsive while
+the Color wheel is dragged. The text measurement cache keys include the resolved Color (as well as the font
+and line metrics), so a Color-only override updates immediately without needing a bold/italic/mono/size change.
 
 Table header overrides live on the header, row overrides on the row, section overrides on the section, object
 overrides on the node, and connector-label overrides on that specific source/center/target label. Overrides are
@@ -602,10 +602,10 @@ existing text is visibly selected.
 | `src/canvas/NodeSkeleton.tsx` | SVG text rendering and double-click target mapping |
 | `src/canvas/PortHandles.tsx` | Connection-port handle rendering |
 | `src/canvas/DraggablePanel.tsx` | Header-drag support and viewport clamping for floating menus |
-| `src/app/ThemePanel.tsx` | Scene theme defaults: tint, object background, font colour and size |
-| `src/app/TextStyleControls.tsx` | Shared bold/italic/mono/size/colour overrides |
+| `src/app/ThemePanel.tsx` | Scene theme defaults: tint, object background, font Color and size |
+| `src/app/TextStyleControls.tsx` | Shared bold/italic/mono/size/Color overrides |
 | `src/app/BackgroundControl.tsx` | Header/section/comment background overrides |
-| `src/app/DeferredColorInput.tsx` | Local colour-drag preview with deferred commits |
+| `src/app/DeferredColorInput.tsx` | Local Color-drag preview with deferred commits |
 | `src/model/styles.ts` | Theme tokens, Latin Modern families, override resolution |
 | `src/layout/snap.ts` | Grid/alignment snapping and all-corner resize math |
 | `src/res/LatinModern/` | Bundled Latin Modern Roman/Mono font faces |
@@ -672,22 +672,22 @@ Browser checks:
 - confirm the table/object header shows a lock toggle instead of a close button; toggle it, verify the clean
   padlock marker and that auto-layout preserves the frame; confirm the marker carries the editor-only data
   attribute and is absent from the Typst/CeTZ serializer contract;
-- change the Theme card’s tint, object background, font colour and font size; confirm existing objects and new
+- change the Theme card’s tint, object background, font Color and font size; confirm existing objects and new
   objects use the defaults, toggling **Transparent tint** and **Transparent object background** removes the
-  respective fills, and **Reset theme** restores the built-in colours and sizes;
-- drag a theme colour picker continuously and confirm the canvas updates only after the drag pauses rather than
+  respective fills, and **Reset theme** restores the built-in Colors and sizes;
+- drag a theme Color picker continuously and confirm the canvas updates only after the drag pauses rather than
   rebuilding the layout on every frame;
 - toggle **Transparent label background** and confirm connector label plates disappear without removing
   their text;
-- override only an attribute row’s font colour (leaving bold/italic/mono/size at their defaults) and confirm the
-  new colour is applied; create a new entity and confirm its header text uses the current default black rather
-  than a stale cached colour;
+- override only an attribute row’s font Color (leaving bold/italic/mono/size at their defaults) and confirm the
+  new Color is applied; create a new entity and confirm its header text uses the current default black rather
+  than a stale cached Color;
 - click a table header, move focus off the name field, press Delete and confirm the header is cleared but the
   object and its connectors remain; press Delete again with the table selected and confirm the object is removed;
 - set a header background, a section background and a comment background; confirm each override is scoped to its
   target, transparent/reset behave as expected, and the table border is not clipped by section fills;
 - use the Text style row on a table header, class row, section, comment and connector label; toggle B/I/M and
-  change size/colour, then reset and confirm the theme defaults return; confirm the size field stays compact and
+  change size/Color, then reset and confirm the theme defaults return; confirm the size field stays compact and
   a per-row override survives a later theme change;
 - inspect the PK/FK/NN/UQ chips and confirm their text is vertically centred in the chip rectangle;
 - add a new use case and confirm the tighter `138 × 45` ellipse does not leave excessive empty space around a

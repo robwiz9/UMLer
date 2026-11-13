@@ -41,6 +41,7 @@ import type {
 import type { SceneEdge } from "../model/edges.ts";
 import type { SceneDocument } from "../model/scene.ts";
 import type { Point, Rect } from "../model/geometry.ts";
+import { expandRect } from "../model/geometry.ts";
 import { toCetzAnchorName, toCetzName } from "../model/cetz-map.ts";
 import type { PageSize } from "./page.ts";
 import {
@@ -89,6 +90,9 @@ export interface CetzExportResult {
   readonly selection: ExportSelection;
   readonly fit: FitResult;
   readonly page: PageSize;
+  /** Natural canvas size including the export border, when enabled. */
+  readonly canvasWidthPt: number;
+  readonly canvasHeightPt: number;
   readonly label: string;
   readonly caption: string;
   readonly warnings: readonly string[];
@@ -151,8 +155,8 @@ const colorExpr = (color: string | null | undefined, opacity?: number): string =
   const trimmed = color.trim();
   const hex = trimmed.startsWith("#") ? trimmed : null;
   if (hex === null) {
-    // Theme colours are hex, but a project file may contain a Typst named
-    // colour. Emitting it verbatim is safer than silently substituting black.
+    // Theme Colors are hex, but a project file may contain a Typst named
+    // Color. Emitting it verbatim is safer than silently substituting black.
     return trimmed;
   }
   let digits = hex.slice(1);
@@ -169,7 +173,7 @@ const colorExpr = (color: string | null | undefined, opacity?: number): string =
     return `rgb("${hex.toLowerCase()}")`;
   }
   if (digits.length !== 6) {
-    // Not a valid Typst hex colour; emit the original token untouched rather
+    // Not a valid Typst hex Color; emit the original token untouched rather
     // than constructing an invalid rgb() call.
     return trimmed;
   }
@@ -1169,7 +1173,7 @@ const imageReferences = (
 /* Entry point                                                               */
 /* ------------------------------------------------------------------------- */
 
-const textExprForCaption = (text: string, size: number, color: string): string =>
+const textExprForCaption = (text: string, _size: number, _color: string): string =>
   `[#(${quote(text)})]`;
 
 export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportResult => {
@@ -1186,9 +1190,17 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
   const margins = pageMarginsPt(settings.page);
   const caption = settings.label === undefined ? scene.meta.title : settings.label;
   const hasCaption = caption.trim().length > 0;
+  const borderEnabled = settings.border.enabled && settings.border.width > 0;
+  const borderPadding = Math.max(0, settings.border.padding);
+  const borderWidth = borderEnabled ? Math.max(0.01, settings.border.width) : 0;
+  // The caption is a figure caption outside the canvas, so it is not inside
+  // the border. The border sits around the content bounds with its own gap.
+  const canvasBounds = borderEnabled
+    ? expandRect(selection.contentBounds, borderPadding + borderWidth)
+    : selection.bounds;
   const fit = fitDiagramToPage(
-    selection.naturalWidth,
-    selection.naturalHeight,
+    Math.max(1, canvasBounds.width),
+    Math.max(1, canvasBounds.height),
     page,
     settings.zoom,
     hasCaption,
@@ -1200,12 +1212,34 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
   const imageByNode = new Map(imageResult.refs.map((ref) => [ref.nodeId, ref]));
   const warnings = [...selection.warnings, ...imageResult.warnings];
 
-  const p = projectorFor(selection.bounds, fit.scale);
+  const p = projectorFor(canvasBounds, fit.scale);
   const writer = new Writer();
   const label = toDiagramLabel(settings.diagramId.trim().length > 0 ? settings.diagramId : defaultDiagramId(scene.meta.title));
   const usedMarks = new Set<string>();
 
   const drawBody = (target: Writer, level: number): void => {
+    if (borderEnabled) {
+      const borderRect = expandRect(
+        selection.contentBounds,
+        borderPadding + borderWidth / 2,
+      );
+      target.push(level, "// border");
+      target.push(
+        level,
+        shapedRect(
+          p,
+          fit.scale,
+          borderRect,
+          null,
+          {
+            color: settings.border.color,
+            width: borderWidth,
+            pattern: "solid",
+          },
+        ),
+      );
+      target.blank();
+    }
     const sequence = scene.meta.diagramKind === "uml-sequence";
     const drawNodes = (): void => {
       if (selection.nodes.length === 0) return;
@@ -1376,6 +1410,8 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
     selection,
     fit,
     page,
+    canvasWidthPt: canvasBounds.width,
+    canvasHeightPt: canvasBounds.height,
     label,
     caption,
     warnings,

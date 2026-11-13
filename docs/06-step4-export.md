@@ -56,9 +56,11 @@ line appears in the copied code.
 
 ## 3. Page fitting contract
 
-Scene units are Typst points. The natural diagram size is the export selection
-bounds, including the scene's `canvas.exportPadding`. The chosen page size is a
-calculation input only; the snippet does not set a page.
+Scene units are Typst points. With no border, the natural canvas is the export
+selection bounds, including the scene's `canvas.exportPadding`. With a border,
+it is the tight content bounds expanded by the border padding and stroke width.
+The chosen page size is a calculation input only; the snippet does not set a
+page.
 
 ```text
 availableWidth  = pageWidth - marginLeft - marginRight
@@ -77,8 +79,11 @@ scale    = min(requestedDocumentZoom, fitLimit)
   describe the host document's margins; asymmetric margins are supported.
 - The caption band reserves 22 pt; the caption itself is host typography and is
   not scaled with the diagram.
+- A border wraps only the diagram canvas. The figure caption remains outside the
+  border, and the border's padding and stroke are included in the fit size.
 - The snippet assumes the host document's page/container; the scene's export
-  padding is the only built-in gutter inside the content box.
+  padding is the only built-in gutter inside the content box when no border is
+  used.
 - Horizontal alignment is `#align(left|center|right)` around the figure body.
   This is a local wrapper, not a global setter.
 - The figure uses `placement: none`, so the label is plain. The label is editable; its default is the
@@ -130,6 +135,10 @@ object is exactly as large in a one-object selection as in the full diagram.
       draw.register-mark("er-one", style => { … })
       draw.register-mark("er-zero-many", style => { … })
 
+      // border (only when enabled)
+      draw.rect((0, 0), (621, 260), fill: none,
+                stroke: (paint: rgb("#111111"), thickness: 0.719pt))
+
       // connectors
       draw.line((232.934, 201.78), (362.342, 201.78),
                 stroke: (paint: rgb("#111111"), thickness: 0.719pt),
@@ -162,9 +171,9 @@ Key properties:
   actions remain the manual-paste path. The panel also shows a copyable
   `#include "<diagram-id>.typ"` command for the downloaded file.
 - **No page setup, no global setters.** The snippet starts at
-  `#figure`. It assumes the host document imported CeTZ as `cetz` and does not
-  change the host's page, text style, font or numbering. `#align` and `#figure`
-  are local wrappers, not document-wide state.
+  `#figure`. It assumes the host imported `canvas` and `draw` from CeTZ and does
+  not change the host's page, text style, font or numbering. `#align` and
+  `#figure` are local wrappers, not document-wide state.
 - **Coordinates are final page points.** The page-fit scale is applied to
   coordinates, font sizes and stroke widths, so strokes and text stay
   proportional. No CeTZ transform or nested scale is needed.
@@ -244,13 +253,14 @@ fails, the diagnostics are shown and the code remains copyable.
 
 | Control | Behaviour |
 |---|---|
-| Sections | **Export Objects**, **Page Format & Placement**, **Reference** and **Preview** are collapsible via their chevron; **Typst Code** stays open. All start expanded. |
+| Sections | **Export Objects**, **Page Format & Placement**, **Border**, **Reference** and **Preview** are collapsible via their chevron; **Typst Code** stays open. All start expanded. |
 | Whole diagram / Selection | Scope; selection is disabled with zero selected objects. |
 | Document size | A4 vertical, A4 horizontal or custom width × height. Used only for fit and preview; never emitted. |
 | Page margins | Top / Right / Bottom / Left in the page unit. Used only for fit and preview. |
 | Unit | mm or pt; switching converts the current values and margins. |
 | Diagram zoom | One manually editable number field, 10–300%; explicit enlargement is allowed, implicit stretching is not. |
 | Size card | Inside **Placement**: natural size, effective scale, page, node/edge/label counts and fit-down warning. |
+| Border | On/off, Color, stroke width (pt) and padding (pt). The frame wraps the diagram canvas; the figure caption stays outside it. |
 | Alignment | Left / Center (default) / Right; emitted as a local `#align` wrapper. |
 | Label below | Editable text, defaulting to the scene name; a trailing cross clears it and empty means no label. |
 | Diagram id | Sanitized to a Typst label such as `fig-er-commerce`; referenced as `@fig-er-commerce`. |
@@ -267,10 +277,11 @@ Settings other than the per-scene diagram id and label are remembered in
 
 ## 9. Verification
 
-- `npm run test:cetz` — 161 assertions: all six fixtures, balanced delimiters,
+- `npm run test:cetz` — 172 assertions: all six fixtures, balanced delimiters,
   no import/page/global-text setters in the result, preview host wrapper,
   selection rules (including edge-to-edge tethers), fit-down, no implicit
   upscale, explicit zoom, A4 landscape, per-side and asymmetric margin fitting,
+  border on/off, border Color/width/padding and canvas growth, zero-width border,
   editable/empty/whitespace label, id sanitizing, resource folder normalization,
   external image references, literal text escaping, and terminal-mark anchoring
   for all five ER endpoints.
@@ -279,7 +290,9 @@ Settings other than the per-scene diagram id and label are remembered in
   mm, typed zoom in the number field, left/center/right alignment, the editable
   label (scene-name default, empty label, custom text), selection export with
   count, id/folder sanitizing, copy, expand modal, and that a selection did not
-  resize the object.
+  resize the object. The border section was verified with the default stroke and
+  with a 4 pt stroke / 20 pt padding: the live preview showed the frame around
+  the diagram and the caption below the frame, outside it.
 - Typst Playground (`https://typst.app/play/`, Typst 0.15 + CeTZ 0.5.3): pasted
   the generated snippet with a real A4 page and **20 mm margins on all sides**;
   it compiled cleanly and the 79%-scaled diagram fit the content box without

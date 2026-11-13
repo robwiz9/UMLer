@@ -111,7 +111,7 @@ export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
             name={`${id}-background`}
             value={background}
             disabled={transparent}
-            title="Object background colour"
+            title="Object background Color"
             onCommit={(color) => {
               setBackground(color);
               onChange(withBackground(theme, color));
@@ -124,7 +124,7 @@ export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
             id={`${id}-font-color`}
             name={`${id}-font-color`}
             value={fontColor}
-            title="Default diagram font colour"
+            title="Default diagram font Color"
             onCommit={(color) => onChange(withFontColor(theme, color))}
           />
         </label>

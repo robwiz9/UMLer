@@ -47,7 +47,7 @@ export const BackgroundControl = ({
           name={`${id}-background`}
           value={color}
           disabled={transparent}
-          title="Background colour override"
+          title="Background Color override"
           onCommit={(next) => {
             setColor(next);
             onChange(next);

@@ -8,10 +8,12 @@ import {
 } from "../export/cetz.ts";
 import {
   defaultDiagramId,
+  normalizeBorder,
   normalizePageSpec,
   pageSize,
   ptToUnit,
   unitToPt,
+  type BorderSettings,
   type ExportAlign,
   type ExportScope,
   type ExportSettings,
@@ -38,6 +40,7 @@ interface StoredSettings {
   readonly page?: PageSpec;
   readonly zoom?: number;
   readonly align?: ExportAlign;
+  readonly border?: Partial<BorderSettings>;
   readonly resourceFolder?: string;
 }
 
@@ -199,6 +202,7 @@ export const CodePanel = ({
   );
   const [scope, setScope] = useState<ExportScope>("diagram");
   const [align, setAlign] = useState<ExportAlign>(stored.current.align ?? "center");
+  const [border, setBorder] = useState<BorderSettings>(normalizeBorder(stored.current.border));
   const [label, setLabel] = useState<string>(scene.meta.title);
   const [resourceFolder, setResourceFolder] = useState<string>(
     stored.current.resourceFolder ?? "assets",
@@ -211,6 +215,7 @@ export const CodePanel = ({
   const [codeMode, setCodeMode] = useState<"export" | "source">("export");
   const [objectsCollapsed, setObjectsCollapsed] = useState(false);
   const [placementCollapsed, setPlacementCollapsed] = useState(false);
+  const [borderCollapsed, setBorderCollapsed] = useState(false);
   const [referenceCollapsed, setReferenceCollapsed] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
@@ -250,13 +255,13 @@ export const CodePanel = ({
   };
 
   useEffect(() => {
-    const data: StoredSettings = { page, zoom, align, resourceFolder };
+    const data: StoredSettings = { page, zoom, align, border, resourceFolder };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       // Local storage can be unavailable in private windows; export still works.
     }
-  }, [page, zoom, align, resourceFolder]);
+  }, [page, zoom, align, border, resourceFolder]);
 
   useEffect(
     () => () => {
@@ -283,11 +288,12 @@ export const CodePanel = ({
       zoom,
       scope,
       align,
+      border,
       label,
       diagramId,
       resourceFolder,
     }),
-    [page, zoom, scope, align, label, diagramId, resourceFolder],
+    [page, zoom, scope, align, border, label, diagramId, resourceFolder],
   );
 
   const result = useMemo(
@@ -637,6 +643,79 @@ export const CodePanel = ({
           <ColoredLine color="var(--line)" />
           <section className="code-section">
             <SectionToggle
+              title="Border"
+              collapsed={borderCollapsed}
+              onToggle={() => setBorderCollapsed((value) => !value)}
+            />
+            {!borderCollapsed ? (
+              <>
+                <label className="code-checkbox">
+                  <input
+                    id="code-border-enabled"
+                    name="code-border-enabled"
+                    type="checkbox"
+                    checked={border.enabled}
+                    onChange={(event) => setBorder({ ...border, enabled: event.target.checked })}
+                  />
+                  <span>Draw border</span>
+                </label>
+                <div className="code-border-grid">
+                  <label className="code-border-field code-border-color">
+                    <span>Color</span>
+                    <input
+                      id="code-border-color"
+                      name="code-border-color"
+                      type="color"
+                      value={border.color}
+                      onInput={(event) =>
+                        setBorder({ ...border, color: event.currentTarget.value })
+                      }
+                      disabled={!border.enabled}
+                    />
+                  </label>
+                  <label className="code-border-field">
+                    <span>Width (pt)</span>
+                    <input
+                      id="code-border-width"
+                      name="code-border-width"
+                      type="number"
+                      min={0}
+                      step={0.25}
+                      value={border.width}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value) && value >= 0) {
+                          setBorder({ ...border, width: value });
+                        }
+                      }}
+                      disabled={!border.enabled}
+                    />
+                  </label>
+                  <label className="code-border-field">
+                    <span>Padding (pt)</span>
+                    <input
+                      id="code-border-padding"
+                      name="code-border-padding"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={border.padding}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value) && value >= 0) {
+                          setBorder({ ...border, padding: value });
+                        }
+                      }}
+                      disabled={!border.enabled}
+                    />
+                  </label>
+                </div>
+              </>
+            ) : null}
+          </section>
+          <ColoredLine color="var(--line)" />
+          <section className="code-section">
+            <SectionToggle
               title="Reference"
               collapsed={referenceCollapsed}
               onToggle={() => setReferenceCollapsed((value) => !value)}
@@ -772,8 +851,8 @@ export const CodePanel = ({
                 <div className="code-summary">
                   <div className="code-summary-line">
                     <span>
-                      {Math.round(result.selection.naturalWidth)} ×{" "}
-                      {Math.round(result.selection.naturalHeight)} pt
+                      {Math.round(result.canvasWidthPt)} ×{" "}
+                      {Math.round(result.canvasHeightPt)} pt
                     </span>
                     <span>
                       {Math.round(result.fit.scale * 100)}% · {pagePresetLabel(page)}
