@@ -118,7 +118,8 @@ chooser opens.
   downloaded file prepends the versioned CeTZ import so it can be included directly.
 - **Page fitting never stretches implicitly.** At 100% a small diagram keeps its natural size; it is only
   reduced (aspect ratio preserved) when it would not fit the page. An explicit zoom above 100% is honoured
-  until the page limit. Selection export keeps absolute object sizes; only the origin moves.
+  until the page limit. Selection export keeps absolute object sizes; only the origin moves. Border padding
+  and stroke width are part of the natural canvas and therefore of the fit calculation.
 - **Typst output is safe and readable**: it uses the host's imported `canvas` and `draw` names
   (`#import "@preview/cetz:0.5.3": canvas, draw` or `: *`), literal `#("…")` text escaping, **body text
   inheriting the host document font** (only explicit monospace overrides name a family), explicit
