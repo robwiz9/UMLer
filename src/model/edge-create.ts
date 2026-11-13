@@ -10,9 +10,9 @@
 import type { SceneDocument } from "./scene.ts";
 import type { EdgeAttachment, NodePortRef, SceneEdge } from "./edges.ts";
 import { NO_MARKER } from "./edges.ts";
-import type { ErMarkerKind, GenericMarkerKind } from "./markers.ts";
+import type { GenericMarkerKind } from "./markers.ts";
 import { DEFAULT_THEME } from "./styles.ts";
-import { newId, type EdgeId, type NodeId } from "./ids.ts";
+import { asLabelId, newId, type EdgeId, type NodeId } from "./ids.ts";
 
 export interface PortAttachmentRef {
   readonly nodeId: NodeId;
@@ -27,15 +27,26 @@ export interface EdgeAttachmentRef {
 
 export type EdgeTargetRef = PortAttachmentRef | EdgeAttachmentRef;
 
-const er = (kind: ErMarkerKind): { family: "er"; kind: ErMarkerKind } => ({
-  family: "er",
-  kind,
-});
-
 const generic = (kind: GenericMarkerKind): { family: "generic"; kind: GenericMarkerKind } => ({
   family: "generic",
   kind,
 });
+
+/**
+ * ER endpoints start as plain lines, so cardinality is carried by text rather
+ * than a terminal glyph. Both ends default to the safe "1" and remain fully
+ * editable from the terminal menu.
+ */
+const erCardinalityLabels = (): SceneEdge["labels"] =>
+  (["source", "target"] as const).map((end) => ({
+    id: asLabelId(newId("label")),
+    zone: end,
+    text: "1",
+    anchor: { kind: "endpoint", end },
+    offset: { x: 0, y: -12 },
+    locked: false,
+    visible: true,
+  }));
 
 export const createEdgeForDiagram = (
   scene: SceneDocument,
@@ -83,7 +94,8 @@ export const createEdgeForDiagram = (
           stubLength: 9,
           waypoints: [],
         },
-        markers: edgeTargetMarkers ?? { source: er("one"), target: er("zeroOrMany") },
+        markers: edgeTargetMarkers ?? { source: NO_MARKER, target: NO_MARKER },
+        labels: attachedToEdge ? [] : erCardinalityLabels(),
         semantic: { family: "er", name: attachedToEdge ? "has" : undefined },
         style: edgeTargetStyle,
       };

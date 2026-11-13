@@ -55,6 +55,8 @@ export interface TableSection {
 
 export interface TableHeader {
   readonly stereotype?: string;
+  /** Weak ER entity: renders `«weak»` and turns the PK badge into D. */
+  readonly weak?: boolean;
   readonly keywords?: readonly string[];
   readonly abstract?: boolean;
   readonly isInterface?: boolean;

@@ -16,6 +16,8 @@ interface NodeFocusMenuProps {
   readonly onUpdateRow: (nodeId: string, rowId: RowId, patch: Partial<TableRow>) => void;
   readonly onAddRow: (nodeId: string, sectionId?: SectionId, afterRowId?: RowId) => void;
   readonly onDeleteRow: (nodeId: string, rowId: RowId) => void;
+  readonly onMoveRow: (nodeId: string, rowId: RowId, direction: "up" | "down") => void;
+  readonly onFocusRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
@@ -54,6 +56,19 @@ const LockIcon = ({ locked }: { readonly locked: boolean }) => (
   </svg>
 );
 
+const ArrowIcon = ({ direction }: { readonly direction: "up" | "down" }) => (
+  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+    <path
+      d={direction === "up" ? "M8 12.5V3.8M4.6 7.2 8 3.8l3.4 3.4" : "M8 3.5v8.7M4.6 8.8 8 12.2l3.4-3.4"}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 const focusElementId = (request: CanvasTextFocusRequest): string | null => {
   const target = request.target;
   switch (target.kind) {
@@ -84,6 +99,8 @@ export const NodeFocusMenu = ({
   onUpdateRow,
   onAddRow,
   onDeleteRow,
+  onMoveRow,
+  onFocusRow,
   onAddSection,
   onUpdateSection,
   onDeleteSection,
@@ -304,6 +321,8 @@ export const NodeFocusMenu = ({
   const rowSection = row === undefined
     ? undefined
     : sections.find((entry) => entry.rows.some((candidate) => candidate.id === row.id));
+  const weakEntity =
+    node.kind === "table" && node.tableKind === "entity" && node.header.weak === true;
 
   if (focus.kind === "table") {
     return (
@@ -324,15 +343,50 @@ export const NodeFocusMenu = ({
             <LockIcon locked={node.locked} />
           </button>
         </div>
-        <label className="field-label">
-          Entity table name
-          <input
-            id={`node-${node.id}-name`}
-            name={`node-${node.id}-name`}
-            value={node.name}
-            onChange={(event) => onUpdateNode(node.id, { name: event.target.value })}
-          />
-        </label>
+        <div className="table-name-row">
+          <label className="field-label">
+            Entity table name
+            <input
+              id={`node-${node.id}-name`}
+              name={`node-${node.id}-name`}
+              value={node.name}
+              onChange={(event) => onUpdateNode(node.id, { name: event.target.value })}
+              onKeyDown={(event) => {
+                if (
+                  event.key !== "Enter" ||
+                  event.shiftKey ||
+                  event.altKey ||
+                  event.ctrlKey ||
+                  event.metaKey
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                const firstRow = sections.flatMap((entry) => entry.rows)[0];
+                if (firstRow !== undefined) {
+                  onFocusRow(node.id, firstRow.id);
+                } else {
+                  onAddRow(node.id, sections[0]?.id);
+                }
+              }}
+            />
+          </label>
+          {node.kind === "table" && node.tableKind === "entity" ? (
+            <button
+              type="button"
+              className={`square-action weak-toggle ${weakEntity ? "on" : ""}`}
+              onClick={() =>
+                onUpdateNode(node.id, {
+                  header: { ...node.header, weak: !weakEntity },
+                })}
+              aria-pressed={weakEntity}
+              aria-label="Weak entity"
+              title="Mark this entity as weak (partial key shown as D)"
+            >
+              W
+            </button>
+          ) : null}
+        </div>
         {node.kind === "table" && node.tableKind === "class" ? (
           <label className="field-label">
             Stereotype
@@ -468,12 +522,28 @@ export const NodeFocusMenu = ({
     const isClassRow = node.kind === "table" && node.tableKind === "class";
     const prefixValue = row.prefix ?? row.visibility ?? "";
     const typeValue = isMethod ? row.returnType ?? "" : row.type ?? "";
+    const allRows = sections.flatMap((entry) => entry.rows);
+    const rowIndex = allRows.findIndex((entry) => entry.id === row.id);
+    const canMoveUp = rowIndex > 0;
+    const canMoveDown = rowIndex >= 0 && rowIndex < allRows.length - 1;
     const focusTypeField = (): void => {
       const input = document.getElementById(`row-${row.id}-type`);
       if (input instanceof HTMLInputElement) {
         input.focus();
         input.select();
       }
+    };
+    const moveAndKeepFocus = (direction: "up" | "down"): void => {
+      onMoveRow(node.id, row.id, direction);
+      // The row id (and therefore this menu) is stable across the move. Put
+      // the caret back on the same row once React has committed the new order.
+      window.setTimeout(() => {
+        const input = document.getElementById(`row-${row.id}-name`);
+        if (input instanceof HTMLInputElement) {
+          input.focus();
+          input.select();
+        }
+      }, 0);
     };
     const handleNameKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
       if (
@@ -524,7 +594,30 @@ export const NodeFocusMenu = ({
             <strong>Row</strong>
             <span>{row.name}</span>
           </div>
-          <button type="button" className="icon-button" onClick={onClose} title="Close object menu">×</button>
+          <div className="row-move-head-actions">
+            <button
+              type="button"
+              className="square-action row-move-button"
+              onClick={() => moveAndKeepFocus("up")}
+              onMouseDown={(event) => event.preventDefault()}
+              disabled={!canMoveUp}
+              title="Move row up"
+              aria-label="Move row up"
+            >
+              <ArrowIcon direction="up" />
+            </button>
+            <button
+              type="button"
+              className="square-action row-move-button"
+              onClick={() => moveAndKeepFocus("down")}
+              onMouseDown={(event) => event.preventDefault()}
+              disabled={!canMoveDown}
+              title="Move row down"
+              aria-label="Move row down"
+            >
+              <ArrowIcon direction="down" />
+            </button>
+          </div>
         </div>
         <label className="field-label">
           Attribute name
@@ -599,8 +692,11 @@ export const NodeFocusMenu = ({
                 type="button"
                 className={`chip ${(row.constraints ?? []).includes(constraint) ? "on" : ""}`}
                 onClick={() => toggleConstraint(constraint)}
+                title={constraint === "PK" && weakEntity
+                  ? "Partial key of a weak entity"
+                  : `${constraint} constraint`}
               >
-                {constraint}
+                {constraint === "PK" && weakEntity ? "D" : constraint}
               </button>
             ))}
           </div>

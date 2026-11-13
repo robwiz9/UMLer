@@ -1,5 +1,5 @@
 import type React from "react";
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SceneDocument } from "../model/scene.ts";
 import type { EdgeLabelLayout, EdgeLayout, LayoutSnapshot, NodeLayout, PortGeometry } from "../model/layout.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
@@ -9,7 +9,7 @@ import type { ActivationId, RowId, SectionId } from "../model/ids.ts";
 import { NodeFocusMenu } from "./NodeFocusMenu.tsx";
 import { DraggablePanel } from "./DraggablePanel.tsx";
 import type { Point, Rect } from "../model/geometry.ts";
-import { rectContainsPoint, rectFromPoints, snap, sub } from "../model/geometry.ts";
+import { expandRect, rectContainsPoint, rectFromPoints, snap, sub } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import type { EdgeAttachmentRef, PortAttachmentRef } from "../model/edge-create.ts";
 import { childrenOfBoundary } from "../model/containment.ts";
@@ -130,6 +130,8 @@ interface CanvasStageProps {
   readonly onUpdateRow: (nodeId: string, rowId: RowId, patch: Partial<TableRow>) => void;
   readonly onAddRow: (nodeId: string, sectionId?: SectionId, afterRowId?: RowId) => void;
   readonly onDeleteRow: (nodeId: string, rowId: RowId) => void;
+  readonly onMoveRow: (nodeId: string, rowId: RowId, direction: "up" | "down") => void;
+  readonly onFocusRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
@@ -649,6 +651,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onUpdateRow,
   onAddRow,
   onDeleteRow,
+  onMoveRow,
+  onFocusRow,
   onAddSection,
   onUpdateSection,
   onDeleteSection,
@@ -688,6 +692,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const [guides, setGuides] = useState<readonly SnapGuide[]>([]);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [hoveredPort, setHoveredPort] = useState<PortGeometry | null>(null);
+  const [hoveredObjectNodeId, setHoveredObjectNodeId] = useState<string | null>(null);
   const [hoveredNodePart, setHoveredNodePart] = useState<NodeFocus | null>(null);
   const [hoveredTerminal, setHoveredTerminal] = useState<{
     readonly edgeId: string;
@@ -1823,6 +1828,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setCursorWorld(world);
 
+    // Hovering a diagram object reveals its connection handles. Tracking this
+    // from the SVG pointer position (rather than the node's own pointerleave)
+    // keeps the handles mounted while the pointer travels to a perimeter port.
+    const hoverMargin = 10 / zoomRef.current;
+    const hoveredObject = Object.values(layout.nodes)
+      .filter((nodeLayout) => scene.nodes[nodeLayout.nodeId]?.visible !== false)
+      .sort((a, b) =>
+        (scene.nodes[b.nodeId]?.z ?? 0) - (scene.nodes[a.nodeId]?.z ?? 0))
+      .find((nodeLayout) =>
+        rectContainsPoint(
+          expandRect(selectionFrameFor(nodeLayout), hoverMargin),
+          world,
+        ));
+    setHoveredObjectNodeId(hoveredObject?.nodeId ?? null);
+
     const nearby = nearestPort(layout.ports, world, 9 / zoomRef.current);
     setHoveredPort(nearby);
 
@@ -2076,6 +2096,17 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     singleSelectedNodeId === null ? undefined : layout.nodes[singleSelectedNodeId];
   const selectedPorts =
     singleSelectedNodeId === null ? [] : snapHandlesForNode(layout.ports, singleSelectedNodeId);
+  const hoveredPorts = hoveredObjectNodeId === null
+    ? []
+    : snapHandlesForNode(layout.ports, hoveredObjectNodeId);
+  const visiblePorts = (() => {
+    const seen = new Set<string>();
+    return [...selectedPorts, ...hoveredPorts].filter((port) => {
+      if (seen.has(port.id)) return false;
+      seen.add(port.id);
+      return true;
+    });
+  })();
   const selectedActivationFrame = (() => {
     if (selectedActivation === null) return null;
     const nodeLayout = layout.nodes[selectedActivation.nodeId];
@@ -2207,7 +2238,24 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       },
     ];
   })();
-  const focusMenuPosition = (() => {
+  const focusMenuKey = (() => {
+    if (nodeFocus === null) return "";
+    const part = nodeFocus.kind === "section"
+      ? nodeFocus.sectionId
+      : nodeFocus.kind === "row"
+        ? nodeFocus.rowId
+        : nodeFocus.kind === "lifelineSpine"
+          ? nodeFocus.y
+          : "";
+    // Camera/viewport and node movement should move the menu; moving the
+    // focused row within its table must not, or reordering would drag the
+    // menu with it.
+    const anchor = nodeFocus.kind === "row" || focusFrame === null || focusLayout === undefined
+      ? ""
+      : `${focusFrame.x}:${focusFrame.y}:${focusFrame.width}:${focusFrame.height}:${focusLayout.frame.x}:${focusLayout.frame.y}:${focusLayout.frame.width}`;
+    return `${nodeFocus.nodeId}:${nodeFocus.kind}:${part}:${anchor}:${camera.x}:${camera.y}:${zoom}:${viewport.width}:${viewport.height}`;
+  })();
+  const focusMenuPosition = useMemo(() => {
     if (focusLayout === undefined || focusFrame === null) return null;
     const width = 320;
     const left = focusLayout.frame.x * zoom + camera.x;
@@ -2221,7 +2269,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       left: Math.max(10, Math.min(leftPosition, Math.max(10, viewport.width - width - 10))),
       top: Math.max(10, Math.min(anchorTop, Math.max(10, viewport.height - 390))),
     };
-  })();
+    // focusMenuKey intentionally captures only the stable focus identity plus
+    // camera/viewport; layout-only row movement keeps the current position.
+  }, [focusMenuKey]);
   const terminalPlacement = (() => {
     if (activeEndpoint === null || selectedEdgeLayout === undefined) return null;
     const points = selectedEdgeLayout.points;
@@ -2284,7 +2334,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onPointerLeave={() => setHoveredPort(null)}
+        onPointerLeave={() => {
+          setHoveredPort(null);
+          setHoveredObjectNodeId(null);
+        }}
         onContextMenu={handleContextMenu}
         onAuxClick={(event) => {
           if (event.button === 1) event.preventDefault();
@@ -2571,9 +2624,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               ) : null}
             </>
           ) : null}
-          {selectedPorts.length > 0 && activationDraft === null ? (
+          {visiblePorts.length > 0 && activationDraft === null ? (
             <PortHandles
-              ports={selectedPorts}
+              ports={visiblePorts}
               zoom={zoom}
               hoveredPortId={hoveredPort?.id}
               theme={scene.theme}
@@ -2678,6 +2731,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             onUpdateRow={onUpdateRow}
             onAddRow={onAddRow}
             onDeleteRow={onDeleteRow}
+            onMoveRow={onMoveRow}
+            onFocusRow={onFocusRow}
             onAddSection={onAddSection}
             onUpdateSection={onUpdateSection}
             onDeleteSection={onDeleteSection}

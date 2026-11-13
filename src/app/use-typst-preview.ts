@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { renderTypstPreview, type PreviewImage } from "../export/typst-preview.ts";
+import type { PreviewImage } from "../export/typst-preview.ts";
 
 export type TypstPreviewStatus = "idle" | "rendering" | "ready" | "error";
 
@@ -35,7 +35,11 @@ export const useTypstPreview = (
       error: undefined,
     }));
     const timer = window.setTimeout(() => {
-      void renderTypstPreview(source, images)
+      // Keep typst.ts and the WASM wrappers out of the editor/export-panel
+      // bundle. The panel is usable immediately; this chunk is fetched only
+      // once the preview actually needs to compile.
+      void import("../export/typst-preview.ts")
+        .then(({ renderTypstPreview }) => renderTypstPreview(source, images))
         .then((result) => {
           if (cancelled || version.current !== current) return;
           setState({

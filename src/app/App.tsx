@@ -1,6 +1,4 @@
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -26,6 +24,7 @@ import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
 import { zoomAtScreenPoint, type Camera, type ViewportSize } from "../canvas/camera.ts";
 import { CanvasStage, type CanvasStageHandle } from "../canvas/CanvasStage.tsx";
+import { CodePanel } from "./CodePanel.tsx";
 import { GitHubDecisionDialog, type GitHubDecision, type GitHubDecisionOption } from "./GitHubDecisionDialog.tsx";
 import { GitHubProjectDialog } from "./GitHubProjectDialog.tsx";
 import { LayoutPanel } from "./LayoutPanel.tsx";
@@ -90,6 +89,7 @@ import {
   insertObject,
   insertSubgraph,
   insertConnectedObject,
+  moveRow,
   moveSequenceEdge,
   patchLayout,
   patchNode,
@@ -109,14 +109,8 @@ import {
   updateSection,
 } from "../model/edits.ts";
 
-/**
- * typst.ts and the compiler/renderer wrappers are sizeable and only needed
- * while the export panel is open, so keep them out of the editor's initial
- * bundle. The 28 MB WASM is still requested only on first preview compile.
- */
-const CodePanel = lazy(() =>
-  import("./CodePanel.tsx").then((module) => ({ default: module.CodePanel })),
-);
+// The export panel is cheap to render; its Typst compiler is imported lazily
+// by useTypstPreview only once the preview is expanded.
 
 const cloneSceneAs = (source: SceneDocument, title: string): SceneDocument => {
   const now = new Date().toISOString();
@@ -653,19 +647,36 @@ export const App = () => {
       digest: string,
       message: string,
       mode: GitHubSaveMode = "manual",
+      retryConflict = false,
     ): Promise<void> => {
       if (githubSession === null) {
         throw new Error("Sign in to GitHub before saving.");
       }
       setGithubBusy("save");
       try {
-        const result = await uploadProjectSnapshot(
-          githubSession,
-          target,
-          snapshot,
-          sha,
-          message,
-        );
+        let result: { sha: string; htmlUrl: string };
+        try {
+          result = await uploadProjectSnapshot(
+            githubSession,
+            target,
+            snapshot,
+            sha,
+            message,
+          );
+        } catch (error) {
+          // An explicit overwrite can still race with a just-landed commit.
+          // Refetch the latest blob SHA once and retry with the user's chosen
+          // overwrite, rather than making them export and save manually.
+          if (!retryConflict || !isGitHubConflict(error)) throw error;
+          const latest = await getProjectFile(githubSession.token, target);
+          result = await uploadProjectSnapshot(
+            githubSession,
+            target,
+            snapshot,
+            latest?.sha ?? null,
+            message,
+          );
+        }
         setGithubBinding({
           ...target,
           sha: result.sha,
@@ -777,6 +788,8 @@ export const App = () => {
                   remote.sha,
                   digest,
                   "Overwrite project from UMLer",
+                  "manual",
+                  true,
                 ),
             },
           ],
@@ -834,6 +847,8 @@ export const App = () => {
                 remote.sha,
                 digest,
                 "Overwrite project from UMLer",
+                "manual",
+                true,
               ),
           },
         ],
@@ -930,6 +945,8 @@ export const App = () => {
                     remote.sha,
                     currentDigest,
                     "Overwrite project from UMLer",
+                    "manual",
+                    true,
                   ),
               },
             ],
@@ -1022,6 +1039,8 @@ export const App = () => {
                         null,
                         digest,
                         "Recreate project from UMLer",
+                        "manual",
+                        true,
                       ),
                   },
                 ],
@@ -1250,6 +1269,14 @@ export const App = () => {
 
   const handleRowDelete = useCallback((nodeId: string, rowId: string) => {
     setScene((current) => deleteRow(current, asNodeId(nodeId), asRowId(rowId)));
+  }, []);
+
+  const handleRowMove = useCallback((
+    nodeId: string,
+    rowId: string,
+    direction: "up" | "down",
+  ) => {
+    setScene((current) => moveRow(current, asNodeId(nodeId), asRowId(rowId), direction));
   }, []);
 
   const handleSectionAdd = useCallback((nodeId: string) => {
@@ -2116,6 +2143,9 @@ export const App = () => {
           onUpdateRow={handleRowUpdate}
           onAddRow={handleRowAdd}
           onDeleteRow={handleRowDelete}
+          onMoveRow={handleRowMove}
+          onFocusRow={(nodeId, rowId) =>
+            handleCanvasTextDoubleClick(nodeId, { kind: "rowName", rowId })}
           onAddSection={handleSectionAdd}
           onUpdateSection={handleSectionUpdate}
           onDeleteSection={handleSectionDelete}
@@ -2131,30 +2161,14 @@ export const App = () => {
         />
 
         {codePanelVisible ? (
-          <Suspense
-            fallback={
-              <aside className="code-panel code-panel-loading" aria-label="Loading export panel">
-                <div className="code-panel-head">
-                  <div>
-                    {/* <div className="code-panel-kicker">Export</div> */}
-                    <h2>Export to Typst</h2>
-                  </div>
-                </div>
-                <div className="code-panel-scroll">
-                  <p className="code-hint">Loading the Typst compiler…</p>
-                </div>
-              </aside>
-            }
-          >
-            <CodePanel
-              scene={scene}
-              layout={layout}
-              selectedNodeIds={selectedNodeIds}
-              selectedEdgeId={selectedEdgeId}
-              assets={exportAssets}
-              onClose={() => setCodePanelVisible(false)}
-            />
-          </Suspense>
+          <CodePanel
+            scene={scene}
+            layout={layout}
+            selectedNodeIds={selectedNodeIds}
+            selectedEdgeId={selectedEdgeId}
+            assets={exportAssets}
+            onClose={() => setCodePanelVisible(false)}
+          />
         ) : null}
       </main>
 

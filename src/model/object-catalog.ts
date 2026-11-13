@@ -315,8 +315,7 @@ const entityTable = (frame: Rect): TableNode => ({
   header: {},
   sections: [
     section("attributes", [
-      row("id", { type: "uuid", constraints: ["PK", "NN"] }),
-      row("name", { type: "text" }),
+      row("id", { type: "uuid", constraints: ["PK"] }),
     ]),
   ],
 });

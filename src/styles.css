@@ -1464,6 +1464,58 @@ button {
   background: #dbeafe;
 }
 
+.square-action.on {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: var(--accent);
+}
+
+.row-move-button {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--muted);
+}
+
+.square-action.row-move-button:not(:disabled):hover {
+  border-color: #c9c2b5;
+  background: #f7f5f0;
+  color: var(--ink);
+}
+
+.square-action:disabled {
+  border-color: var(--line);
+  background: #f7f5f0;
+  color: #b8b1a5;
+  cursor: default;
+}
+
+.table-name-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.table-name-row .field-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.weak-toggle {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.row-move-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.row-move-head-actions .square-action {
+  margin-bottom: 0;
+}
+
 .terminal-text-field input {
   height: 26px;
 }

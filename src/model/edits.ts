@@ -436,6 +436,72 @@ export const addRow = (
     return withSections(node, next);
   });
 
+export type RowMoveDirection = "up" | "down";
+
+/**
+ * Moves a row one slot in the flattened row order. At a section edge the row
+ * crosses into the neighbouring section instead of stopping at the boundary;
+ * its row id is preserved, so the open row menu keeps its focus.
+ */
+export const moveRow = (
+  scene: SceneDocument,
+  nodeId: NodeId,
+  rowId: RowId,
+  direction: RowMoveDirection,
+): SceneDocument =>
+  updateNode(scene, nodeId, (node) => {
+    if (node.kind !== "table" && node.kind !== "relationAttribute") return node;
+    const sections = tableSections(node).map((section) => ({
+      ...section,
+      rows: [...section.rows],
+    }));
+    let sectionIndex = -1;
+    let rowIndex = -1;
+    for (let index = 0; index < sections.length; index += 1) {
+      const found = sections[index]?.rows.findIndex((row) => row.id === rowId) ?? -1;
+      if (found >= 0) {
+        sectionIndex = index;
+        rowIndex = found;
+        break;
+      }
+    }
+    const section = sections[sectionIndex];
+    if (section === undefined || rowIndex < 0) return node;
+
+    if (direction === "up") {
+      if (rowIndex > 0) {
+        const rows = section.rows;
+        const previousRow = rows[rowIndex - 1];
+        const currentRow = rows[rowIndex];
+        if (previousRow !== undefined && currentRow !== undefined) {
+          rows[rowIndex - 1] = currentRow;
+          rows[rowIndex] = previousRow;
+        }
+      } else {
+        const previous = sections[sectionIndex - 1];
+        if (previous === undefined) return node;
+        const [moved] = section.rows.splice(rowIndex, 1);
+        if (moved !== undefined) previous.rows.push(moved);
+      }
+    } else {
+      if (rowIndex < section.rows.length - 1) {
+        const rows = section.rows;
+        const nextRow = rows[rowIndex + 1];
+        const currentRow = rows[rowIndex];
+        if (nextRow !== undefined && currentRow !== undefined) {
+          rows[rowIndex + 1] = currentRow;
+          rows[rowIndex] = nextRow;
+        }
+      } else {
+        const next = sections[sectionIndex + 1];
+        if (next === undefined) return node;
+        const [moved] = section.rows.splice(rowIndex, 1);
+        if (moved !== undefined) next.rows.unshift(moved);
+      }
+    }
+    return withSections(node, sections);
+  });
+
 export const deleteRow = (
   scene: SceneDocument,
   nodeId: NodeId,

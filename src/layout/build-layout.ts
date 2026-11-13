@@ -211,17 +211,23 @@ const headerText = (
     : node.textStyle;
   const style = resolveTextStyle(node.style.headerText, override);
   const maxWidth = node.frame.width - node.style.paddingX * 2;
+  const stereotype =
+    node.kind === "table" && node.tableKind === "entity" && node.header.weak === true
+      ? "weak"
+      : node.kind === "table"
+        ? node.header.stereotype
+        : undefined;
   return {
     text: measurer.measure(node.name, style, maxWidth),
     stereotype:
-      node.kind === "table" && node.header.stereotype
-        ? measurer.measure(`«${node.header.stereotype}»`, resolveTextStyle({
+      stereotype === undefined
+        ? undefined
+        : measurer.measure(`«${stereotype}»`, resolveTextStyle({
             ...style,
             fontSize: Math.max(7, style.fontSize - 2),
             weight: 400,
             italic: true,
-          }, override), maxWidth)
-        : undefined,
+          }, override), maxWidth),
   };
 };
 
@@ -296,7 +302,15 @@ const measureTable = (
     const rows: RowBand[] = [];
     for (const row of section.rows) {
       const rowFrame = rect(frame.x, cursor, frame.width, rowHeight);
-      const badges = badgeLayout(row, style, frame, cursor, rowHeight, measurer);
+      const badges = badgeLayout(
+        row,
+        style,
+        frame,
+        cursor,
+        rowHeight,
+        measurer,
+        node.kind === "table" && node.tableKind === "entity" && node.header.weak === true,
+      );
       const badgeWidth = badges.reduce((sum, badge) => sum + badge.frame.width + 3, 0);
       const displayText = formatRow(row, false);
       const rowStyle = resolveTextStyle(style.text, row.textStyle);
@@ -403,6 +417,7 @@ const badgeLayout = (
   top: number,
   rowHeight: number,
   measurer: TextMeasurer,
+  weakEntity: boolean,
 ): RowBand["badgeFrames"] => {
   const constraints = row.constraints ?? [];
   if (constraints.length === 0) return [];
@@ -416,10 +431,13 @@ const badgeLayout = (
   const result: { label: string; frame: Rect }[] = [];
   let right = rectRight(frame) - style.paddingX;
   for (const constraint of reversed) {
-    const measurement = measurer.measure(constraint, badgeStyle);
+    // A weak entity has a partial key, not a primary key; the ER convention
+    // marks it as D while the stored constraint remains PK.
+    const label = weakEntity && constraint === "PK" ? "D" : constraint;
+    const measurement = measurer.measure(label, badgeStyle);
     const width = measurement.width + 5;
     const badgeFrame = rect(right - width, top + (rowHeight - badgeHeight) / 2, width, badgeHeight);
-    result.unshift({ label: constraint, frame: badgeFrame });
+    result.unshift({ label, frame: badgeFrame });
     right -= width + 3;
   }
   return result;
