@@ -48,9 +48,9 @@ export interface PageSize {
 
 export const ZERO_MARGINS: PageMargins = {
   top: 0,
-  right: 25,
+  right: 0,
   bottom: 0,
-  left: 25,
+  left: 0,
 };
 
 export const DEFAULT_PAGE: PageSpec = {
@@ -58,7 +58,7 @@ export const DEFAULT_PAGE: PageSpec = {
   customWidth: 210,
   customHeight: 297,
   unit: "mm",
-  margins: ZERO_MARGINS,
+  margins: {...ZERO_MARGINS, left: 25, right: 25},
 };
 
 /** Supports older persisted settings that predate the margin fields. */
