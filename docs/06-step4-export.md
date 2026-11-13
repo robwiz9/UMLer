@@ -123,7 +123,7 @@ object is exactly as large in a one-object selection as in the full diagram.
   placement: none,
   numbering: none,
   gap: 6pt,
-  caption: text(size: 9.5pt, fill: rgb("#555555"))[#("ER — commerce")],
+  caption: [#("ER — commerce")],
 )[
   #align(center)[
     #canvas(length: 1pt, padding: 0pt, {

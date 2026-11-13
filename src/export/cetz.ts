@@ -1170,7 +1170,7 @@ const imageReferences = (
 /* ------------------------------------------------------------------------- */
 
 const textExprForCaption = (text: string, size: number, color: string): string =>
-  `text(size: ${num(size)}pt, fill: ${colorExpr(color)})[#(${quote(text)})]`;
+  `[#(${quote(text)})]`;
 
 export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportResult => {
   const { scene, layout, settings, selectedNodeIds } = options;
