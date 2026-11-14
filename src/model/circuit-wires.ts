@@ -147,7 +147,7 @@ export const nearestCircuitJunction = (
   let best: CircuitJunctionNode | undefined;
   let bestDistance = tolerance;
   for (const node of Object.values(scene.nodes)) {
-    if (node.kind !== "circuitJunction") continue;
+    if (node.kind !== "circuitJunction" || node.generatedBranch === true) continue;
     const distance = length(sub(rectCenter(node.frame), at));
     if (distance <= bestDistance) {
       best = node;
@@ -870,7 +870,10 @@ export const createShiftDragBranchesResult = (
         node.rotation,
       );
       const group1Point = add(originalPoint, scale(normal, distance));
-      const group1 = createCircuitJunction(scene, group1Point, "filled");
+      const group1 = {
+        ...createCircuitJunction(scene, group1Point, "filled"),
+        generatedBranch: true,
+      };
       nodes[group1.id] = group1;
       const group1Ref: CircuitSourceRef = {
         nodeId: group1.id,
@@ -890,7 +893,10 @@ export const createShiftDragBranchesResult = (
       let dynamicEdge: SceneEdge | undefined;
       if (distance > 0) {
         const group2Point = add(finalPoint, scale(normal, distance));
-        group2 = createCircuitJunction(scene, group2Point, "none");
+        group2 = {
+          ...createCircuitJunction(scene, group2Point, "none"),
+          generatedBranch: true,
+        };
         nodes[group2.id] = group2;
         const group2Ref: CircuitSourceRef = {
           nodeId: group2.id,
@@ -991,11 +997,14 @@ export const createDuplicateParallelBranches = (
         duplicate.mirrorX === true,
         duplicate.mirrorY === true,
       );
-      const group1 = createCircuitJunction(
-        scene,
-        add(sourcePinPoint, scale(normal, offset)),
-        "filled",
-      );
+      const group1 = {
+        ...createCircuitJunction(
+          scene,
+          add(sourcePinPoint, scale(normal, offset)),
+          "filled",
+        ),
+        generatedBranch: true,
+      };
       nodes[group1.id] = group1;
       const group1Ref: CircuitSourceRef = {
         nodeId: group1.id,
@@ -1015,11 +1024,14 @@ export const createDuplicateParallelBranches = (
       );
       edges[sourceStub.id] = sourceStub;
 
-      const group2 = createCircuitJunction(
-        scene,
-        add(duplicatePinPoint, scale(normal, offset)),
-        "none",
-      );
+      const group2 = {
+        ...createCircuitJunction(
+          scene,
+          add(duplicatePinPoint, scale(normal, offset)),
+          "none",
+        ),
+        generatedBranch: true,
+      };
       nodes[group2.id] = group2;
       group2Ids.push(group2.id);
       const group2Ref: CircuitSourceRef = {
@@ -1151,7 +1163,13 @@ const collapseRedundantCollinearJunctions = (
     const nodes: Record<string, SceneNode> = { ...current.nodes };
     const edges: Record<string, SceneEdge> = { ...current.edges };
     for (const node of Object.values(current.nodes)) {
-      if (node.kind !== "circuitJunction" || node.name.length > 0) continue;
+      if (
+        node.kind !== "circuitJunction" ||
+        node.generatedBranch === true ||
+        node.name.length > 0
+      ) {
+        continue;
+      }
       const incident = Object.values(edges).filter(
         (edge) =>
           edge.semantic.family === "circuit" &&
@@ -1234,7 +1252,11 @@ export const mergeCoincidentCircuitConnections = (
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   const edges: Record<string, SceneEdge> = { ...scene.edges };
 
-  const junctionIds = () => Object.keys(nodes).filter((id) => nodes[id]?.kind === "circuitJunction");
+  const junctionIds = () => Object.keys(nodes).filter(
+    (id) =>
+      nodes[id]?.kind === "circuitJunction" &&
+      (nodes[id] as CircuitJunctionNode).generatedBranch !== true,
+  );
   const ids = junctionIds();
   for (let index = 0; index < ids.length; index += 1) {
     const keeperId = asNodeId(ids[index] ?? "");
@@ -1305,7 +1327,8 @@ export const mergeCoincidentCircuitConnections = (
     }
   }
   const junctions = Object.values(nodes).filter(
-    (node): node is CircuitJunctionNode => node.kind === "circuitJunction",
+    (node): node is CircuitJunctionNode =>
+      node.kind === "circuitJunction" && node.generatedBranch !== true,
   );
   const addZeroWire = (
     source: CircuitSourceRef,
@@ -1536,7 +1559,10 @@ export const mergeNearbyCircuitJunctions = (
   const grid = Math.max(1, scene.canvas.grid.size);
   const tolerance = grid * 0.5 - 1e-6;
   const junctionIds = Object.keys(scene.nodes).filter(
-    (id) => scene.nodes[id]?.kind === "circuitJunction",
+    (id) => {
+      const node = scene.nodes[id];
+      return node?.kind === "circuitJunction" && node.generatedBranch !== true;
+    },
   );
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   const edges: Record<string, SceneEdge> = { ...scene.edges };
@@ -1645,7 +1671,13 @@ export const normalizeCircuitJunctionStyles = (
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   let changed = false;
   for (const node of Object.values(scene.nodes)) {
-    if (node.kind !== "circuitJunction" || node.junctionStyle !== "none") continue;
+    if (
+      node.kind !== "circuitJunction" ||
+      node.junctionStyle !== "none" ||
+      node.generatedBranch === true
+    ) {
+      continue;
+    }
     const connections = Object.values(scene.edges).filter(
       (edge) =>
         edge.semantic.family === "circuit" &&
@@ -1674,7 +1706,10 @@ export const normalizeCircuitPinConnections = (
   // First merge junction nodes that occupy the same point; multiple pins
   // landing together must share one junction, not one junction per pin.
   const junctionIds = Object.keys(current.nodes).filter(
-    (id) => current.nodes[id]?.kind === "circuitJunction",
+    (id) => {
+      const node = current.nodes[id];
+      return node?.kind === "circuitJunction" && node.generatedBranch !== true;
+    },
   );
   for (let index = 0; index < junctionIds.length; index += 1) {
     const keeperId = asNodeId(junctionIds[index] ?? "");

@@ -256,6 +256,16 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
       ) {
         error("circuit/label-offset", `${path}.labelOffset`, "labelOffset must have finite coordinates");
       }
+      if (
+        node.generatedBranch !== undefined &&
+        typeof node.generatedBranch !== "boolean"
+      ) {
+        error(
+          "circuit/branch-marker",
+          `${path}.generatedBranch`,
+          "generatedBranch must be a boolean",
+        );
+      }
     }
 
     if (

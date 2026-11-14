@@ -260,6 +260,8 @@ export interface CircuitComponentNode extends NodeBase {
 export interface CircuitJunctionNode extends NodeBase {
   readonly kind: "circuitJunction";
   readonly junctionStyle: CircuitJunctionStyle;
+  /** Generated branch intermediate; must not be merged away during normalization. */
+  readonly generatedBranch?: boolean;
   /** Label anchor in scene coordinates, relative to the junction centre. */
   readonly labelOffset?: Point;
   readonly style: ShapeNodeStyle;
