@@ -216,7 +216,8 @@ chooser opens.
   at the nearest grid point and splits the wire. A wire between two junctions can be dragged sideways
   (perpendicular to itself), carrying both junctions and stretching perpendicular branches. None-style
   junctions have no hit area, so dragging at their bends selects the wire; visible junctions select normally.
-  At most one wire is kept between the same two node endpoints. Orthogonal wire translation hides any
+  At most one wire is kept between the same two attachment ports; different pins on the same object pair
+  remain valid, so a simple loop needs no junction. Orthogonal wire translation hides any
   moved two-wire junction after pin/duplicate normalization; circuit diagrams show only the Layout
   panel’s “Visual layout refinements” checkbox (on by default), which disables this. Other diagram
   types do not show that checkbox. Junction hit, hover and selection regions are one-grid-square
@@ -383,7 +384,7 @@ Clipboard checks passed (26 assertions).
 
 Conversion checks passed (29 assertions).
 
-Circuit checks passed (102 assertions).
+Circuit checks passed (103 assertions).
 
 GitHub project checks passed (33 assertions).
 
@@ -562,6 +563,7 @@ CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ
 **Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
 document builder, and an optional image-resources manifest. Keep the serializer as the single source of
 geometry; the preview and any file export must consume the same `CetzExportResult`.
+
 
 
 

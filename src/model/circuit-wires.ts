@@ -8,7 +8,7 @@
 import type { SceneDocument } from "./scene.ts";
 import type { CircuitJunctionNode, SceneNode } from "./nodes.ts";
 import type { EdgeAttachment, NodePortRef, SceneEdge } from "./edges.ts";
-import { NO_MARKER } from "./edges.ts";
+import { NO_MARKER, portKey } from "./edges.ts";
 import type { Point, Rect } from "./geometry.ts";
 import { add, length, point, rect, rectCenter, scale, snap, sub } from "./geometry.ts";
 import { circuitComponent } from "./circuit-catalog.ts";
@@ -1450,7 +1450,9 @@ export const normalizeCircuitDuplicateConnections = (
     ) {
       continue;
     }
-    const pair = [String(edge.source.nodeId), String(edge.target.nodeId)].sort().join("|");
+    const sourceKey = portKey(edge.source.nodeId, edge.source.port);
+    const targetKey = portKey(edge.target.nodeId, edge.target.port);
+    const pair = [sourceKey, targetKey].sort().join("|");
     const group = groups.get(pair);
     if (group === undefined) groups.set(pair, [edge]);
     else group.push(edge);

@@ -1658,9 +1658,10 @@ behaviour; where earlier sections differ, this section wins.
     endpoint junctions together. Other branches at those junctions must be parallel to that movement
     axis; they stretch/reroute with the junctions. `none`-style junctions have no hit area, so dragging
     at a wire bend selects the wire; filled/hollow junctions remain directly selectable.
-36. **Unique node-pair connections.** Normalization keeps at most one circuit wire between the same two
-    node endpoints (junction–junction, junction–object, or object–object). Duplicate parallel wires are
-    removed, preferring the labeled/visible copy.
+36. **Unique port-pair connections.** Normalization keeps at most one circuit wire between the same two
+    attachment ports. Duplicate parallel wires between those exact ports are removed, preferring the
+    labeled/visible copy. Different pins on the same object pair remain valid, so a simple two-wire loop
+    between two components needs no junction.
 37. **Visual layout refinements.** In circuit diagrams the Layout panel shows only the “Visual layout
     refinements” checkbox (default on); other diagram types do not show it. When enabled, every junction
     moved by orthogonal wire translation with exactly two incident wires switches to `none` style.
@@ -1682,7 +1683,7 @@ behaviour; where earlier sections differ, this section wins.
     auto-merged junction aligned on the first move instead of leaving it behind and generating an
     off-grid duplicate.
 
-The circuit test suite now covers these cases (102 assertions at the time of writing).
+The circuit test suite now covers these cases (103 assertions at the time of writing).
 
 ---
 
@@ -1710,6 +1711,7 @@ The circuit test suite now covers these cases (102 assertions at the time of wri
 - [ ] CeTZ export contains the same components, rotations, junction styles, labels and hops as the
       canvas, with no editor overlays.
 - [ ] `npm run check` passes, including new circuit tests and all existing fixture checks.
+
 
 
 

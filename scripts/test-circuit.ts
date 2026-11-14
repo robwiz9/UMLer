@@ -581,6 +581,20 @@ check(
   Object.keys(duplicateConnections.edges).length === 1,
   "duplicate wires between the same two nodes should collapse to one",
 );
+const loopConnections = normalizeCircuitDuplicateConnections(withNodes(
+  [
+    component("v1", "V1", "voltage-source", rect(0, 0, 36, 54)),
+    component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
+  ],
+  [
+    wire("loop_w1", "v1", "+", "r1", "A"),
+    wire("loop_w2", "v1", "−", "r1", "B"),
+  ],
+));
+check(
+  Object.keys(loopConnections.edges).length === 2,
+  "a two-point loop between different pins should not be deduplicated",
+);
 
 // --- orthogonal corner junctions -------------------------------------------
 const cornerScene = withNodes(
