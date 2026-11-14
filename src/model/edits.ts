@@ -743,7 +743,13 @@ export const rerouteEdge = (scene: SceneDocument, edgeId: EdgeId): SceneDocument
         }
       : {
           ...edge,
-          routing: { ...edge.routing, mode: "orthogonal", avoidObstacles: true },
+          routing: {
+            ...edge.routing,
+            mode: "orthogonal",
+            avoidObstacles: true,
+            avoidWireOverlap: true,
+            obstaclePadding: Math.max(2, edge.routing.obstaclePadding),
+          },
         });
 
 export const setEdgeLocked = (

@@ -170,7 +170,7 @@ export const routeOrthogonalAStar = (input: OrthogonalRouterInput): OrthogonalRo
     y: input.target.y + input.targetNormal.y * stub,
   };
   const obstacles = input.obstacles.map((rect) => inflate(rect, padding));
-  const bendPenalty = input.bendPenalty ?? 18;
+  const bendPenalty = input.bendPenalty ?? 120;
 
   const xs = uniqueSorted([
     start.x,

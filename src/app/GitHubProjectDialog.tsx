@@ -8,9 +8,11 @@ import {
   isGitHubProjectFile,
   joinGitHubFolder,
   joinGitHubPath,
+  normalizeGitHubBranchName,
 } from "../model/github-project.ts";
 import { deserializeProjectFile } from "../model/persistence.ts";
 import {
+  createBranch,
   describeGitHubError,
   getProjectFile,
   listBranches,
@@ -97,6 +99,11 @@ export const GitHubProjectDialog = ({
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [branch, setBranch] = useState(initialTarget?.branch ?? "");
   const [loadingBranches, setLoadingBranches] = useState(false);
+  const [showNewBranch, setShowNewBranch] = useState(false);
+  const [newBranchName, setNewBranchName] = useState("");
+  const [branchBusy, setBranchBusy] = useState(false);
+  const [branchError, setBranchError] = useState<string | null>(null);
+  const [branchNotice, setBranchNotice] = useState<string | null>(null);
 
   const [folder, setFolder] = useState(initialFolderOf(initialTarget));
   const [fileName, setFileName] = useState(initialFileNameOf(initialTarget));
@@ -435,6 +442,10 @@ export const GitHubProjectDialog = ({
     setNewFolderName("");
     setFolderError(null);
     setOpenError(null);
+    setShowNewBranch(false);
+    setNewBranchName("");
+    setBranchError(null);
+    setBranchNotice(null);
   }, [repos]);
 
   const chooseBranch = useCallback((name: string) => {
@@ -443,7 +454,59 @@ export const GitHubProjectDialog = ({
     setNewFolderName("");
     setFolderError(null);
     setOpenError(null);
+    setBranchError(null);
+    setBranchNotice(null);
   }, []);
+
+  const toggleNewBranch = useCallback(() => {
+    setShowNewBranch((value) => !value);
+    setNewBranchName("");
+    setBranchError(null);
+  }, []);
+
+  const createNewBranch = useCallback(async () => {
+    if (
+      session === null ||
+      selectedRepo === undefined ||
+      branch.length === 0 ||
+      branchBusy
+    ) {
+      return;
+    }
+    let name: string;
+    try {
+      name = normalizeGitHubBranchName(newBranchName);
+    } catch (error) {
+      setBranchError(error instanceof Error ? error.message : "Choose a valid branch name.");
+      return;
+    }
+    setBranchBusy(true);
+    setBranchError(null);
+    setBranchNotice(null);
+    setOpenError(null);
+    try {
+      await createBranch(
+        session.token,
+        { owner: selectedRepo.owner, repo: selectedRepo.name, branch },
+        name,
+      );
+      setBranches((current) =>
+        current.some((entry) => entry.name === name)
+          ? current
+          : [...current, { name }],
+      );
+      setBranch(name);
+      setNewBranchName("");
+      setShowNewBranch(false);
+      setBranchNotice(
+        `Created branch “${name}”. Projects opened and saved from here use this branch.`,
+      );
+    } catch (error) {
+      setBranchError(describeGitHubError(error));
+    } finally {
+      setBranchBusy(false);
+    }
+  }, [branch, branchBusy, newBranchName, selectedRepo, session]);
 
   const useNewFolder = useCallback(() => {
     setFolderError(null);
@@ -764,7 +827,55 @@ export const GitHubProjectDialog = ({
                 ))}
               </select>
             </label>
-            {loadingBranches ? <span className="gh-note">Loading branches…</span> : null}
+            <div className="gh-branch-tools">
+              <button
+                type="button"
+                className="gh-link-button"
+                onClick={toggleNewBranch}
+                disabled={loadingBranches || branchBusy || branch.length === 0}
+              >
+                {showNewBranch ? "Cancel new branch" : "New branch…"}
+              </button>
+              {loadingBranches ? <span className="gh-note">Loading branches…</span> : null}
+            </div>
+            {showNewBranch ? (
+              <>
+                <div className="gh-branch-create">
+                  <input
+                    id="gh-new-branch"
+                    name="gh-new-branch"
+                    value={newBranchName}
+                    onChange={(event) => {
+                      setNewBranchName(event.target.value);
+                      setBranchError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void createNewBranch();
+                      }
+                    }}
+                    placeholder="feature/my-change"
+                    spellCheck={false}
+                    disabled={branchBusy}
+                  />
+                  <button
+                    type="button"
+                    className="dialog-button"
+                    onClick={() => void createNewBranch()}
+                    disabled={branchBusy || newBranchName.trim().length === 0}
+                  >
+                    {branchBusy ? "Creating…" : "Create branch"}
+                  </button>
+                </div>
+                <span className="gh-note">
+                  Created from <strong>{branch}</strong>. Open the project from this
+                  branch so saved edits stay on it.
+                </span>
+              </>
+            ) : null}
+            {branchNotice !== null ? <span className="gh-note">{branchNotice}</span> : null}
+            {branchError !== null ? <p className="gh-error">{branchError}</p> : null}
           </div>
 
           <div className="gh-location">

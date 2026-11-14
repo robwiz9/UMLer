@@ -7,8 +7,13 @@
  */
 
 import type { NodeId, RowId, SectionId, AssetId, ActivationId } from "./ids.ts";
-import type { Rect } from "./geometry.ts";
+import type { Point, Rect } from "./geometry.ts";
 import type { Color, ShapeNodeStyle, TableNodeStyle, TextStyleOverride } from "./styles.ts";
+import type {
+  CircuitComponentKind,
+  CircuitJunctionStyle,
+  Rotation45,
+} from "./circuit.ts";
 
 export type Visibility = "+" | "-" | "#" | "~";
 export type ErConstraint = "PK" | "FK" | "NN" | "UQ";
@@ -230,6 +235,36 @@ export interface CommentNode extends NodeBase {
   readonly style: ShapeNodeStyle;
 }
 
+/** A schematic component with a fixed symbol and fixed electrical pins. */
+export interface CircuitComponentNode extends NodeBase {
+  readonly kind: "circuitComponent";
+  readonly component: CircuitComponentKind;
+  /** Clockwise, screen orientation, always a multiple of 45°. */
+  readonly rotation: Rotation45;
+  /** Geometric mirror flips; each mirror button toggles one flag. */
+  readonly mirrorX?: boolean;
+  readonly mirrorY?: boolean;
+  /** Pin-pair swaps applied by the Change orientation action. */
+  readonly swapPinsX?: boolean;
+  readonly swapPinsY?: boolean;
+  /** Label anchor in the component's local frame, relative to its centre. */
+  readonly labelOffset?: Point;
+  readonly style: ShapeNodeStyle;
+  /** Switch-specific: blade closed (ON) instead of open (OFF). */
+  readonly switchClosed?: boolean;
+  /** Reserved for a future value line (e.g. 10 kΩ). */
+  readonly value?: string;
+}
+
+/** A branch point in a circuit. The visible dot is the junction style. */
+export interface CircuitJunctionNode extends NodeBase {
+  readonly kind: "circuitJunction";
+  readonly junctionStyle: CircuitJunctionStyle;
+  /** Label anchor in scene coordinates, relative to the junction centre. */
+  readonly labelOffset?: Point;
+  readonly style: ShapeNodeStyle;
+}
+
 export type SceneNode =
   | TableNode
   | RelationAttributeNode
@@ -242,7 +277,9 @@ export type SceneNode =
   | LifelineNode
   | FrameNode
   | ImageNode
-  | CommentNode;
+  | CommentNode
+  | CircuitComponentNode
+  | CircuitJunctionNode;
 
 export type TableLikeNode = TableNode | RelationAttributeNode;
 

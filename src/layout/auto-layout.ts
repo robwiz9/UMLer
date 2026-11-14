@@ -90,6 +90,9 @@ export const autoLayoutFrames = (
   if (scene.meta.diagramKind === "uml-sequence") {
     return { ...EMPTY, skipped: "Sequence diagrams keep their lane/time layout." };
   }
+  if (scene.meta.diagramKind === "circuit") {
+    return { ...EMPTY, skipped: "Circuit diagrams are wired manually; automatic layout is disabled." };
+  }
 
   const containers = useCaseContainers(scene);
   const childIds = new Set(containers.keys());

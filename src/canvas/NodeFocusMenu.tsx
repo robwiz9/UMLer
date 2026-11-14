@@ -1,12 +1,84 @@
 import { useEffect, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
+import type { CircuitComponentNode, ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { CanvasTextFocusRequest } from "../model/text-targets.ts";
 import type { RowId, SectionId } from "../model/ids.ts";
 import { asSectionId } from "../model/ids.ts";
+import { normalizeRotation, type CircuitJunctionStyle } from "../model/circuit.ts";
+import { circuitComponent } from "../model/circuit-catalog.ts";
 import { TextStyleControls } from "../app/TextStyleControls.tsx";
 import { BackgroundControl } from "../app/BackgroundControl.tsx";
 import { ImageAssetControls } from "./ImageAssetControls.tsx";
+
+const RotateGlyph = ({ clockwise }: { readonly clockwise: boolean }) => (
+  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+    <g
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      transform={clockwise ? "translate(16 0) scale(-1 1)" : undefined}
+    >
+      <path d="M3.1 8a4.9 4.9 0 1 1 1.1 3.1" />
+      <path d="M2.8 4.1v3.2H6" />
+    </g>
+  </svg>
+);
+
+const MirrorGlyph = ({ axis }: { readonly axis: "horizontal" | "vertical" }) => (
+  <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+    <g
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {axis === "horizontal" ? (
+        <>
+          <path d="M8 1.8v12.4" strokeDasharray="2 2" />
+          <path d="M6.2 4.3 2.2 8l4 3.7Z" fill="currentColor" stroke="none" />
+          <path d="M9.8 4.3 13.8 8l-4 3.7Z" />
+        </>
+      ) : (
+        <>
+          <path d="M1.8 8h12.4" strokeDasharray="2 2" />
+          <path d="M4.3 6.2 8 2.2l3.7 4Z" fill="currentColor" stroke="none" />
+          <path d="M4.3 9.8 8 13.8l3.7-4Z" />
+        </>
+      )}
+    </g>
+  </svg>
+);
+
+const orientationAxisFor = (
+  node: CircuitComponentNode,
+): "horizontal" | "vertical" => {
+  const definition = circuitComponent(node.component);
+  if (definition === undefined || definition.pins.length <= 2) return "horizontal";
+  const base = definition.pins.find(
+    (pin) => Math.abs(pin.y) < 0.001 && pin.x < 0,
+  );
+  return base === undefined ? "horizontal" : "vertical";
+};
+
+const OrientationGlyph = () => (
+  <svg width="16" height="15" viewBox="0 0 18 16" aria-hidden="true">
+    <g
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2 4.5h10.1" />
+      <path d="M9.3 2.3 12.1 4.5 9.3 6.7" />
+      <path d="M16 11.5H5.9" />
+      <path d="M8.7 9.3 5.9 11.5 8.7 13.7" />
+    </g>
+  </svg>
+);
 
 interface NodeFocusMenuProps {
   readonly node: SceneNode;
@@ -22,6 +94,8 @@ interface NodeFocusMenuProps {
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
   readonly onDeleteNode: (nodeId: string) => void;
+  readonly onMergeJunction?: (nodeId: string) => void;
+  readonly junctionWireCount?: number;
   readonly onAddActivation: (nodeId: string, worldY: number) => void;
   readonly imageAssets: Readonly<Record<string, ImageAsset>>;
   readonly onAssignImage: (nodeId: string, file: File) => Promise<void>;
@@ -105,6 +179,8 @@ export const NodeFocusMenu = ({
   onUpdateSection,
   onDeleteSection,
   onDeleteNode,
+  onMergeJunction,
+  junctionWireCount = 0,
   onAddActivation,
   imageAssets,
   onAssignImage,
@@ -139,7 +215,13 @@ export const NodeFocusMenu = ({
       frame: "Frame",
       image: "Image",
       comment: "Comment",
+      circuitComponent: "Component",
+      circuitJunction: "Junction",
     };
+    const objectTitle =
+      node.kind === "circuitComponent"
+        ? circuitComponent(node.component)?.label ?? kindTitle[node.kind]
+        : kindTitle[node.kind] ?? node.kind;
     const lockButton = (
       <button
         type="button"
@@ -155,7 +237,7 @@ export const NodeFocusMenu = ({
     const head = (
       <div className="popover-head">
         <div>
-          <strong>{kindTitle[node.kind] ?? node.kind}</strong>
+          <strong>{objectTitle}</strong>
           <span>{node.kind === "comment" ? "note" : node.name}</span>
         </div>
         {focus.kind === "lifelineSpine" ? (
@@ -282,14 +364,187 @@ export const NodeFocusMenu = ({
         ) : null}
         <label className="field-label">
           {label}
-          <input id={id} name={id} value={value} onChange={(event) => update(event.target.value)} />
+          <input
+            id={id}
+            name={id}
+            value={value}
+            data-label-scope={
+              node.kind === "circuitComponent" || node.kind === "circuitJunction"
+                ? "node"
+                : undefined
+            }
+            data-label-node-id={
+              node.kind === "circuitComponent" || node.kind === "circuitJunction"
+                ? node.id
+                : undefined
+            }
+            placeholder={
+              node.kind === "circuitComponent" || node.kind === "circuitJunction"
+                ? 'e.g. R_1 or R_"12"'
+                : undefined
+            }
+            onChange={(event) => update(event.target.value)}
+          />
         </label>
+        {node.kind === "circuitComponent" ? (
+          <div className="circuit-rotation-controls">
+            <span className="field-label">Rotation</span>
+            <div className="circuit-rotation-row">
+              <button
+                type="button"
+                className="chip"
+                onClick={() =>
+                  onUpdateNode(node.id, {
+                    rotation: normalizeRotation(node.rotation - 45),
+                  })
+                }
+                title="Rotate 45° counter-clockwise"
+                aria-label="Rotate 45 degrees counter-clockwise"
+              >
+                <RotateGlyph clockwise={false} />
+              </button>
+              <span className="circuit-rotation-value">{node.rotation}°</span>
+              <button
+                type="button"
+                className="chip"
+                onClick={() =>
+                  onUpdateNode(node.id, {
+                    rotation: normalizeRotation(node.rotation + 45),
+                  })
+                }
+                title="Rotate 45° clockwise"
+                aria-label="Rotate 45 degrees clockwise"
+              >
+                <RotateGlyph clockwise={true} />
+              </button>
+              <span className="circuit-rotation-divider" aria-hidden="true" />
+              <button
+                type="button"
+                className="chip"
+                onClick={() =>
+                  onUpdateNode(node.id, { mirrorY: node.mirrorY !== true })
+                }
+                title="Mirror vertically (wires follow the mirrored pins)"
+                aria-label="Mirror vertically"
+              >
+                <MirrorGlyph axis="vertical" />
+              </button>
+              <button
+                type="button"
+                className="chip"
+                onClick={() =>
+                  onUpdateNode(node.id, { mirrorX: node.mirrorX !== true })
+                }
+                title="Mirror horizontally (wires follow the mirrored pins)"
+                aria-label="Mirror horizontally"
+              >
+                <MirrorGlyph axis="horizontal" />
+              </button>
+              <button
+                type="button"
+                className="chip"
+                onClick={() => {
+                  const axis = orientationAxisFor(node);
+                  onUpdateNode(
+                    node.id,
+                    axis === "horizontal"
+                      ? {
+                          mirrorX: node.mirrorX !== true,
+                          swapPinsX: node.swapPinsX !== true,
+                        }
+                      : {
+                          mirrorY: node.mirrorY !== true,
+                          swapPinsY: node.swapPinsY !== true,
+                        },
+                  );
+                }}
+                title="Change orientation and rewire the mirrored endings"
+                aria-label="Change orientation"
+              >
+                <OrientationGlyph />
+              </button>
+            </div>
+            {/* <div className="circuit-rotation-row">
+              {ROTATIONS.map((rotation) => (
+                <button
+                  key={rotation}
+                  type="button"
+                  className={`chip ${node.rotation === rotation ? "on" : ""}`}
+                  onClick={() => onUpdateNode(node.id, { rotation })}
+                  title={`Rotate to ${rotation}°`}
+                >
+                  {rotation}°
+                </button>
+              ))}
+            </div> */}
+          </div>
+        ) : null}
+        {node.kind === "circuitComponent" && node.component === "switch" ? (
+          <div className="circuit-junction-controls">
+            <span className="field-label">Switch state</span>
+            <div className="circuit-rotation-row">
+              <button
+                type="button"
+                className={`chip ${node.switchClosed === true ? "on" : ""}`}
+                onClick={() => onUpdateNode(node.id, { switchClosed: true })}
+              >
+                ON
+              </button>
+              <button
+                type="button"
+                className={`chip ${node.switchClosed !== true ? "on" : ""}`}
+                onClick={() => onUpdateNode(node.id, { switchClosed: false })}
+              >
+                OFF
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {node.kind === "circuitJunction" ? (
+          <div className="circuit-junction-controls">
+            <span className="field-label">Dot style</span>
+            <div className="circuit-rotation-row">
+              {(["filled", "solid", "hollow", "none"] as const satisfies readonly CircuitJunctionStyle[]).map(
+                (style) => (
+                  <button
+                    key={style}
+                    type="button"
+                    className={`chip ${node.junctionStyle === style ? "on" : ""}`}
+                    onClick={() => onUpdateNode(node.id, { junctionStyle: style })}
+                  >
+                    {style === "filled"
+                      ? "● Filled"
+                      : style === "solid"
+                        ? "● Filled XL"
+                        : style === "hollow"
+                          ? "○ Hollow"
+                          : "None"}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+        ) : null}
         <TextStyleControls
           base={objectTextBase}
           value={node.textStyle}
           onChange={(textStyle) => onUpdateNode(node.id, { textStyle })}
         />
         <div className="focus-actions">
+          {node.kind === "circuitJunction" &&
+          junctionWireCount === 2 &&
+          onMergeJunction !== undefined ? (
+            <button
+              type="button"
+              className="editor-add"
+              onClick={() => {
+                onMergeJunction(node.id);
+                onClose();
+              }}
+            >
+              Remove Junction (merge wires)
+            </button>
+          ) : null}
           <button
             type="button"
             className="editor-add danger"

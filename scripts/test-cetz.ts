@@ -230,6 +230,21 @@ const zoomed = serialize(er.scene, {
 check(Math.abs(zoomed.fit.scale - 1.5) < 1e-9, "explicit zoom enlarges a small selection");
 check(zoomed.fit.diagramWidthPt > zoomed.selection.naturalWidth, "explicit zoom enlarges the emitted geometry");
 
+// The figure caption inherits the preview document's text size. Zoom may
+// scale the diagram, but it must not enlarge that surrounding caption.
+const previewTextSetter = (code: string): string =>
+  code.split("\n").find((line) => line.startsWith("#set text(")) ?? "";
+const defaultPreviewText = previewTextSetter(serialize(er.scene).previewCode);
+const zoomedPreviewText = previewTextSetter(zoomed.previewCode);
+check(
+  defaultPreviewText === zoomedPreviewText,
+  "diagram zoom does not change the preview document text size",
+);
+check(
+  zoomedPreviewText.includes("size: 10.5pt"),
+  "preview document text keeps its host size while the diagram scales",
+);
+
 const bigPage: PageSpec = {
   preset: "custom",
   customWidth: 2000,

@@ -10,6 +10,7 @@ interface EdgeInspectorProps {
   readonly edge: SceneEdge;
   readonly layout: EdgeLayout;
   readonly compact?: boolean;
+  readonly variant?: "default" | "circuit";
   readonly idPrefix?: string;
   readonly focusToken?: number;
   readonly labelTextStyle: TextStyle;
@@ -55,6 +56,7 @@ export const EdgeInspector = ({
   edge,
   layout,
   compact = false,
+  variant = "default",
   idPrefix = "inspector",
   focusToken = 0,
   labelTextStyle,
@@ -82,17 +84,20 @@ export const EdgeInspector = ({
     edge.labels.find((label) => label.zone === zone)?.text ?? "";
   const labelStyleFor = (zone: EdgeLabelZone): TextStyleOverride | undefined =>
     edge.labels.find((label) => label.zone === zone)?.textStyle;
+  const isCircuit = variant === "circuit" || edge.semantic.family === "circuit";
   const centerField = (
     <>
       <div className="center-label-row">
         <label className="field-label">
-          Center label
+          {isCircuit ? "Wire label" : "Center label"}
           <input
             ref={centerRef}
             id={`${idPrefix}-edge-${edge.id}-center-label`}
             name={`${idPrefix}-edge-${edge.id}-center-label`}
             value={labelFor("center")}
-            placeholder="relationship name"
+            data-label-scope={isCircuit ? "edge" : undefined}
+            data-label-edge-id={isCircuit ? edge.id : undefined}
+            placeholder={isCircuit ? 'e.g. out or V_1' : "relationship name"}
             onChange={(event) => onSetLabel("center", event.target.value)}
           />
         </label>
@@ -178,6 +183,19 @@ export const EdgeInspector = ({
       )}
     </>
   );
+
+  if (isCircuit) {
+    return (
+      <div className="edge-inspector">
+        <div className="selected-kind">Plain wire</div>
+        {centerField}
+        <p className="panel-footnote">
+          Wires have no arrowheads or line styles. Crossings get an omega bridge; a junction dot is
+          created when a wire meets another wire.
+        </p>
+      </div>
+    );
+  }
 
   if (compact) {
     return (

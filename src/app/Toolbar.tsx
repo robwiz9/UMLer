@@ -145,12 +145,13 @@ export const Toolbar = ({
       >
         ↷
       </button>
-      <button type="button" className={`tool-toggle ${gridVisible ? "on" : ""}`} onClick={onToggleGrid} title="Toggle grid">
-        # Grid
-      </button>
-      <button type="button" className={`tool-toggle ${snapEnabled ? "on" : ""}`} onClick={onToggleSnap} title="Toggle snapping">
-        ⌁ Snap
-      </button>
+      {scene.meta.diagramKind == "circuit" ? null :
+        <><button type="button" className={`tool-toggle ${gridVisible ? "on" : ""}`} onClick={onToggleGrid} title="Toggle grid">
+          # Grid
+        </button><button type="button" className={`tool-toggle ${snapEnabled ? "on" : ""}`} onClick={onToggleSnap} title="Toggle snapping">
+            ⌁ Snap
+          </button></>
+      }
       <button
         type="button"
         className={`tool-toggle ${panelVisible ? "on" : ""}`}
@@ -168,7 +169,8 @@ export const Toolbar = ({
       >
         {"</> Typst"}
       </button>
-      <label className="grid-size">
+
+      {scene.meta.diagramKind == "circuit" ? null : <label className="grid-size">
         step
         <input
           id="grid-step"
@@ -184,7 +186,7 @@ export const Toolbar = ({
           }}
         />
         pt
-      </label>
+      </label>}
     </div>
 
     <div className="topbar-group zoom-group">

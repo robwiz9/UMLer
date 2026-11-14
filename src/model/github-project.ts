@@ -122,6 +122,43 @@ export const normalizeGitHubFolderName = (raw: string): string => {
   return normalized;
 };
 
+/** Characters Git forbids anywhere in a ref name (`git-check-ref-format`). */
+const INVALID_BRANCH_CHARACTERS = /[\u0000-\u0020\u007f~^:?*[\\]/;
+
+/**
+ * Validates a branch name before it reaches GitHub. Slashes are allowed for
+ * namespaced branches such as `feature/er-export`, but every path component
+ * still has to be a valid Git ref component.
+ */
+export const normalizeGitHubBranchName = (raw: string): string => {
+  const value = raw.trim();
+  if (value.length === 0) throw new Error("Enter a branch name.");
+  if (value.length > 255) throw new Error("The branch name is too long.");
+  if (value === "HEAD" || value.startsWith("-")) {
+    throw new Error("That branch name is reserved.");
+  }
+  if (
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("//") ||
+    value.includes("..") ||
+    value.includes("@{") ||
+    value.endsWith(".") ||
+    value.endsWith(".lock")
+  ) {
+    throw new Error("That branch name is not valid.");
+  }
+  if (INVALID_BRANCH_CHARACTERS.test(value)) {
+    throw new Error("A branch name cannot contain spaces or Git special characters.");
+  }
+  for (const component of value.split("/")) {
+    if (component.length === 0 || component.startsWith(".") || component.endsWith(".lock")) {
+      throw new Error("That branch name is not valid.");
+    }
+  }
+  return value;
+};
+
 export const joinGitHubFolder = (folder: string, name: string): string => {
   const normalizedFolder = normalizeGitHubFolder(folder);
   const folderName = normalizeGitHubFolderName(name);

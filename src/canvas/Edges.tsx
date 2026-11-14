@@ -1,12 +1,13 @@
-import type { EdgeLayout, EdgeLabelLayout } from "../model/layout.ts";
+import type { EdgeLayout, EdgeLabelLayout, WireBridge } from "../model/layout.ts";
 import type { EndpointMarker } from "../model/markers.ts";
 import { markerLineInset } from "../model/markers.ts";
 import type { Point } from "../model/geometry.ts";
 import { normalize, point, sub, scale, add } from "../model/geometry.ts";
 import type { Theme } from "../model/styles.ts";
+import { RichLabelText } from "./RichText.tsx";
 
 interface EdgeLayerProps {
-  readonly edges: readonly { readonly layout: EdgeLayout; readonly markers: { readonly source: EndpointMarker; readonly target: EndpointMarker }; readonly stroke: Theme["edge"]["stroke"] }[];
+  readonly edges: readonly { readonly layout: EdgeLayout; readonly markers: { readonly source: EndpointMarker; readonly target: EndpointMarker }; readonly stroke: Theme["edge"]["stroke"]; readonly nonScalingStroke?: boolean }[];
   readonly theme: Theme;
   readonly renderLines?: boolean;
   readonly renderLabels?: boolean;
@@ -36,19 +37,7 @@ export const EdgeLabelView = ({
       fill={theme.edge.labelFill.color ?? "none"}
       stroke="none"
     />
-    <text
-      x={label.textFrame.x + label.textFrame.width / 2}
-      y={label.textFrame.y + label.textFrame.height / 2}
-      textAnchor="middle"
-      dominantBaseline="middle"
-      fontFamily={label.text.style.fontFamily}
-      fontSize={label.text.style.fontSize}
-      fontWeight={label.text.style.weight}
-      fontStyle={label.text.style.italic === true ? "italic" : "normal"}
-      fill={label.text.style.color}
-    >
-      {label.text.text}
-    </text>
+    <RichLabelText measurement={label.text} frame={label.textFrame} />
   </g>
 );
 
@@ -253,6 +242,38 @@ const EdgeGlyphs = ({
   );
 };
 
+const projectionT = (a: Point, b: Point, p: Point): number => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const denominator = dx * dx + dy * dy;
+  if (denominator === 0) return 0;
+  return ((p.x - a.x) * dx + (p.y - a.y) * dy) / denominator;
+};
+
+/** SVG path with optional omega hops. Shared by the wire layer and selection. */
+export const edgePathData = (
+  points: readonly Point[],
+  bridges: readonly WireBridge[] = [],
+): string => {
+  if (points.length < 2) return "";
+  let d = `M ${points[0]?.x ?? 0},${points[0]?.y ?? 0}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    if (a === undefined || b === undefined) continue;
+    const onSegment = bridges
+      .map((bridge) => ({ bridge, t: projectionT(a, b, bridge.at) }))
+      .filter((entry) => entry.t > 1e-6 && entry.t < 1 - 1e-6)
+      .sort((left, right) => left.t - right.t);
+    for (const { bridge } of onSegment) {
+      d += ` L ${bridge.from.x},${bridge.from.y}`;
+      d += ` C ${bridge.c1.x},${bridge.c1.y} ${bridge.c2.x},${bridge.c2.y} ${bridge.to.x},${bridge.to.y}`;
+    }
+    d += ` L ${b.x},${b.y}`;
+  }
+  return d;
+};
+
 export const EdgeLayer = ({
   edges,
   theme,
@@ -261,21 +282,21 @@ export const EdgeLayer = ({
   hiddenLabelId,
 }: EdgeLayerProps) => (
   <g pointerEvents="none">
-    {edges.map(({ layout, markers, stroke }) => {
-      const points = edgeLinePoints(layout, markers).map((p) => `${p.x},${p.y}`).join(" ");
+    {edges.map(({ layout, markers, stroke, nonScalingStroke = true }) => {
+      const points = edgeLinePoints(layout, markers);
       return (
         <g key={layout.edgeId} data-edge-id={layout.edgeId}>
           {renderLines ? (
             <>
-              <polyline
-                points={points}
+              <path
+                d={edgePathData(points, layout.bridges ?? [])}
                 fill="none"
                 stroke={stroke.color}
                 strokeWidth={stroke.width}
                 strokeDasharray={dashArray(stroke.pattern)}
-                strokeLinecap="butt"
+                strokeLinecap="round"
                 strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
+                vectorEffect={nonScalingStroke ? "non-scaling-stroke" : undefined}
               />
               <EdgeGlyphs layout={layout} markers={markers} color={stroke.color} />
             </>
@@ -293,9 +314,15 @@ export const EdgeLayer = ({
   </g>
 );
 
-export const edgeLayerItem = (layout: EdgeLayout, markers: EdgeLayerProps["edges"][number]["markers"], stroke: Theme["edge"]["stroke"]) => ({
+export const edgeLayerItem = (
+  layout: EdgeLayout,
+  markers: EdgeLayerProps["edges"][number]["markers"],
+  stroke: Theme["edge"]["stroke"],
+  nonScalingStroke = true,
+) => ({
   layout,
   markers,
   stroke,
+  nonScalingStroke,
 });
 

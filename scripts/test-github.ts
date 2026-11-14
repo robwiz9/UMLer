@@ -20,6 +20,7 @@ import {
   isGitHubProjectFile,
   joinGitHubFolder,
   joinGitHubPath,
+  normalizeGitHubBranchName,
   normalizeGitHubFilePath,
   normalizeGitHubFolder,
   normalizeGitHubFolderName,
@@ -62,6 +63,31 @@ assert(
 assert(
   joinGitHubFolder("diagrams", "nested") === "diagrams/nested",
   "new folder should join the current folder",
+);
+assert(
+  normalizeGitHubBranchName(" feature/er-export ") === "feature/er-export",
+  "branch names should trim slashes, spaces and nested names",
+);
+assert(
+  normalizeGitHubBranchName("main") === "main",
+  "simple branch names should pass validation",
+);
+assertThrows(() => normalizeGitHubBranchName(""), "empty branch names should fail");
+assertThrows(
+  () => normalizeGitHubBranchName("feature branch"),
+  "branch names with spaces should fail",
+);
+assertThrows(
+  () => normalizeGitHubBranchName("feature..branch"),
+  "branch names with double dots should fail",
+);
+assertThrows(
+  () => normalizeGitHubBranchName("/feature"),
+  "branch names with a leading slash should fail",
+);
+assertThrows(
+  () => normalizeGitHubBranchName("feature.lock"),
+  "branch names ending in .lock should fail",
 );
 assert(
   isGitHubProjectFile("order-model.umler") && !isGitHubProjectFile("order-model.uscn"),
@@ -210,6 +236,12 @@ assert(
     "Sign in again",
   ),
   "401 errors should ask the user to sign in again",
+);
+assert(
+  describeGitHubError(
+    new GitHubApiError("Reference already exists", 422),
+  ).includes("already exists"),
+  "branch creation conflicts should mention the existing branch",
 );
 
 console.log(`GitHub project checks passed (${checked} assertions).`);

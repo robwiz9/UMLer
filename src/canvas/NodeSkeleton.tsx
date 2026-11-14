@@ -6,12 +6,14 @@ import { asRowId, asSectionId } from "../model/ids.ts";
 import type { CanvasTextTarget } from "../model/text-targets.ts";
 import { rectBottom, rectCenter, rectRight, type Point, type Rect } from "../model/geometry.ts";
 import type { Theme } from "../model/styles.ts";
+import { CircuitComponentBody, CircuitJunctionBody } from "./CircuitSymbols.tsx";
 
 interface NodeSkeletonProps {
   readonly node: SceneNode;
   readonly layout: NodeLayout;
   readonly theme: Theme;
   readonly selected: boolean;
+  readonly gridSize?: number;
   readonly skeleton: boolean;
   readonly hoveredPart?: NodeFocus | null;
   readonly onHoverPart?: (focus: NodeFocus | null) => void;
@@ -19,6 +21,7 @@ interface NodeSkeletonProps {
   readonly onPointerDown: (event: React.PointerEvent<SVGGElement>) => void;
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
+  readonly labelDelta?: Point;
   readonly activationDraft?: { readonly id: string; readonly top: number; readonly height: number } | null;
   readonly onActivationPointerDown?: (
     nodeId: string,
@@ -904,6 +907,7 @@ export const NodeSkeleton = ({
   layout,
   theme,
   selected,
+  gridSize = 9,
   skeleton,
   hoveredPart,
   onHoverPart,
@@ -911,6 +915,7 @@ export const NodeSkeleton = ({
   onPointerDown,
   onTextDoubleClick,
   onPartClick,
+  labelDelta,
   activationDraft,
   onActivationPointerDown,
 }: NodeSkeletonProps) => {
@@ -976,6 +981,26 @@ export const NodeSkeleton = ({
         />
       );
       break;
+    case "circuitComponent":
+      body = node.kind === "circuitComponent" ? (
+        <CircuitComponentBody
+          node={node}
+          layout={layout}
+          labelDelta={labelDelta}
+          onTextDoubleClick={onTextDoubleClick}
+        />
+      ) : null;
+      break;
+    case "circuitJunction":
+      body = node.kind === "circuitJunction" ? (
+        <CircuitJunctionBody
+          node={node}
+          layout={layout}
+          labelDelta={labelDelta}
+          onTextDoubleClick={onTextDoubleClick}
+        />
+      ) : null;
+      break;
     default:
       body = <ShapeBody layout={layout} node={node} theme={theme} skeleton={skeleton} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
   }
@@ -1005,6 +1030,26 @@ export const NodeSkeleton = ({
     }
     return layout.kind === "lifeline" ? layout.headFrame : layout.frame;
   })();
+
+  const junctionCompactFrame: Rect | null =
+    layout.kind === "circuitJunction"
+      ? {
+          x: layout.center.x - gridSize / 2,
+          y: layout.center.y - gridSize / 2,
+          width: gridSize,
+          height: gridSize,
+        }
+      : null;
+  const hitOutline = layout.kind === "circuitComponent"
+    ? layout.focusOutline
+    : null;
+  const hoverOutline = layout.kind === "circuitComponent"
+    ? layout.outline
+    : null;
+  const hitFrame = junctionCompactFrame ?? layout.frame;
+  const shownHoverFrame = junctionCompactFrame !== null && hoverFrame !== null
+    ? junctionCompactFrame
+    : hoverFrame;
 
   const handleNodePointerMove = (event: React.PointerEvent<SVGGElement>): void => {
     if (onHoverPart === undefined) return;
@@ -1055,20 +1100,45 @@ export const NodeSkeleton = ({
           ? { kind: "table", nodeId: node.id }
           : { kind: "object", nodeId: node.id });
       }}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onTextDoubleClick?.(
+          node.kind === "image"
+            ? { kind: "caption" }
+            : node.kind === "comment"
+              ? { kind: "commentBody" }
+              : node.kind === "lifeline"
+                ? { kind: "lifelineLabel" }
+                : { kind: "nodeName" },
+        );
+      }}
       style={{ cursor: node.locked ? "grab" : "move" }}
       opacity={node.visible ? 1 : 0.3}
     >
       <title>{`${node.name}${node.locked ? " (locked)" : ""}`}</title>
-      {layout.kind === "lifeline" || layout.kind === "frame" ? null : (
-        <rect
-          x={layout.frame.x}
-          y={layout.frame.y}
-          width={layout.frame.width}
-          height={layout.frame.height}
+      {layout.kind === "lifeline" ||
+      layout.kind === "frame" ||
+      (layout.kind === "circuitJunction" && layout.junctionStyle === "none") ? null : hitOutline !== null ? (
+        <polygon
+          points={hitOutline.map((entry) => `${entry.x},${entry.y}`).join(" ")}
           fill="transparent"
           stroke="transparent"
           pointerEvents="all"
-          rx={layout.kind === "table" || layout.kind === "relationAttribute" ? 0 : 3}
+        />
+      ) : (
+        <rect
+          x={hitFrame.x}
+          y={hitFrame.y}
+          width={hitFrame.width}
+          height={hitFrame.height}
+          fill="transparent"
+          stroke="transparent"
+          pointerEvents="all"
+          rx={layout.kind === "circuitJunction"
+            ? 0
+            : layout.kind === "table" || layout.kind === "relationAttribute"
+              ? 0
+              : 3}
         />
       )}
       {body}
@@ -1123,30 +1193,54 @@ export const NodeSkeleton = ({
               ));
             })()}
           </g>
-        ) : (
-          <rect
-            x={layout.frame.x}
-            y={layout.frame.y}
-            width={layout.frame.width}
-            height={layout.frame.height}
+        ) : layout.kind === "circuitComponent" ? (
+          <polygon
+            points={layout.outline.map((p) => `${p.x},${p.y}`).join(" ")}
             fill="none"
             stroke={theme.colors.selection}
             strokeWidth={1.4}
             vectorEffect="non-scaling-stroke"
             pointerEvents="none"
-            rx={layout.kind === "table" || layout.kind === "relationAttribute" ? 0 : 3}
+          />
+        ) : (
+          <rect
+            x={junctionCompactFrame?.x ?? layout.frame.x}
+            y={junctionCompactFrame?.y ?? layout.frame.y}
+            width={junctionCompactFrame?.width ?? layout.frame.width}
+            height={junctionCompactFrame?.height ?? layout.frame.height}
+            fill="none"
+            stroke={theme.colors.selection}
+            strokeWidth={1.4}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+            rx={layout.kind === "circuitJunction"
+              ? 0
+              : layout.kind === "table" || layout.kind === "relationAttribute"
+                ? 0
+                : 3}
           />
         )
       ) : null}
-      {hoverFrame !== null ? (
-        <rect
-          className="node-hover-outline"
-          x={hoverFrame.x}
-          y={hoverFrame.y}
-          width={hoverFrame.width}
-          height={hoverFrame.height}
-          rx={layout.kind === "state" ? Math.min(12, hoverFrame.height / 4) : 0}
-        />
+      {shownHoverFrame !== null ? (
+        hoverOutline !== null ? (
+          <polygon
+            className="node-hover-outline"
+            points={hoverOutline.map((entry) => `${entry.x},${entry.y}`).join(" ")}
+          />
+        ) : (
+          <rect
+            className="node-hover-outline"
+            x={shownHoverFrame.x}
+            y={shownHoverFrame.y}
+            width={shownHoverFrame.width}
+            height={shownHoverFrame.height}
+            rx={layout.kind === "circuitJunction"
+              ? 0
+              : layout.kind === "state"
+                ? Math.min(12, shownHoverFrame.height / 4)
+                : 0}
+          />
+        )
       ) : null}
       {node.locked ? (
         // Editor-only overlay. The Typst/CeTZ serializer must never draw this

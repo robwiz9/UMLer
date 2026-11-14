@@ -11,7 +11,7 @@ export interface ViewportSize {
 }
 
 export const ZOOM_MIN = 0.15;
-export const ZOOM_MAX = 4;
+export const ZOOM_MAX = 8;
 
 export const clampZoom = (zoom: number): number =>
   Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
@@ -21,6 +21,7 @@ export const fitBounds = (
   bounds: Rect,
   viewport: ViewportSize,
   padding = 56,
+  fixedZoom?: number,
 ): { readonly camera: Camera; readonly zoom: number } => {
   const availableWidth = Math.max(1, viewport.width - padding * 2);
   const availableHeight = Math.max(1, viewport.height - padding * 2);
@@ -30,7 +31,7 @@ export const fitBounds = (
   );
   // A small diagram should not be blown up to 300% just because the viewport
   // is empty. Fit is a ceiling; the user can still zoom in manually.
-  const zoom = clampZoom(Math.min(1.5, fitted));
+  const zoom = clampZoom(fixedZoom ?? Math.min(1.5, fitted));
   return {
     zoom,
     camera: {

@@ -456,6 +456,41 @@ export const listBranches = async (
     .map((branch) => ({ name: branch.name }));
 };
 
+const branchRefPath = (branch: string): string =>
+  branch
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+/**
+ * Creates a branch from the current head of `target.branch`. The new branch
+ * keeps the same commits, so opening the selected project from it starts with
+ * the file that existed on the base branch; the next save targets the branch.
+ */
+export const createBranch = async (
+  token: string,
+  target: Pick<GitHubTarget, "owner" | "repo" | "branch">,
+  newBranch: string,
+): Promise<GitHubBranch> => {
+  const { data } = await apiRequest(
+    token,
+    `${repoPath(target)}/git/ref/heads/${branchRefPath(target.branch)}`,
+  );
+  const sha =
+    isRecord(data) && isRecord(data.object) && typeof data.object.sha === "string"
+      ? data.object.sha
+      : null;
+  if (sha === null) {
+    throw new GitHubApiError("GitHub did not return the base branch commit.", 200);
+  }
+  await apiRequest(token, `${repoPath(target)}/git/refs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/heads/${newBranch}`, sha }),
+  });
+  return { name: newBranch };
+};
+
 export const listDirectoryContents = async (
   token: string,
   target: GitHubTarget,
@@ -641,6 +676,9 @@ export const describeGitHubError = (error: unknown): string => {
     }
     if (error.status === 404) {
       return "GitHub could not find the repository, branch or file. Check the selection.";
+    }
+    if (error.status === 422 && /reference already exists|branch.*already exists/i.test(error.message)) {
+      return "A branch with that name already exists. Choose another name.";
     }
     if (error.status === 409 || error.status === 422) {
       return `${error.message} The remote file may have changed. Try saving again to resolve it.`;

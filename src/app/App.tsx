@@ -19,7 +19,7 @@ import {
   serializeSceneFile,
   type ImportedProject,
 } from "../model/persistence.ts";
-import { buildLayoutSnapshot, withNodeFrames } from "../layout/build-layout.ts";
+import { buildLayoutSnapshot, pointOnPolyline, withNodeFrames, withNodeRotations } from "../layout/build-layout.ts";
 import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
 import { zoomAtScreenPoint, type Camera, type ViewportSize } from "../canvas/camera.ts";
@@ -28,6 +28,7 @@ import { CodePanel } from "./CodePanel.tsx";
 import { GitHubDecisionDialog, type GitHubDecision, type GitHubDecisionOption } from "./GitHubDecisionDialog.tsx";
 import { GitHubProjectDialog } from "./GitHubProjectDialog.tsx";
 import { LayoutPanel } from "./LayoutPanel.tsx";
+import { CircuitPanel } from "./CircuitPanel.tsx";
 import { ProjectImportDialog } from "./ProjectImportDialog.tsx";
 import { SceneDialog, type SceneDialogMode } from "./SceneDialog.tsx";
 import { ThemePanel } from "./ThemePanel.tsx";
@@ -58,11 +59,34 @@ import type {
   EdgeLabelZone,
   EdgeRoutingMode,
 } from "../model/edges.ts";
+import { portKey } from "../model/edges.ts";
 import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
 import type { StrokePattern, TextStyleOverride, Theme } from "../model/styles.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import { resolveCircuitSettings, setCircuitStandard, type CircuitStandard } from "../model/circuit.ts";
+import {
+  addCircuitJunctionToWire,
+  cleanupShiftBranches,
+  connectCircuitWireToPoint,
+  connectCircuitWireToWire,
+  createCircuitWire,
+  hideDegreeTwoJunctions,
+  insertCircuitComponentOnWire,
+  mergeCircuitJunction,
+  mergeCircuitJunctionResult,
+  mergeCoincidentCircuitConnections,
+  normalizeCircuitDuplicateConnections,
+  normalizeCircuitPinConnections,
+  prepareOccupiedPinJunction,
+  reattachCircuitEdgeToPoint,
+  rewireCircuitComponentPins,
+  reattachCircuitEdgeToWire,
+  splitCircuitWireAtCorners,
+  type ShiftBranchGroup,
+  type WireOrientation,
+} from "../model/circuit-wires.ts";
 import { asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, newId, type ActivationId, type SceneId } from "../model/ids.ts";
 import { snap, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
@@ -259,12 +283,17 @@ export const App = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<readonly string[]>([]);
+  const selectedEdgeId = selectedEdgeIds.length === 1 ? selectedEdgeIds[0]! : null;
+  const setSelectedEdgeId = useCallback((edgeId: string | null) => {
+    setSelectedEdgeIds(edgeId === null ? [] : [edgeId]);
+  }, []);
   const [selectedActivation, setSelectedActivation] = useState<{
     readonly nodeId: string;
     readonly activationId: ActivationId;
   } | null>(null);
   const [previewFrames, setPreviewFrames] = useState<Readonly<Record<string, Rect>>>({});
+  const [rotationPreview, setRotationPreview] = useState<Readonly<Record<string, number>>>({});
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
@@ -359,7 +388,10 @@ export const App = () => {
     };
   }, [assetLibrary, baselineDigest, currentScenes, githubBinding, scene.id]);
 
-  const effectiveScene = useMemo(() => withNodeFrames(scene, previewFrames), [scene, previewFrames]);
+  const effectiveScene = useMemo(
+    () => withNodeRotations(withNodeFrames(scene, previewFrames), rotationPreview),
+    [scene, previewFrames, rotationPreview],
+  );
   const layout = useMemo(
     () => buildLayoutSnapshot(effectiveScene, measurer),
     [effectiveScene, measurer, fontTick],
@@ -379,6 +411,7 @@ export const App = () => {
     setSelectedEdgeId(null);
     setSelectedActivation(null);
     setPreviewFrames({});
+    setRotationPreview({});
     setLayoutNote(null);
     setFocusRequest(null);
     setNodeFocus(null);
@@ -387,7 +420,10 @@ export const App = () => {
 
   const commitFrames = useCallback((frames: Readonly<Record<string, Rect>>) => {
     setScene((current) => {
-      const next = withNodeFrames(current, frames);
+      let next = withNodeFrames(current, frames);
+      if (current.meta.diagramKind === "circuit") {
+        next = mergeCoincidentCircuitConnections(next);
+      }
       return {
         ...next,
         revision: current.revision + 1,
@@ -395,7 +431,50 @@ export const App = () => {
       };
     });
     setPreviewFrames({});
+    setRotationPreview({});
   }, []);
+
+  const commitWireTranslation = useCallback(
+    (frames: Readonly<Record<string, Rect>>, edgeId: string) => {
+      setScene((current) => {
+        let next = withNodeFrames(current, frames);
+        if (current.meta.diagramKind === "circuit") {
+          const movedJunctionIds = Object.keys(frames).filter(
+            (id) => current.nodes[id]?.kind === "circuitJunction",
+          );
+          next = mergeCoincidentCircuitConnections(next);
+          next = normalizeCircuitDuplicateConnections(next);
+          if (current.layout.visualRefinements !== false) {
+            // History will normalize pin junctions after this updater, so do
+            // it here first; otherwise a newly created filled junction can
+            // escape the degree-two refinement on the first drag.
+            next = normalizeCircuitPinConnections(next);
+            next = normalizeCircuitDuplicateConnections(next);
+            const edge = next.edges[edgeId];
+            const endpointIds: string[] = [...movedJunctionIds];
+            if (edge?.source.target === "node" && edge.source.port.kind === "center") {
+              endpointIds.push(String(edge.source.nodeId));
+            }
+            if (edge?.target.target === "node" && edge.target.port.kind === "center") {
+              endpointIds.push(String(edge.target.nodeId));
+            }
+            next = hideDegreeTwoJunctions(
+              next,
+              [...new Set(endpointIds)].map((id) => asNodeId(id)),
+            );
+          }
+        }
+        return {
+          ...next,
+          revision: current.revision + 1,
+          meta: { ...next.meta, updatedAt: new Date().toISOString() },
+        };
+      });
+      setPreviewFrames({});
+      setRotationPreview({});
+    },
+    [],
+  );
 
   const clearTransientSelection = useCallback(() => {
     setSelectedNodeId(null);
@@ -405,6 +484,7 @@ export const App = () => {
     setNodeFocus(null);
     setFocusRequest(null);
     setPreviewFrames({});
+    setRotationPreview({});
   }, []);
 
   const activateSceneDocument = useCallback(
@@ -1235,8 +1315,35 @@ export const App = () => {
           });
         }
       }
-      return patchNode(current, asNodeId(nodeId), patch);
+      const patched = patch as {
+        readonly rotation?: number;
+        readonly mirrorX?: boolean;
+        readonly mirrorY?: boolean;
+        readonly swapPinsX?: boolean;
+        readonly swapPinsY?: boolean;
+      };
+      let next = patchNode(current, asNodeId(nodeId), patch);
+      if (current.meta.diagramKind === "circuit" && node?.kind === "circuitComponent") {
+        if (patched.swapPinsX !== undefined) {
+          next = rewireCircuitComponentPins(next, asNodeId(nodeId), "horizontal");
+        }
+        if (patched.swapPinsY !== undefined) {
+          next = rewireCircuitComponentPins(next, asNodeId(nodeId), "vertical");
+        }
+      }
+      const geometryChanged =
+        patched.rotation !== undefined ||
+        patched.mirrorX !== undefined ||
+        patched.mirrorY !== undefined;
+      return current.meta.diagramKind === "circuit" && geometryChanged
+        ? mergeCoincidentCircuitConnections(next)
+        : next;
     });
+  }, []);
+  const handleMoveNodeLabel = useCallback((nodeId: string, labelOffset: Point) => {
+    setScene((current) =>
+      patchNode(current, asNodeId(nodeId), { labelOffset } as Partial<SceneNode>),
+    );
   }, []);
 
   const handleRowUpdate = useCallback((nodeId: string, rowId: string, patch: Partial<TableRow>) => {
@@ -1501,8 +1608,97 @@ export const App = () => {
     [],
   );
 
+  const circuitPinGeometry = useCallback(
+    (reference: PortAttachmentRef) =>
+      reference.port.kind === "pin"
+        ? layout.ports[portKey(reference.nodeId, reference.port)]
+        : undefined,
+    [layout],
+  );
+
   const handleCreateEdge = useCallback(
     (source: PortAttachmentRef, target: EdgeTargetRef) => {
+      if (scene.meta.diagramKind === "circuit") {
+        if ("nodeId" in target) {
+          if (source.nodeId === target.nodeId) {
+            setLayoutNote("Connect two different pins or nodes.");
+            return;
+          }
+          let prepared = scene;
+          let sourceRef: PortAttachmentRef = source;
+          let targetRef: PortAttachmentRef = {
+            nodeId: target.nodeId,
+            port: target.port,
+          };
+          const sourcePin = circuitPinGeometry(sourceRef);
+          if (sourcePin !== undefined) {
+            const result = prepareOccupiedPinJunction(
+              prepared,
+              sourceRef,
+              sourcePin.point,
+              sourcePin.normal,
+            );
+            prepared = result.scene;
+            sourceRef = result.attachment;
+          }
+          const targetPin = circuitPinGeometry(targetRef);
+          if (targetPin !== undefined) {
+            const result = prepareOccupiedPinJunction(
+              prepared,
+              targetRef,
+              targetPin.point,
+              targetPin.normal,
+            );
+            prepared = result.scene;
+            targetRef = result.attachment;
+          }
+          const edge = createCircuitWire(prepared, sourceRef, targetRef);
+          setScene(insertEdge(prepared, edge));
+          setSelectedEdgeId(edge.id);
+          setSelectedNodeId(null);
+          setSelectedNodeIds([]);
+          setNodeFocus(null);
+          setLayoutNote("Wire created.");
+          return;
+        }
+        const targetLayout = layout.edges[target.edgeId];
+        if (targetLayout === undefined) {
+          setLayoutNote("That wire is no longer available.");
+          return;
+        }
+        const point = pointOnPolyline(targetLayout.points, target.t).point;
+        let prepared = scene;
+        let sourceRef: PortAttachmentRef = source;
+        const sourcePin = circuitPinGeometry(sourceRef);
+        if (sourcePin !== undefined) {
+          const result = prepareOccupiedPinJunction(
+            prepared,
+            sourceRef,
+            sourcePin.point,
+            sourcePin.normal,
+          );
+          prepared = result.scene;
+          sourceRef = result.attachment;
+        }
+        const result = connectCircuitWireToWire(
+          prepared,
+          sourceRef,
+          asEdgeId(target.edgeId),
+          point,
+        );
+        if (result === null) {
+          setLayoutNote("Could not connect to that wire.");
+          return;
+        }
+        setScene(result.scene);
+        setSelectedEdgeId(result.newEdgeId);
+        setSelectedNodeId(null);
+        setSelectedNodeIds([]);
+        setNodeFocus(null);
+        setLayoutNote("Junction created and wires split.");
+        return;
+      }
+
       const edge = createEdgeForDiagram(scene, source, target);
       if (edge === null) {
         setLayoutNote("Connect two different objects.");
@@ -1515,8 +1711,92 @@ export const App = () => {
       setNodeFocus(null);
       setLayoutNote("Connector created. Click the line or a terminal to refine it.");
     },
+    [circuitPinGeometry, layout, scene],
+  );
+
+  const handleExtendWireToPoint = useCallback(
+    (source: PortAttachmentRef, point: Point) => {
+      let prepared = scene;
+      let sourceRef = source;
+      const sourcePin = circuitPinGeometry(sourceRef);
+      if (sourcePin !== undefined) {
+        const occupied = prepareOccupiedPinJunction(
+          prepared,
+          sourceRef,
+          sourcePin.point,
+          sourcePin.normal,
+        );
+        prepared = occupied.scene;
+        sourceRef = occupied.attachment;
+      }
+      const result = connectCircuitWireToPoint(prepared, sourceRef, point, "none");
+      if (result === null) {
+        setLayoutNote("Could not create the wire.");
+        return;
+      }
+      setScene(result.scene);
+      setSelectedEdgeId(result.newEdgeId);
+      setSelectedNodeId(null);
+      setSelectedNodeIds([]);
+      setNodeFocus(null);
+      setLayoutNote("Wire extended; a no-dot node was created.");
+    },
+    [circuitPinGeometry, scene],
+  );
+
+  const handleReattachEdgeToPoint = useCallback(
+    (edgeId: string, end: "source" | "target", point: Point) => {
+      const result = reattachCircuitEdgeToPoint(
+        scene,
+        asEdgeId(edgeId),
+        end,
+        point,
+      );
+      if (result === null) return;
+      setScene(result.scene);
+      setSelectedEdgeId(result.newEdgeId);
+      setLayoutNote("Wire endpoint reattached to a new no-dot node.");
+    },
     [scene],
   );
+
+  const handlePreviewRotation = useCallback(
+    (nodeId: string, rotation: number | null) => {
+      setRotationPreview((current) => {
+        if (rotation === null) {
+          const next = { ...current };
+          delete next[nodeId];
+          return next;
+        }
+        return { ...current, [nodeId]: rotation };
+      });
+    },
+    [],
+  );
+
+  const handleCommitRotation = useCallback(
+    (nodeId: string, rotation: number) => {
+      setRotationPreview((current) => {
+        const next = { ...current };
+        delete next[nodeId];
+        return next;
+      });
+      setScene((current) =>
+        mergeCoincidentCircuitConnections(
+          patchNode(current, asNodeId(nodeId), { rotation } as Partial<SceneNode>),
+        ),
+      );
+      setLayoutNote(`Component rotated to ${rotation}°.`);
+    },
+    [],
+  );
+
+  const handleCircuitStandard = useCallback((standard: CircuitStandard) => {
+    setScene((current) => setCircuitStandard(current, standard));
+    setLayoutNote(
+      standard === "iec" ? "Circuit standard: IEC / EU." : "Circuit standard: ANSI / US.",
+    );
+  }, []);
 
   const selectNodes = useCallback(
     (nodeIds: readonly string[], primary?: string | null) => {
@@ -1562,6 +1842,14 @@ export const App = () => {
     setNodeFocus((current) => (current?.nodeId === nodeId ? null : current));
     setLayoutNote("Object and its connectors deleted.");
   }, [selectedNodeIds]);
+
+  const handleMergeJunction = useCallback((nodeId: string) => {
+    setScene((current) => mergeCircuitJunction(current, asNodeId(nodeId)));
+    setSelectedNodeId(null);
+    setSelectedNodeIds([]);
+    setNodeFocus(null);
+    setLayoutNote("Junction removed; the two wires were merged.");
+  }, []);
 
   const handleCopySelection = useCallback(() => {
     const focusedNodeId = nodeFocus?.nodeId;
@@ -1715,6 +2003,49 @@ export const App = () => {
       if (target instanceof HTMLElement) {
         const tag = target.tagName.toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable) {
+          if (target instanceof HTMLInputElement && target.dataset.labelScope !== undefined) {
+            const value = target.value;
+            const atEnd = target.selectionStart === target.selectionEnd &&
+              target.selectionEnd === value.length;
+            const shouldDelete = value.length === 0 || (event.key === "Delete" && atEnd);
+            if (shouldDelete) {
+              event.preventDefault();
+              target.blur();
+              if (target.dataset.labelScope === "edge") {
+                const edgeId = target.dataset.labelEdgeId;
+                if (edgeId !== undefined) {
+                  setScene((current) => deleteEdge(current, asEdgeId(edgeId)));
+                  setSelectedEdgeId(null);
+                  setNodeFocus(null);
+                  setLayoutNote("Connector deleted from its label field.");
+                  return;
+                }
+              }
+              if (target.dataset.labelScope === "node") {
+                const nodeId = target.dataset.labelNodeId;
+                const node = nodeId === undefined ? undefined : scene.nodes[nodeId];
+                if (nodeId !== undefined && node?.kind === "circuitJunction") {
+                  const merge = mergeCircuitJunctionResult(scene, node.id);
+                  if (merge !== null) {
+                    setScene(merge.scene);
+                    selectNodes([], null);
+                    setSelectedEdgeId(merge.edgeId);
+                    setNodeFocus(null);
+                    setLayoutNote("Junction removed; wires merged and the new wire selected.");
+                    return;
+                  }
+                }
+                if (nodeId !== undefined) {
+                  setScene((current) => deleteNode(current, asNodeId(nodeId)));
+                  selectNodes([], null);
+                  setSelectedEdgeId(null);
+                  setNodeFocus(null);
+                  setLayoutNote("Object deleted from its label field.");
+                  return;
+                }
+              }
+            }
+          }
           return;
         }
       }
@@ -1779,12 +2110,20 @@ export const App = () => {
         return;
       }
 
-      if (selectedEdgeId !== null) {
+      if (selectedEdgeIds.length > 0) {
         event.preventDefault();
-        setScene((current) => deleteEdge(current, asEdgeId(selectedEdgeId)));
-        setSelectedEdgeId(null);
+        const edgeIds = selectedEdgeIds;
+        setScene((current) =>
+          edgeIds.reduce(
+            (next, edgeId) => deleteEdge(next, asEdgeId(edgeId)),
+            current,
+          ),
+        );
+        setSelectedEdgeIds([]);
         setNodeFocus(null);
-        setLayoutNote("Connector deleted.");
+        setLayoutNote(
+          edgeIds.length === 1 ? "Connector deleted." : `${edgeIds.length} connectors deleted.`,
+        );
         return;
       }
 
@@ -1795,6 +2134,19 @@ export const App = () => {
           : [selectedNodeId];
       if (nodeIds.length > 0) {
         event.preventDefault();
+        const singleNodeId = nodeIds.length === 1 ? nodeIds[0] : undefined;
+        const singleNode = singleNodeId === undefined ? undefined : scene.nodes[singleNodeId];
+        if (singleNode?.kind === "circuitJunction") {
+          const merge = mergeCircuitJunctionResult(scene, singleNode.id);
+          if (merge !== null) {
+            setScene(merge.scene);
+            selectNodes([], null);
+            setSelectedEdgeId(merge.edgeId);
+            setNodeFocus(null);
+            setLayoutNote("Junction removed; wires merged and the new wire selected.");
+            return;
+          }
+        }
         setScene((current) =>
           deleteNodes(current, nodeIds.map((nodeId) => asNodeId(nodeId))),
         );
@@ -1812,10 +2164,11 @@ export const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     nodeFocus,
+    scene,
     scene.nodes,
     selectNodes,
     selectedActivation,
-    selectedEdgeId,
+    selectedEdgeIds,
     selectedNodeId,
     selectedNodeIds,
   ]);
@@ -1848,9 +2201,140 @@ export const App = () => {
   }, []);
 
   const handleReroute = useCallback((edgeId: string) => {
+    if (scene.meta.diagramKind === "circuit") {
+      const candidate = rerouteEdge(scene, asEdgeId(edgeId));
+      const candidateLayout = buildLayoutSnapshot(candidate, measurer);
+      const points = candidateLayout.edges[edgeId]?.points ?? [];
+      const corners = points.slice(1, -1);
+      if (corners.length === 0) {
+        setScene(candidate);
+        setLayoutNote("Wire rerouted orthogonally.");
+      } else {
+        setScene(splitCircuitWireAtCorners(candidate, asEdgeId(edgeId), corners));
+        setSelectedEdgeId(edgeId);
+        setLayoutNote(
+          `Wire rerouted and split at ${corners.length} bend${corners.length === 1 ? "" : "s"}.`,
+        );
+      }
+      return;
+    }
     setScene((current) => rerouteEdge(current, asEdgeId(edgeId)));
     setLayoutNote("A* reroute requested.");
+  }, [measurer, scene, setSelectedEdgeId]);
+
+  const handleAddJunctionAtWire = useCallback((edgeId: string, at: Point) => {
+    const result = addCircuitJunctionToWire(scene, asEdgeId(edgeId), at);
+    if (result === null) {
+      setLayoutNote("Could not add a junction to that wire.");
+      return;
+    }
+    setScene(result.scene);
+    setSelectedNodeId(result.junction.id);
+    setSelectedNodeIds([result.junction.id]);
+    setSelectedEdgeId(null);
+    setNodeFocus({ kind: "object", nodeId: result.junction.id });
+    setLayoutNote("Junction added at the nearest grid point.");
+  }, [scene]);
+
+  const commitShiftDrag = useCallback(
+    (frames: Readonly<Record<string, Rect>>, groups: readonly ShiftBranchGroup[]) => {
+      setScene(
+        (current) =>
+          cleanupShiftBranches(
+            mergeCoincidentCircuitConnections(withNodeFrames(current, frames)),
+            groups,
+          ),
+        { coalesce: true },
+      );
+      setPreviewFrames({});
+      setRotationPreview({});
+    },
+    [],
+  );
+
+  const beginShiftDrag = useCallback((branchScene: SceneDocument) => {
+    setScene(branchScene, { newStep: true });
+    setPreviewFrames({});
   }, []);
+
+  const beginDuplicateDrag = useCallback(
+    (duplicateScene: SceneDocument, nodeIds: readonly string[]) => {
+      setScene(duplicateScene, { newStep: true, skipNormalize: true });
+      selectNodes([...nodeIds], nodeIds[nodeIds.length - 1] ?? null);
+      setSelectedEdgeId(null);
+      setNodeFocus(null);
+      setPreviewFrames({});
+    },
+    [selectNodes],
+  );
+
+  const commitDuplicateDrag = useCallback(
+    (frames: Readonly<Record<string, Rect>>) => {
+      setScene(
+        (current) => {
+          const next = withNodeFrames(current, frames);
+          return {
+            ...next,
+            revision: current.revision + 1,
+            meta: { ...next.meta, updatedAt: new Date().toISOString() },
+          };
+        },
+        { coalesce: true, skipNormalize: true },
+      );
+      setPreviewFrames({});
+    },
+    [],
+  );
+
+  const beginDetachDrag = useCallback((detachedScene: SceneDocument) => {
+    setScene(detachedScene, { newStep: true });
+    setPreviewFrames({});
+  }, []);
+
+  const commitDetachDrag = useCallback(
+    (frames: Readonly<Record<string, Rect>>) => {
+      setScene(
+        (current) => {
+          const next = withNodeFrames(current, frames);
+          return {
+            ...next,
+            revision: current.revision + 1,
+            meta: { ...next.meta, updatedAt: new Date().toISOString() },
+          };
+        },
+        { coalesce: true },
+      );
+      setPreviewFrames({});
+    },
+    [],
+  );
+
+  const handleInsertComponentOnWire = useCallback(
+    (
+      nodeId: string,
+      edgeId: string,
+      at: Point,
+      orientation: WireOrientation,
+    ) => {
+      const result = insertCircuitComponentOnWire(
+        scene,
+        asNodeId(nodeId),
+        asEdgeId(edgeId),
+        at,
+        orientation,
+      );
+      if (result === null) {
+        setLayoutNote("That component could not be inserted on the wire.");
+        return;
+      }
+      setScene(result);
+      selectNodes([nodeId], nodeId);
+      setSelectedEdgeId(null);
+      setNodeFocus(null);
+      setLayoutNote("Component inserted into the selected wire.");
+    },
+    [scene, selectNodes],
+  );
 
   const handleReattachEdge = useCallback(
     (
@@ -1858,13 +2342,59 @@ export const App = () => {
       end: EdgeEnd,
       target: PortAttachmentRef | EdgeAttachmentRef,
     ) => {
+      if (scene.meta.diagramKind === "circuit") {
+        if ("nodeId" in target) {
+          let prepared = scene;
+          let attachment: PortAttachmentRef = {
+            nodeId: target.nodeId,
+            port: target.port,
+          };
+          const targetPin = circuitPinGeometry(attachment);
+          if (targetPin !== undefined) {
+            const occupied = prepareOccupiedPinJunction(
+              prepared,
+              attachment,
+              targetPin.point,
+              targetPin.normal,
+            );
+            prepared = occupied.scene;
+            attachment = occupied.attachment;
+          }
+          const edgeAttachment: EdgeAttachment = {
+            target: "node",
+            nodeId: attachment.nodeId,
+            port: attachment.port,
+          };
+          setScene(setEdgeAttachment(prepared, asEdgeId(edgeId), end, edgeAttachment));
+          setLayoutNote("Wire endpoint reattached.");
+          return;
+        }
+        const targetLayout = layout.edges[target.edgeId];
+        if (targetLayout === undefined) return;
+        const point = pointOnPolyline(targetLayout.points, target.t).point;
+        const result = reattachCircuitEdgeToWire(
+          scene,
+          asEdgeId(edgeId),
+          end,
+          asEdgeId(target.edgeId),
+          point,
+        );
+        if (result === null) {
+          setLayoutNote("Could not reattach to that wire.");
+          return;
+        }
+        setScene(result.scene);
+        setSelectedEdgeId(result.newEdgeId);
+        setLayoutNote("Wire endpoint reattached; junction created.");
+        return;
+      }
       const attachment: EdgeAttachment = "nodeId" in target
         ? { target: "node", nodeId: target.nodeId, port: target.port }
         : { target: "edge", edgeId: target.edgeId, t: target.t };
       setScene((current) => setEdgeAttachment(current, asEdgeId(edgeId), end, attachment));
       setLayoutNote("Connector endpoint reattached.");
     },
-    [],
+    [circuitPinGeometry, layout, scene],
   );
 
   const handleMoveSequenceEdge = useCallback((edgeId: string, deltaY: number) => {
@@ -1894,6 +2424,13 @@ export const App = () => {
     setLayoutNote(`Layout spacing: ${spacing}.`);
   }, []);
 
+  const handleVisualRefinements = useCallback((enabled: boolean) => {
+    setScene((current) => patchLayout(current, { visualRefinements: enabled }));
+    setLayoutNote(
+      enabled ? "Visual layout refinements on." : "Visual layout refinements off.",
+    );
+  }, []);
+
   const handleThemeChange = useCallback((theme: Theme) => {
     setScene((current) => setSceneTheme(current, theme));
   }, []);
@@ -1917,6 +2454,7 @@ export const App = () => {
       }),
     );
     setPreviewFrames({});
+    setRotationPreview({});
     setLayoutNote(
       `${result.moved} nodes · ${result.layers} layers · crossings ${result.crossingsBefore} → ${result.crossingsAfter}`,
     );
@@ -1926,6 +2464,16 @@ export const App = () => {
   const selectEdge = useCallback((edgeId: string | null) => {
     setSelectedEdgeId(edgeId);
     if (edgeId !== null) {
+      setSelectedActivation(null);
+      setNodeFocus(null);
+      setSelectedNodeId(null);
+      setSelectedNodeIds([]);
+    }
+  }, [setSelectedEdgeId]);
+
+  const selectEdges = useCallback((edgeIds: readonly string[]) => {
+    setSelectedEdgeIds([...new Set(edgeIds)]);
+    if (edgeIds.length > 0) {
       setSelectedActivation(null);
       setNodeFocus(null);
       setSelectedNodeId(null);
@@ -1967,30 +2515,10 @@ export const App = () => {
     requestFocus(nodeId, target);
   }, [requestFocus, scene.nodes, selectNodes]);
 
-  const nodeTargetForFocus = useCallback((focus: NodeFocus): CanvasTextTarget => {
-    const node = scene.nodes[focus.nodeId];
-    if (focus.kind === "table") return { kind: "nodeName" };
-    if (focus.kind === "section") return { kind: "sectionTitle", sectionId: focus.sectionId };
-    if (focus.kind === "row") return { kind: "rowName", rowId: focus.rowId };
-    if (focus.kind === "lifelineSpine") return { kind: "lifelineLabel" };
-    if (node?.kind === "image") return { kind: "caption" };
-    if (node?.kind === "comment") return { kind: "commentBody" };
-    if (node?.kind === "lifeline") return { kind: "lifelineLabel" };
-    return { kind: "nodeName" };
-  }, [scene.nodes]);
-
   const handleNodePartClick = useCallback((focus: NodeFocus) => {
     selectNodes([focus.nodeId], focus.nodeId);
-    const same = nodeFocus !== null &&
-      nodeFocus.kind === focus.kind &&
-      nodeFocus.nodeId === focus.nodeId &&
-      (focus.kind !== "section" || (nodeFocus.kind === "section" && nodeFocus.sectionId === focus.sectionId)) &&
-      (focus.kind !== "row" || (nodeFocus.kind === "row" && nodeFocus.rowId === focus.rowId)) &&
-      (focus.kind !== "lifelineSpine" ||
-        (nodeFocus.kind === "lifelineSpine" && Math.abs(nodeFocus.y - focus.y) < 1));
-    if (same) requestFocus(focus.nodeId, nodeTargetForFocus(focus));
     setNodeFocus(focus);
-  }, [nodeFocus, nodeTargetForFocus, requestFocus, selectNodes]);
+  }, [selectNodes]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -2082,16 +2610,41 @@ export const App = () => {
               </svg>
               Add object
             </button>
-            <ThemePanel theme={scene.theme} onChange={handleThemeChange} />
-            <LayoutPanel
-              direction={scene.layout.direction}
-              spacing={scene.layout.spacing ?? "normal"}
-              engine={scene.layout.engine}
-              note={layoutNote}
-              onDirectionChange={handleLayoutDirection}
-              onSpacingChange={handleLayoutSpacing}
-              onRun={runAutoLayout}
-            />
+            {scene.meta.diagramKind === "circuit" ? (
+              <>
+                <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="circuit" />
+                <CircuitPanel
+                  standard={resolveCircuitSettings(scene).standard}
+                  onChange={handleCircuitStandard}
+                />
+                <LayoutPanel
+                  direction={scene.layout.direction}
+                  spacing={scene.layout.spacing ?? "normal"}
+                  engine={scene.layout.engine}
+                  note={layoutNote}
+                  variant="circuit"
+                  visualRefinements={scene.layout.visualRefinements !== false}
+                  onDirectionChange={handleLayoutDirection}
+                  onSpacingChange={handleLayoutSpacing}
+                  onVisualRefinementsChange={handleVisualRefinements}
+                  onRun={runAutoLayout}
+                />
+              </>
+            ) : (
+              <>
+              
+              <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="full" />
+              <LayoutPanel
+                direction={scene.layout.direction}
+                spacing={scene.layout.spacing ?? "normal"}
+                engine={scene.layout.engine}
+                note={layoutNote}
+                onDirectionChange={handleLayoutDirection}
+                onSpacingChange={handleLayoutSpacing}
+                onRun={runAutoLayout}
+                />
+                </>
+            )}
           </section>
         ) : null}
 
@@ -2116,12 +2669,14 @@ export const App = () => {
           selectedNodeId={selectedNodeId}
           selectedNodeIds={selectedNodeIds}
           selectedEdgeId={selectedEdgeId}
+          selectedEdgeIds={selectedEdgeIds}
           selectedActivation={selectedActivation}
           fitNonce={fitNonce}
           onSelectNode={selectNode}
           onSelectNodes={selectNodes}
           onToggleNodeSelection={toggleNodeSelection}
           onSelectEdge={selectEdge}
+          onSelectEdges={selectEdges}
           onSelectActivation={selectActivation}
           onSetMarker={handleSetMarker}
           onSetEdgeLabel={handleSetEdgeLabel}
@@ -2131,6 +2686,14 @@ export const App = () => {
           onSetStrokeWidth={handleSetStrokeWidth}
           onSetRoutingMode={handleSetRoutingMode}
           onRerouteEdge={handleReroute}
+          onAddJunctionAtWire={handleAddJunctionAtWire}
+          onBeginShiftDrag={beginShiftDrag}
+          onCommitShiftDrag={commitShiftDrag}
+          onBeginDuplicateDrag={beginDuplicateDrag}
+          onCommitDuplicateDrag={commitDuplicateDrag}
+          onBeginDetachDrag={beginDetachDrag}
+          onCommitDetachDrag={commitDetachDrag}
+          onInsertComponentOnWire={handleInsertComponentOnWire}
           onReattachEdge={handleReattachEdge}
           onMoveSequenceEdge={handleMoveSequenceEdge}
           onMoveEdgeLabel={handleMoveEdgeLabel}
@@ -2153,10 +2716,17 @@ export const App = () => {
           onAddActivation={handleAddActivation}
           onUpdateActivation={handleUpdateActivation}
           onCreateEdge={handleCreateEdge}
+          onExtendWireToPoint={handleExtendWireToPoint}
+          onReattachEdgeToPoint={handleReattachEdgeToPoint}
+          onPreviewRotation={handlePreviewRotation}
+          onCommitRotation={handleCommitRotation}
           onDeleteNode={handleDeleteNode}
+          onMergeJunction={handleMergeJunction}
+          onMoveNodeLabel={handleMoveNodeLabel}
           onViewChange={handleViewChange}
           onPreviewFrames={setPreviewFrames}
           onCommitFrames={commitFrames}
+          onCommitWireTranslation={commitWireTranslation}
           onViewport={setViewport}
         />
 
@@ -2166,6 +2736,7 @@ export const App = () => {
             layout={layout}
             selectedNodeIds={selectedNodeIds}
             selectedEdgeId={selectedEdgeId}
+            selectedEdgeIds={selectedEdgeIds}
             assets={exportAssets}
             onClose={() => setCodePanelVisible(false)}
           />

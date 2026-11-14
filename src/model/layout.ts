@@ -9,9 +9,15 @@
 
 import type { ActivationId, EdgeId, LabelId, NodeId, PortId, RowId, SectionId } from "./ids.ts";
 import type { EdgeLabelZone } from "./edges.ts";
-import type { NodePortRef } from "./edges.ts";
+import type { NodePortRef, PinPortRef } from "./edges.ts";
 import type { Point, Rect } from "./geometry.ts";
 import type { TextStyle } from "./styles.ts";
+import type {
+  CircuitComponentKind,
+  CircuitJunctionStyle,
+  CircuitPrimitive,
+  Rotation45,
+} from "./circuit.ts";
 
 export interface TextMeasurement {
   readonly text: string;
@@ -21,6 +27,19 @@ export interface TextMeasurement {
   readonly lines: number;
   readonly truncated: boolean;
   readonly style: TextStyle;
+  /** Present when the text contains circuit-style sub/superscript markup. */
+  readonly segments?: readonly RichTextSegment[];
+}
+
+export type TextScript = "normal" | "sub" | "super";
+
+export interface RichTextSegment {
+  readonly text: string;
+  readonly script: TextScript;
+  /** 0 = baseline, 1 = first script level, 2 = nested script level, … */
+  readonly depth: number;
+  readonly fontSize: number;
+  readonly width: number;
 }
 
 export interface PortGeometry {
@@ -111,6 +130,40 @@ export interface ShapeNodeLayout extends NodeLayoutBase {
   readonly labelFrame?: Rect;
 }
 
+export interface CircuitPinGeometry extends PortGeometry {
+  readonly ref: PinPortRef;
+  readonly pinId: string;
+}
+
+export interface CircuitComponentLayout extends NodeLayoutBase {
+  readonly kind: "circuitComponent";
+  readonly component: CircuitComponentKind;
+  readonly rotation: Rotation45;
+  /** Persisted unrotated frame. */
+  readonly localFrame: Rect;
+  readonly center: Point;
+  /** Rotated corners of localFrame, for selection/outline drawing. */
+  readonly outline: readonly Point[];
+  /** Rotated outline expanded to include every pinned ending. */
+  readonly focusOutline: readonly Point[];
+  readonly pins: readonly CircuitPinGeometry[];
+  /** Absolute scene-space primitives; single source for DOM and CeTZ. */
+  readonly primitives: readonly CircuitPrimitive[];
+  readonly labelFrame?: Rect;
+  readonly label?: TextMeasurement;
+}
+
+export interface CircuitJunctionLayout extends NodeLayoutBase {
+  readonly kind: "circuitJunction";
+  readonly junctionStyle: CircuitJunctionStyle;
+  readonly center: Point;
+  readonly radius: number;
+  /** False when no wire is attached (rendered as a warning). */
+  readonly connected: boolean;
+  readonly labelFrame?: Rect;
+  readonly label?: TextMeasurement;
+}
+
 export interface ImageNodeLayout extends NodeLayoutBase {
   readonly kind: "image";
   readonly imageFrame: Rect;
@@ -130,7 +183,9 @@ export type NodeLayout =
   | LifelineNodeLayout
   | ShapeNodeLayout
   | ImageNodeLayout
-  | CommentNodeLayout;
+  | CommentNodeLayout
+  | CircuitComponentLayout
+  | CircuitJunctionLayout;
 
 export interface EdgeLabelLayout {
   readonly labelId: LabelId;
@@ -141,6 +196,16 @@ export interface EdgeLabelLayout {
   readonly anchorPoint: Point;
   /** Tether is drawn only when the label's frame no longer touches the line. */
   readonly tether: readonly [Point, Point] | null;
+}
+
+export interface WireBridge {
+  readonly at: Point;
+  readonly from: Point;
+  readonly to: Point;
+  readonly c1: Point;
+  readonly c2: Point;
+  readonly radius: number;
+  readonly ownerEdgeId: EdgeId;
 }
 
 export interface EdgeLayout {
@@ -154,6 +219,8 @@ export interface EdgeLayout {
   readonly routedBy: "straight" | "orthogonal" | "polyline" | "bezier" | "astar" | "auto-layout";
   readonly bendCount: number;
   readonly crossings: number;
+  /** Circuit-only omega hops, derived from segment intersections. */
+  readonly bridges?: readonly WireBridge[];
 }
 
 export interface LayoutDiagnostics {

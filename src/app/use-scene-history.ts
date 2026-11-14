@@ -8,11 +8,26 @@
 
 import { useCallback, useState } from "react";
 import type { SceneDocument } from "../model/scene.ts";
+import {
+  mergeNearbyCircuitJunctions,
+  normalizeCircuitDuplicateConnections,
+  normalizeCircuitJunctionStyles,
+  normalizeCircuitPinConnections,
+} from "../model/circuit-wires.ts";
 
 const HISTORY_LIMIT = 100;
 const COALESCE_MS = 350;
 
 type SceneUpdater = SceneDocument | ((current: SceneDocument) => SceneDocument);
+
+export interface SceneUpdateOptions {
+  /** Merge this update into the previous undo step. */
+  readonly coalesce?: boolean;
+  /** Force a fresh undo step even when the update arrives in a burst. */
+  readonly newStep?: boolean;
+  /** Internal preview/gesture updates that must not auto-connect coincident pins. */
+  readonly skipNormalize?: boolean;
+}
 
 interface HistoryState {
   readonly past: readonly SceneDocument[];
@@ -38,25 +53,39 @@ export const useSceneHistory = (initial: SceneDocument) => {
     lastUpdateAt: 0,
   });
 
-  const update = useCallback((updater: SceneUpdater) => {
-    setHistory((current) => {
-      const next =
-        typeof updater === "function" ? updater(current.present) : updater;
-      if (next === current.present) return current;
-      const now = Date.now();
-      const merge =
-        now - current.lastUpdateAt < COALESCE_MS && current.past.length > 0;
-      const past = merge
-        ? current.past
-        : [...current.past, current.present].slice(-HISTORY_LIMIT);
-      return {
-        past,
-        present: next,
-        future: [],
-        lastUpdateAt: now,
-      };
-    });
-  }, []);
+  const update = useCallback(
+    (updater: SceneUpdater, options?: SceneUpdateOptions) => {
+      setHistory((current) => {
+        const raw =
+          typeof updater === "function" ? updater(current.present) : updater;
+        let next = raw;
+        if (!options?.skipNormalize && raw.meta.diagramKind === "circuit") {
+          next = normalizeCircuitPinConnections(raw);
+          next = normalizeCircuitDuplicateConnections(next);
+          next = mergeNearbyCircuitJunctions(next);
+          next = normalizeCircuitDuplicateConnections(next);
+          next = normalizeCircuitJunctionStyles(next);
+        }
+        if (next === current.present) return current;
+        const now = Date.now();
+        const merge = options?.coalesce === true
+          ? true
+          : options?.newStep === true
+            ? false
+            : now - current.lastUpdateAt < COALESCE_MS && current.past.length > 0;
+        const past = merge
+          ? current.past
+          : [...current.past, current.present].slice(-HISTORY_LIMIT);
+        return {
+          past,
+          present: next,
+          future: [],
+          lastUpdateAt: options?.coalesce === true ? 0 : now,
+        };
+      });
+    },
+    [],
+  );
 
   const undo = useCallback(() => {
     setHistory((current) => {

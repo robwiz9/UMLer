@@ -214,5 +214,7 @@ export const convertNodeForDiagram = (
     case "uml-use-case":
     case "uml-state-machine":
       return null;
+    case "circuit":
+      return null;
   }
 };

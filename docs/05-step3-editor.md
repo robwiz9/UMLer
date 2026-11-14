@@ -65,8 +65,9 @@ endpoints do not send CORS headers. No client secret is needed or stored. Create
 the dialog’s **Set up GitHub OAuth** field (stored in this browser). A personal access token with `repo` scope
 is available as a fallback and is kept in memory only.
 
-The picker selects a repository, branch, folder and project file name. A debounced contents lookup reports
-whether the path contains an existing UMLer project. On open:
+The picker selects a repository, branch, folder and project file name. **New branch…** creates a branch from
+the selected base branch and switches the picker to it, so a project opened from there keeps its saves on that
+branch. A debounced contents lookup reports whether the path contains an existing UMLer project. On open:
 
 - an existing file is validated and loaded, restoring its active scene;
 - a missing file creates a blank ER project at that path;

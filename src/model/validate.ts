@@ -9,6 +9,8 @@ import { findRow, isTableLikeNode } from "./nodes.ts";
 import type { EdgeAttachment, SceneEdge } from "./edges.ts";
 import type { SceneDocument } from "./scene.ts";
 import type { Rect } from "./geometry.ts";
+import { isRotation45 } from "./circuit.ts";
+import { circuitComponent } from "./circuit-catalog.ts";
 
 export type DiagnosticSeverity = "error" | "warning";
 
@@ -45,9 +47,11 @@ const NODE_KINDS = new Set([
   "frame",
   "image",
   "comment",
+  "circuitComponent",
+  "circuitJunction",
 ]);
 
-const EDGE_FAMILIES = new Set(["uml", "er", "sequence", "communication", "state", "generic"]);
+const EDGE_FAMILIES = new Set(["uml", "er", "sequence", "communication", "state", "circuit", "generic"]);
 
 export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
   const diagnostics: Diagnostic[] = [];
@@ -73,6 +77,17 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
   if (scene.layout.rankGap < 0 || scene.layout.nodeGap < 0) {
     error("layout/gap", "layout", "layout gaps cannot be negative");
   }
+  if (scene.circuit !== undefined) {
+    if (scene.circuit.standard !== "iec" && scene.circuit.standard !== "ansi") {
+      error("circuit/standard", "circuit.standard", 'standard must be "iec" or "ansi"');
+    }
+    if (scene.circuit.crossings !== "bridge" && scene.circuit.crossings !== "plain") {
+      error("circuit/crossings", "circuit.crossings", 'crossings must be "bridge" or "plain"');
+    }
+    if (!isFiniteNumber(scene.circuit.bridgeRadius) || scene.circuit.bridgeRadius < 0) {
+      error("circuit/bridge-radius", "circuit.bridgeRadius", "bridgeRadius must be finite and non-negative");
+    }
+  }
 
   const { nodes, edges, assets } = scene;
 
@@ -86,7 +101,9 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
     }
     if (!validRect(node.frame)) {
       error("node/frame", `${path}.frame`, "frame must have finite coordinates and positive size");
-    } else {
+    } else if (node.kind !== "circuitJunction") {
+      // Wire intersections can legitimately fall between grid lines; snapping
+      // such a junction would pull it off the wire and break the connection.
       const frameEntries: readonly [string, number][] = [
         ["x", node.frame.x],
         ["y", node.frame.y],
@@ -173,6 +190,74 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
       }
     }
 
+    if (node.kind === "circuitComponent") {
+      const definition = circuitComponent(node.component);
+      if (definition === undefined) {
+        error(
+          "circuit/component-kind",
+          `${path}.component`,
+          `unknown circuit component "${String(node.component)}"`,
+        );
+      }
+      if (!isRotation45(node.rotation)) {
+        error("circuit/rotation", `${path}.rotation`, "rotation must be a multiple of 45 in [0, 360)");
+      }
+      if (
+        node.labelOffset !== undefined &&
+        (!isFiniteNumber(node.labelOffset.x) || !isFiniteNumber(node.labelOffset.y))
+      ) {
+        error("circuit/label-offset", `${path}.labelOffset`, "labelOffset must have finite coordinates");
+      }
+      if (node.switchClosed !== undefined && typeof node.switchClosed !== "boolean") {
+        error("circuit/switch-state", `${path}.switchClosed`, "switchClosed must be a boolean");
+      }
+      if (
+        node.mirrorX !== undefined &&
+        typeof node.mirrorX !== "boolean"
+      ) {
+        error("circuit/mirror-x", `${path}.mirrorX`, "mirrorX must be a boolean");
+      }
+      if (
+        node.mirrorY !== undefined &&
+        typeof node.mirrorY !== "boolean"
+      ) {
+        error("circuit/mirror-y", `${path}.mirrorY`, "mirrorY must be a boolean");
+      }
+      if (
+        node.swapPinsX !== undefined &&
+        typeof node.swapPinsX !== "boolean"
+      ) {
+        error("circuit/swap-pins-x", `${path}.swapPinsX`, "swapPinsX must be a boolean");
+      }
+      if (
+        node.swapPinsY !== undefined &&
+        typeof node.swapPinsY !== "boolean"
+      ) {
+        error("circuit/swap-pins-y", `${path}.swapPinsY`, "swapPinsY must be a boolean");
+      }
+    }
+
+    if (node.kind === "circuitJunction") {
+      if (
+        node.junctionStyle !== "filled" &&
+        node.junctionStyle !== "solid" &&
+        node.junctionStyle !== "hollow" &&
+        node.junctionStyle !== "none"
+      ) {
+        error(
+          "circuit/junction-style",
+          `${path}.junctionStyle`,
+          'junctionStyle must be "filled", "solid", "hollow" or "none"',
+        );
+      }
+      if (
+        node.labelOffset !== undefined &&
+        (!isFiniteNumber(node.labelOffset.x) || !isFiniteNumber(node.labelOffset.y))
+      ) {
+        error("circuit/label-offset", `${path}.labelOffset`, "labelOffset must have finite coordinates");
+      }
+    }
+
     if (
       node.kind === "image" &&
       node.assetId !== undefined &&
@@ -237,6 +322,26 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
     }
     if (edge.markers.target.family !== "none" && edge.markers.target.scale !== undefined && !(edge.markers.target.scale > 0)) {
       error("edge/marker-scale", `${path}.markers.target.scale`, "marker scale must be positive");
+    }
+
+    if (edge.semantic.family === "circuit") {
+      if (
+        edge.markers.source.family !== "none" ||
+        edge.markers.target.family !== "none"
+      ) {
+        warning(
+          "circuit/wire-markers",
+          `${path}.markers`,
+          "circuit wires are plain lines; marker settings are ignored",
+        );
+      }
+      if (edge.routing.mode !== "straight") {
+        warning(
+          "circuit/wire-routing",
+          `${path}.routing.mode`,
+          "circuit wires are straight; routing mode is ignored",
+        );
+      }
     }
 
     if (edge.semantic.family === "er" && edge.markers.source.family === "uml") {
@@ -338,6 +443,23 @@ function validateAttachment(
       }
       if (!isFiniteNumber(attachment.port.t) || attachment.port.t < 0 || attachment.port.t > 1) {
         error("edge/spine-t", path, "spine t must be in [0, 1]");
+      }
+      return;
+    case "pin": {
+      if (node.kind !== "circuitComponent") {
+        error("edge/pin-port-type", path, `node "${node.id}" is not a circuit component`);
+        return;
+      }
+      const pinId = attachment.port.pinId;
+      const definition = circuitComponent(node.component);
+      if (definition === undefined || !definition.pins.some((pin) => pin.id === pinId)) {
+        error("edge/missing-pin", path, `pin "${pinId}" does not exist on node "${node.id}"`);
+      }
+      return;
+    }
+    case "center":
+      if (node.kind !== "circuitJunction") {
+        error("edge/center-port-type", path, `node "${node.id}" is not a circuit junction`);
       }
       return;
   }

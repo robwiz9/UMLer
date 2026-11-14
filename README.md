@@ -1,7 +1,7 @@
 # UMLer
 
-A UX-focused editor for **ER** and **UML** diagrams — Use Case, Class, Sequence, Communication and State Machine
-— with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
+A UX-focused editor for **ER**, **UML** and **circuit** diagrams — Use Case, Class, Sequence, Communication,
+State Machine and Circuit — with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
 
 ## Run it
 
@@ -44,11 +44,13 @@ the manual client-id setup and personal-access-token fallback.
 | [04 — Step 2 canvas](docs/04-step2-canvas.md) | Camera/grid/measurement/snap pipeline and Step 2 verification |
 | [05 — Step 3 editor](docs/05-step3-editor.md) | A* router, layered auto-layout, endpoint menus, table editor, label rules, verification |
 | [06 — Step 4 export](docs/06-step4-export.md) | Visual conventions vs CeTZ, selection bounds, page fitting, serializer, image resources, live WASM preview |
+| [07 — Circuit extension](docs/07-circuit-diagram-extension.md) | Circuit diagram kind: components, junctions, wires, omega crossings, 45° rotation, searchable palette, IEC/ANSI standard switch |
 
 ## Repository layout
 
 ```text
 src/model/        framework-agnostic scene graph + derived layout types + validation + edits + file formats
+                 (circuit vocabulary/catalogue and junction/wire edits also live here)
 src/layout/       text measurer, Phase 1 layout pass, A* router, auto-layout, snap/index helpers
 src/canvas/       SVG grid, node/edge skeleton renderers, endpoint popover, camera and port handles
 src/export/       selection resolver, page-fit math, Typst/CeTZ serializer and typst.ts preview bridge
@@ -68,7 +70,8 @@ cetz.pdf          supplied CeTZ 0.5.3 manual
 
 **File → Open from GitHub…** signs in with the OAuth, lets you pick a
 repository, branch and folder, lists existing `.umler` projects for direct selection, can target a new folder
-(created when the project is saved), then loads the project if that file exists. If the file is
+(created when the project is saved), and can create a new branch from the selected one so opened projects save
+there. It then loads the project if that file exists. If the file is
 absent, it creates a blank ER project there; if the current project has unsaved changes, it offers
 **Create blank project** or **Upload current project** instead. A bound project shows its repository path
 and sync state in the status bar; **Save to GitHub** / `Ctrl/Cmd+S` writes all scenes and the active scene.
@@ -93,13 +96,13 @@ nothing else until you click it, at which point the normal **Replace local with 
 chooser opens.
 
 ## What works now
-> **Current checkpoint: Step 4 complete — live Typst / CeTZ export.**
+> **Current checkpoint: Step 4 complete plus the circuit diagram extension.**
 > The repository contains the notation research and scene schema (Step 1), the SVG grid canvas and
 > measurement/snap pipeline (Step 2), the Step 3 editor layer (sparse orthogonal A* routing, layered
 > crossing-reduction layout, table content editing, endpoint marker popovers and label collision
-> avoidance), and the Step 4 exporter: a selectable, fit-aware Typst + CeTZ snippet serializer with a
-> live WASM-rendered preview, copyable source, document presets used only for fitting, typed diagram zoom,
-> alignment, an editable label (scene name by default) and an external image-resources folder.
+> avoidance), the Step 4 exporter (a selectable, fit-aware Typst + CeTZ snippet serializer with a
+> live WASM-rendered preview), and the circuit extension described in
+> [07 — Circuit extension](docs/07-circuit-diagram-extension.md).
 
 - **Live Typst / CeTZ export panel** toggled by **`</> Code`** in the toolbar. It serializes the committed
   scene/layout into a clean **pasteable snippet** and renders it in-browser through **typst.ts 0.7** (Typst
@@ -133,7 +136,11 @@ chooser opens.
   resize handles; corner connection arrows are gone, and table/class east-west ports sit at the header centre
   above the row-level arrows.
 - **Rubber-band selection and clipboard**: left-drag empty canvas to select every object fully inside the
-  rectangle (lifelines count by their head only); Ctrl/Cmd+click toggles an object; dragging any selected object
+  rectangle (lifelines count by their head only); if no objects are selected, every wire crossing the
+  rectangle is selected and Delete removes them all. Moving a component group carries auto-merged
+  junctions whose component endings all belong to the group, snapping their start positions to the grid;
+  nearby junction pairs are also merged into one grid-aligned junction during normalization. A single click opens an object's menu without
+  focusing its label; double-click the object or label to edit the text. Ctrl/Cmd+click toggles an object; dragging any selected object
   moves the whole selection. Ctrl/Cmd+C, X and V copy, cut and paste objects within the scene; connectors are
   copied only when both endpoint objects are selected, so a connector cannot be copied alone. Pasted objects
   are offset, selected and given fresh IDs, and image assets travel with their nodes. Selecting a table header
@@ -157,6 +164,71 @@ chooser opens.
   family-appropriate connector. New objects are grid-aligned, placed clear of existing objects, selected and
   focused; adding from the panel button pans just enough to reveal an object whose collision-free placement
   lands outside the viewport. New lifelines become a lane to the right of the existing lanes.
+- **Circuit diagrams** use a searchable, scrollable component table with recently placed components on top
+  and Image/Comment plus a Node row below it. The catalogue covers resistors, capacitors, coils,
+  potentiometers, DC/AC voltage sources, current sources, batteries, diodes/LEDs/zener diodes, NPN/PNP
+  transistors, N/P MOSFETs, switches, lightbulbs and voltage/current meters. Switches expose ON/OFF
+  focus-menu controls. External leads are one grid
+  square long and all pins are aligned to the 9 pt grid, including the potentiometer wiper and
+  three-terminal devices.
+  Components carry fixed pins that rotate with them, editable reference labels with Typst-style
+  sub/superscript notation (`R_1`, `R_"12"`, nested `R_"12"_"34"`, `V^2`; auto labels use the subscript
+  form), and a focus-menu rotation control plus an external drag-to-rotate handle in 45° steps that
+  follows the pointer at a fixed radius around the component centre, with its dashed leader always
+  pointing to the centre, settles at the new angle, and opens the component menu. Pin leads are drawn
+  dynamically from each body attachment point to the final pin; at 45° + n·90° that pin snaps to the
+  grid, so the lead extends from the rotated body to the grid. Rotation and orientation share one row:
+  rotate −45°/+45°, a thin dashed divider, mirror vertical, mirror horizontal and change orientation.
+  Mirrors move pins without rewiring (wires cross); change orientation mirrors about the control-pin
+  axis and rewires the mirrored endings, so LEDs reverse and transistor collector/emitter switch.
+  Component focus menus
+  open outside both the component and handle. The hit area and focus fill follow the rotated component
+  polygon expanded to include every pinned ending; the hover outline remains the plain rotated body
+  rectangle with no outer AABB. Port handles appear only while hovering that area.
+  Circuit diagrams open at 200% zoom with manual zoom capped at 800%. Circuit
+  scenes offer a left-panel **IEC/EU ↔ ANSI/US** symbol switch. In IEC mode the voltage source is a
+  circle with two horizontal bars, the current source is two overlapping circles, and new DC/AC voltage
+  sources are auto-numbered `U_1`, `U_2`, …; ANSI/US uses `V`. Junction styles are
+  small **Filled** (default), **Filled XL**, **Hollow** and **None**; an unconnected junction is drawn as
+  a gray dashed hollow warning. A junction with exactly two wires offers **Remove Junction (merge wires)**,
+  preserving one label or joining two labels with a space; pressing Delete on such a junction performs the
+  same merge and selects the resulting wire. Moving or rotating components/junctions so their endings
+  coincide merges overlapping junctions and adds zero-length straight connections to coincident pins. Wires use the same stroke as component leads, carry no
+  arrows or per-wire stroke options, and support draggable wire labels. Component and junction labels are
+  draggable too, with hover outlines and double-click-to-edit (double-clicking a component label opens
+  its focus menu and selects the name field). Delete at the end of a circuit label field (or when empty)
+  deletes the object or merges a two-way junction. Ctrl-dragging an object drags a duplicate selection;
+  Ctrl+Shift-dragging a circuit component duplicates it and wires the copy as a parallel branch through
+  fixed Group 1 and moving Group 2 junctions.
+  While dragging, amber rings preview pins/junctions that would merge or connect on drop. Alt-dragging a
+  circuit component or group disconnects its external endings into invisible junctions and shorts the
+  two-ending case; components with more than two endings get invisible junctions but no short. Shift-dragging an unconnected
+  two-terminal component onto a wire highlights the target and inserts the component in series at the
+  nearest grid point; wire insertion takes priority over endpoint merging while a target is active. The add-component menu uses one internal scroll body;
+  wheel events over it scroll the list without zooming the canvas. A wire dropped on empty canvas creates an invisible
+  branch Node after a deliberate drag; a component pin keeps at most one direct wire, and connecting to
+  an already-wired pin creates a filled junction at that pin point with zero-length rewiring; coincident
+  pins share one junction, with one zero-length stub each and no inter-pin loops; a
+  wire dropped on another wire creates a filled junction and splits/rewires both segments. A None-style
+  junction that gains a third connection becomes filled. Right-clicking
+  a wire computes an obstacle-aware orthogonal path with the fewest bends and splits it at each bend
+  into separate straight wires joined by junctions; double-clicking adds a small filled junction
+  at the nearest grid point and splits the wire. A wire between two junctions can be dragged sideways
+  (perpendicular to itself), carrying both junctions and stretching perpendicular branches. None-style
+  junctions have no hit area, so dragging at their bends selects the wire; visible junctions select normally.
+  At most one wire is kept between the same two node endpoints. Orthogonal wire translation hides any
+  moved two-wire junction after pin/duplicate normalization; circuit diagrams show only the Layout
+  panel’s “Visual layout refinements” checkbox (on by default), which disables this. Other diagram
+  types do not show that checkbox. Junction hit, hover and selection regions are one-grid-square
+  regions with square corners. Clicking a junction's centre port handle focuses it and opens its menu;
+  dragging the handle still starts a wire. Degree-two collinear junctions left by auto-merging collapse
+  back into a single wire. Shift + wheel shows blue dashed markers for shift-drag
+  branch junctions, and Shift-drag spawns fixed Group 1 and moving None-style Group 2 junctions once the
+  component reaches the next grid square. The whole gesture is one undo step; branch wires stay straight
+  and collinear results merge back into direct wires. Unconnected crossings render an omega bridge. The ANSI/US
+  resistor uses a symmetric three-peak zigzag. Copy/paste and duplicate preserve component reference labels
+  exactly, including intentional duplicates. Circuit scenes skip graph auto-layout and export through the
+  same Typst/CeTZ serializer.
 - **LaTeX typography**: diagram text uses bundled **Latin Modern Roman** and **Latin Modern Mono** faces on a
   white canvas with Computer Modern-style strokes. Default sizes are larger (10.5 pt body, 11.5 pt table
   headers, 9.5 pt edge labels), UI text was raised by one pixel, and contract chips use a centred baseline.
@@ -298,23 +370,26 @@ PASS UML sequence checkout — 3 nodes, 4 edges, 0 errors, 0 warnings
 PASS UML use case shop — 6 nodes, 3 edges, 0 errors, 0 warnings
 PASS UML state order — 5 nodes, 4 edges, 0 errors, 0 warnings
 PASS UML communication checkout — 3 nodes, 3 edges, 0 errors, 0 warnings
+PASS Circuit divider loop — 4 nodes, 4 edges, 0 errors, 0 warnings
 
 layout: OK
-  fixtures: 6
+  fixtures: 7
   ER nodes/ports/edges: 3/30/2
   ER content bounds: 585 × 223.9
 
-Persistence checks passed (38 assertions).
+Persistence checks passed (41 assertions).
 
 Clipboard checks passed (26 assertions).
 
 Conversion checks passed (29 assertions).
 
+Circuit checks passed (102 assertions).
+
 GitHub project checks passed (33 assertions).
 
 Storage checks passed (16 assertions).
 
-CeTZ serializer checks passed (172 assertions).
+CeTZ serializer checks passed (188 assertions).
 
 OAuth relay checks passed (18 assertions).
 ```
@@ -423,6 +498,36 @@ body text no longer carries a forced font. Also confirmed Ctrl+C with selected t
 and that clipboard shortcuts do not run while the export panel is focused. Typst Playground
 (`https://typst.app/play/`, Typst 0.15 + CeTZ 0.5.3) compiled the snippet with a real A4 page and 20 mm
 margins; the 79% output fit the content box, and a 100 × 60 mm page produced a 46% output that also fit.
+Circuit-extension checks (Chrome DevTools): created a circuit scene from the Scene dialog (the divider
+template loaded with `V_1`, `R_1`, `D_1` and a small filled junction); opened the add-component menu and
+confirmed the searchable, scrollable grouped table, the recent-component row, the Node row and
+Image/Comment below the table; added a coil and a capacitor; switched IEC/EU to ANSI/US and confirmed the
+resistor and potentiometer symbols restyled while pins stayed attached, including the corrected
+three-peak US resistor and the restored vertical potentiometer wiper; added IEC voltage and current
+sources and confirmed the two-bar DC symbol and two-overlapping-circle current symbol; added a switch and
+lightbulb from the Outputs group and confirmed their symbols; confirmed the
+divider template wires were horizontal/vertical; rotated a coil to 90° from the focus menu and a capacitor
+to 45° with the external rotate handle, confirming pins/wires followed and labels stayed upright; confirmed
+the subscripts in auto labels (`V_1`, `R_1`, `D_1`) and a nested `R_"12"_"34"` label;
+clicked/short-dragged a pin onto empty canvas and confirmed no node or wire was created, then performed a
+deliberate drag and confirmed the no-dot node and wire; dragged a pin onto an existing wire and confirmed
+a small filled junction, split/rewired segments and one-step undo; connected a second wire to an occupied
+pin and confirmed the nearby junction, stub and rewired existing wire; double-clicked a wire and confirmed
+a small grid-snapped junction split, then right-clicked a wire and confirmed the grid-aligned orthogonal
+reroute; added an unconnected Node and confirmed its gray dashed hollow warning; selected a wire over a
+component and confirmed hovered pin handles stayed hidden so the line could be dragged away; confirmed
+equal wire/lead thickness at 150% zoom and one-grid-square component leads; confirmed the
+Filled/Filled XL/Hollow/None junction menu and the two-way **Remove Junction (merge wires)** action;
+dragged component and wire labels, confirmed their hit frames moved and survived reload, then
+double-clicked the component label and confirmed its focus menu opened with the name text selected, and
+double-clicked the wire label and confirmed focus moved to the wire-label field; pressed Delete on an
+empty label field and confirmed the object action ran; pressed Delete on a two-way junction and confirmed
+the merged wire became selected; confirmed Shift + wheel displayed blue dashed branch markers and that
+releasing Shift removed them; rendered `R_"12"_"34"` in the canvas and compiled the Typst panel
+with matching nested sizing/baseline (638 ms); reloaded the page and confirmed the circuit scene, standard,
+rotation, labels, junction styles, offsets and wire labels were restored. `npm run check` and
+`npm run build` pass.
+
 Earlier Step 2 checks covered drag/resize, right-drag panning, stereotype centring, uniform table borders
 and sequence fit bounds.
 
@@ -449,9 +554,35 @@ CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ
 - Container-aware auto-layout for framed diagrams; sequence lane editing.
 - Label dragging/pinning and multiline label wrapping.
 - Typst-aware syntax highlighting in the generated-code block.
+- Circuit component values (`10 kΩ`, `0.1 µF`), per-component standard overrides, and automatic wire
+  merging when a junction is deleted.
 
 ## Next
 
 **Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
 document builder, and an optional image-resources manifest. Keep the serializer as the single source of
 geometry; the preview and any file export must consume the same `CetzExportResult`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
