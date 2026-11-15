@@ -2600,8 +2600,244 @@ button {
   width: min(500px, 100%);
 }
 
+.github-decision-dialog.merge {
+  width: min(980px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
 .gh-decision-actions {
   flex-wrap: wrap;
+  position: sticky;
+  bottom: -14px;
+  margin: 14px -14px -14px;
+  padding: 11px 14px;
+  border-top: 1px solid #f0ece3;
+  background: #fff;
+}
+
+.gh-merge-panel {
+  margin-top: 10px;
+}
+
+.gh-merge-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px;
+  border: 1px solid #e7e2d7;
+  border-radius: 8px;
+  background: #fbfaf7;
+}
+
+.gh-merge-summary strong {
+  display: block;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+.gh-merge-summary span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.gh-merge-bulk {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gh-merge-commit {
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #f6f4ef;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.gh-merge-commit code {
+  color: var(--ink);
+}
+
+.gh-merge-commit-message {
+  display: block;
+  margin-top: 2px;
+  color: #8a8378;
+  font-style: italic;
+}
+
+.gh-merge-grid {
+  margin-top: 10px;
+}
+
+.gh-merge-grid-head,
+.gh-merge-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.gh-merge-grid-head {
+  padding: 0 1px 6px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.gh-merge-row {
+  align-items: stretch;
+  padding: 10px 0;
+  border-top: 1px solid #f0ece3;
+}
+
+.gh-merge-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gh-merge-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gh-merge-card:hover {
+  border-color: #c9c2b5;
+}
+
+.gh-merge-card.on {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #475569;
+  box-shadow: inset 0 0 0 1px #bfdbfe;
+}
+
+.gh-merge-card:focus-within {
+  outline: 2px solid #bfdbfe;
+  outline-offset: 1px;
+}
+
+.gh-merge-card > strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+.gh-merge-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.gh-merge-card-kicker {
+  color: #8a8378;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gh-merge-choice-indicator {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #d6d0c3;
+  border-radius: 50%;
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.gh-merge-card.on .gh-merge-choice-indicator {
+  border-color: #60a5fa;
+  background: #fff;
+}
+
+.gh-merge-both {
+  justify-content: flex-start;
+  /* width: 30%; */
+  /* flex: 0.5; */
+}
+
+.gh-merge-preview-toggle {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.gh-merge-preview-toggle:hover {
+  text-decoration: underline;
+}
+
+.gh-merge-previews {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gh-merge-preview-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.scene-preview {
+  position: relative;
+  height: 190px;
+  overflow: hidden;
+  border: 1px solid #e7e2d7;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.scene-preview svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.scene-preview-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 10.5px;
 }
 
 .gh-picker .dialog-actions {

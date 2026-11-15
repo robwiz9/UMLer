@@ -46,11 +46,22 @@ export interface GitHubDirectoryEntry {
   readonly type: "dir" | "file" | "symlink" | "submodule";
 }
 
+export interface GitHubCommitInfo {
+  readonly sha: string;
+  readonly message: string;
+  readonly authorName: string;
+  readonly authorEmail: string;
+  readonly date: string;
+  readonly htmlUrl: string;
+}
+
 export interface GitHubRemoteFile {
   readonly text: string;
   readonly sha: string;
   readonly htmlUrl: string;
   readonly size: number;
+  /** Last commit that touched the selected file, when GitHub reports it. */
+  readonly commit?: GitHubCommitInfo;
 }
 
 export interface GitHubOAuthConfig {
@@ -228,6 +239,51 @@ const readRepo = (value: unknown): GitHubRepo | null => {
     private: value.private === true,
     htmlUrl: typeof value.html_url === "string" ? value.html_url : "",
     canPush: permissions.push !== false,
+  };
+};
+
+const readCommitInfo = (value: unknown): GitHubCommitInfo | undefined => {
+  if (!isRecord(value)) return undefined;
+  const author = isRecord(value.author) ? value.author : {};
+  const committer = isRecord(value.committer) ? value.committer : {};
+  const date =
+    typeof author.date === "string"
+      ? author.date
+      : typeof committer.date === "string"
+        ? committer.date
+        : "";
+  return {
+    sha: typeof value.sha === "string" ? value.sha : "",
+    message: typeof value.message === "string" ? value.message : "",
+    authorName:
+      typeof author.name === "string" && author.name.length > 0
+        ? author.name
+        : "Unknown author",
+    authorEmail: typeof author.email === "string" ? author.email : "",
+    date,
+    htmlUrl: typeof value.html_url === "string" ? value.html_url : "",
+  };
+};
+
+/**
+ * Parses one entry from `GET /repos/{owner}/{repo}/commits?path=...`. The
+ * Contents API file response omits commit details, so this is the reliable
+ * source for the author name shown in the merge dialog.
+ */
+export const parseLatestFileCommit = (
+  value: unknown,
+): GitHubCommitInfo | undefined => {
+  if (!isRecord(value) || !isRecord(value.commit)) return undefined;
+  const info = readCommitInfo(value.commit);
+  if (info === undefined) return undefined;
+  const actor = isRecord(value.author) ? value.author : {};
+  if (info.authorName === "Unknown author" && typeof actor.login === "string") {
+    return { ...info, authorName: actor.login };
+  }
+  return {
+    ...info,
+    sha: typeof value.sha === "string" ? value.sha : info.sha,
+    htmlUrl: typeof value.html_url === "string" ? value.html_url : info.htmlUrl,
   };
 };
 
@@ -587,12 +643,14 @@ export const getProjectFile = async (
 
   const size = typeof data.size === "number" ? data.size : 0;
   const htmlUrl = typeof data.html_url === "string" ? data.html_url : "";
+  const commit = readCommitInfo(data.commit);
   if (typeof data.content === "string" && data.content.length > 0) {
     return {
       text: base64ToUtf8(data.content),
       sha: data.sha,
       htmlUrl,
       size,
+      ...(commit === undefined ? {} : { commit }),
     };
   }
 
@@ -623,7 +681,29 @@ export const getProjectFile = async (
     sha: data.sha,
     htmlUrl,
     size,
+    ...(commit === undefined ? {} : { commit }),
   };
+};
+
+/**
+ * The last commit that touched the selected project file. Used only when a
+ * conflict dialog needs attribution, so normal saves do not pay for it.
+ */
+export const getLatestFileCommit = async (
+  token: string,
+  target: Pick<GitHubTarget, "owner" | "repo" | "branch" | "path">,
+): Promise<GitHubCommitInfo | undefined> => {
+  const query = new URLSearchParams({
+    path: target.path,
+    sha: target.branch,
+    per_page: "1",
+  });
+  const { data } = await apiRequest(
+    token,
+    `${repoPath(target)}/commits?${query.toString()}`,
+  );
+  if (!Array.isArray(data)) return undefined;
+  return parseLatestFileCommit(data[0]);
 };
 
 export interface WriteProjectFileInput {

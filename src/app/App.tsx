@@ -38,6 +38,7 @@ import { loadStoredGitHubSession, storeGitHubSession } from "./github-session.ts
 import { loadStoredProject, saveStoredProject } from "./project-storage.ts";
 import {
   describeGitHubError,
+  getLatestFileCommit,
   getProjectFile,
   isGitHubConflict,
   writeProjectFile,
@@ -47,11 +48,16 @@ import {
 import { useSceneHistory } from "./use-scene-history.ts";
 import {
   compareRemoteFile,
+  conflictingScenes,
   githubTargetLabel,
+  mergeAutoChoices,
+  mergeProjectScenes,
   projectDigest,
   projectTitleFromPath,
+  sceneDigestMap,
   type GitHubBinding,
   type GitHubTarget,
+  type MergeChoice,
   type ProjectSnapshot,
 } from "../model/github-project.ts";
 import type {
@@ -264,9 +270,18 @@ export const App = () => {
   const [githubSession, setGithubSession] = useState<GitHubSession | null>(() =>
     loadStoredGitHubSession(),
   );
-  const [githubBinding, setGithubBinding] = useState<GitHubBinding | null>(() =>
-    initialProject === null ? null : initialProject.githubBinding,
-  );
+  const [githubBinding, setGithubBinding] = useState<GitHubBinding | null>(() => {
+    const binding = initialProject?.githubBinding ?? null;
+    if (binding === null || binding.sceneDigests !== undefined) return binding;
+    if (initialProject === null) return binding;
+    // Migrate a binding saved before per-scene baselines existed. Only do this
+    // when the local project is clean; otherwise the last synced scene state
+    // is unknown.
+    const cleanDigest = projectDigest(initialProject.scenes, initialScene.id);
+    return cleanDigest === binding.syncedDigest
+      ? { ...binding, sceneDigests: sceneDigestMap(initialProject.scenes) }
+      : binding;
+  });
   const [assetLibrary, setAssetLibrary] = useState<Record<string, ImageAsset>>(
     () =>
       initialProject === null
@@ -312,6 +327,8 @@ export const App = () => {
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
   const manualSaveRef = useRef<() => void>(() => {});
   const autoSaveRef = useRef<() => void>(() => {});
+  const startupCheckRef = useRef<() => void>(() => {});
+  const startupCheckedRef = useRef(false);
 
   const measurer = useMemo(() => new CanvasTextMeasurer(), [fontTick]);
 
@@ -712,12 +729,30 @@ export const App = () => {
         syncedDigest: digest,
         syncedAt: new Date().toISOString(),
         htmlUrl: remote.htmlUrl,
+        sceneDigests: sceneDigestMap(project.scenes),
       });
       setGithubDecision(null);
       setGithubDialogOpen(false);
       showToast(`Opened ${target.owner}/${target.repo} · ${target.path}`);
     },
     [activateSceneDocument, showToast],
+  );
+
+  const adoptProjectLocally = useCallback(
+    (
+      projectScenes: readonly SceneDocument[],
+      projectActiveSceneId: string,
+      projectAssets: Readonly<Record<string, ImageAsset>>,
+    ): void => {
+      const active =
+        projectScenes.find((item) => item.id === projectActiveSceneId) ??
+        projectScenes[0];
+      if (active === undefined) throw new Error("The merged project has no scenes.");
+      setScenes([...projectScenes]);
+      setAssetLibrary(pruneUnusedProjectAssets(projectScenes, projectAssets));
+      activateSceneDocument(active);
+    },
+    [activateSceneDocument],
   );
 
   const commitSnapshotToGitHub = useCallback(
@@ -774,6 +809,7 @@ export const App = () => {
           syncedDigest: digest,
           syncedAt: new Date().toISOString(),
           htmlUrl: result.htmlUrl,
+          sceneDigests: sceneDigestMap(snapshot.scenes),
         });
         setBaselineDigest(digest);
         setGithubDecision(null);
@@ -788,6 +824,108 @@ export const App = () => {
       }
     },
     [githubSession, showToast],
+  );
+
+  const resolveSaveMerge = useCallback(
+    async (
+      target: GitHubTarget,
+      remote: GitHubRemoteFile,
+      remoteProject: ImportedProject,
+      localSnapshot: ProjectSnapshot,
+      remoteDigest: string,
+      choices: Readonly<Record<string, MergeChoice>>,
+      mode: GitHubSaveMode = "manual",
+    ): Promise<void> => {
+      const merged = mergeProjectScenes(
+        localSnapshot.scenes,
+        localSnapshot.activeSceneId,
+        remoteProject.scenes,
+        remoteProject.activeSceneId,
+        choices,
+      );
+      const mergedAssets = {
+        ...remoteProject.assets,
+        ...(localSnapshot.assets ?? {}),
+      };
+      const mergedDigest = projectDigest(merged.scenes, merged.activeSceneId);
+      if (mergedDigest === remoteDigest) {
+        applyRemoteProject(target, remote, remoteProject);
+        return;
+      }
+      try {
+        await commitSnapshotToGitHub(
+          target,
+          {
+            scenes: merged.scenes,
+            activeSceneId: merged.activeSceneId,
+            assets: mergedAssets,
+          },
+          remote.sha,
+          mergedDigest,
+          "Merge project from UMLer",
+          mode,
+          true,
+        );
+        adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+      } catch (error) {
+        const message = describeGitHubError(error);
+        if (mode === "auto") {
+          showToast(`Auto-merge failed: ${message}`, "warning", {
+            sticky: true,
+            action: { label: "Retry", run: () => manualSaveRef.current() },
+          });
+        } else {
+          showToast(message, "error");
+        }
+      }
+    },
+    [adoptProjectLocally, applyRemoteProject, commitSnapshotToGitHub, showToast],
+  );
+
+  const resolveOpenMerge = useCallback(
+    (
+      target: GitHubTarget,
+      remote: GitHubRemoteFile,
+      remoteProject: ImportedProject,
+      localSnapshot: ProjectSnapshot,
+      remoteDigest: string,
+      choices: Readonly<Record<string, MergeChoice>>,
+    ): void => {
+      const merged = mergeProjectScenes(
+        localSnapshot.scenes,
+        localSnapshot.activeSceneId,
+        remoteProject.scenes,
+        remoteProject.activeSceneId,
+        choices,
+      );
+      const mergedAssets = {
+        ...remoteProject.assets,
+        ...(localSnapshot.assets ?? {}),
+      };
+      const mergedDigest = projectDigest(merged.scenes, merged.activeSceneId);
+      setGithubDecision(null);
+      if (mergedDigest === remoteDigest) {
+        applyRemoteProject(target, remote, remoteProject);
+        return;
+      }
+      try {
+        adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+        setBaselineDigest(remoteDigest);
+        setGithubBinding({
+          ...target,
+          sha: remote.sha,
+          syncedDigest: remoteDigest,
+          syncedAt: new Date().toISOString(),
+          htmlUrl: remote.htmlUrl,
+          sceneDigests: sceneDigestMap(remoteProject.scenes),
+        });
+        setGithubDialogOpen(false);
+        showToast("Merged project locally. Save to GitHub to publish the merged copy.");
+      } catch (error) {
+        showToast(describeGitHubError(error), "error");
+      }
+    },
+    [adoptProjectLocally, applyRemoteProject, showToast],
   );
 
   const createBlankRemoteProject = useCallback(
@@ -824,6 +962,7 @@ export const App = () => {
           syncedDigest: digest,
           syncedAt: new Date().toISOString(),
           htmlUrl: result.htmlUrl,
+          sceneDigests: sceneDigestMap(snapshot.scenes),
         });
         setGithubDecision(null);
         setGithubDialogOpen(false);
@@ -836,13 +975,13 @@ export const App = () => {
   );
 
   const presentSaveConflict = useCallback(
-    (
+    async (
       target: GitHubTarget,
       remote: GitHubRemoteFile,
       snapshot: ProjectSnapshot,
       digest: string,
       mode: GitHubSaveMode = "manual",
-    ) => {
+    ): Promise<void> => {
       const warnAutoConflict = (message: string): void => {
         showToast(message, "warning", {
           sticky: true,
@@ -899,6 +1038,7 @@ export const App = () => {
           syncedDigest: digest,
           syncedAt: new Date().toISOString(),
           htmlUrl: remote.htmlUrl,
+          sceneDigests: sceneDigestMap(remoteProject.scenes),
         });
         setBaselineDigest(digest);
         setGithubDecision(null);
@@ -911,6 +1051,37 @@ export const App = () => {
         return;
       }
 
+      const baseline = githubBinding?.sceneDigests;
+      const conflicts = conflictingScenes(
+        snapshot.scenes,
+        remoteProject.scenes,
+        baseline,
+      );
+      const autoChoices = mergeAutoChoices(
+        snapshot.scenes,
+        remoteProject.scenes,
+        baseline,
+      );
+
+      // Disjoint scene edits merge themselves. This is the common two-user
+      // case: each side changed a different scene, so there is nothing to ask.
+      if (conflicts.length === 0) {
+        // Let the current save call clear its busy flag first; the merge commit
+        // then takes ownership of the busy state for its own request.
+        window.setTimeout(() => {
+          void resolveSaveMerge(
+            target,
+            remote,
+            remoteProject,
+            snapshot,
+            remoteDigest,
+            autoChoices,
+            mode,
+          );
+        }, 0);
+        return;
+      }
+
       if (mode === "auto") {
         warnAutoConflict(
           `GitHub conflict: ${target.path} changed remotely. Click to review.`,
@@ -918,34 +1089,52 @@ export const App = () => {
         return;
       }
 
+      let remoteCommit = remote.commit;
+      if (githubSession !== null) {
+        try {
+          remoteCommit =
+            (await getLatestFileCommit(githubSession.token, target)) ?? remoteCommit;
+        } catch {
+          // Attribution is optional; the conflict picker still works.
+        }
+      }
+
       askGitHub({
-        title: "Remote project changed",
-        message: `${target.path} has changes on GitHub. Choose which copy to keep.`,
+        title: "Scenes changed in both copies",
+        message: `${conflicts.length} ${conflicts.length === 1 ? "scene has" : "scenes have"} changes on both sides. Choose local, remote, or keep both for each scene.`,
         detail: githubTargetLabel(target),
-        options: [
-          {
-            label: "Replace local with remote",
-            tone: "danger",
-            run: () => applyRemoteProject(target, remote, remoteProject),
-          },
-          {
-            label: "Overwrite remote",
-            tone: "primary",
-            run: () =>
-              commitSnapshotToGitHub(
-                target,
-                snapshot,
-                remote.sha,
-                digest,
-                "Overwrite project from UMLer",
-                "manual",
-                true,
-              ),
-          },
-        ],
+        options: [],
+        merge: {
+          conflicts,
+          localAuthor:
+            githubSession?.user.name?.trim() ||
+            githubSession?.user.login ||
+            "Local editor",
+          localAssets: snapshot.assets ?? {},
+          remoteAssets: remoteProject.assets,
+          remoteCommit,
+          confirmLabel: "Merge and save",
+          onConfirm: (choices) =>
+            resolveSaveMerge(
+              target,
+              remote,
+              remoteProject,
+              snapshot,
+              remoteDigest,
+              { ...autoChoices, ...choices },
+            ),
+        },
       });
     },
-    [applyRemoteProject, askGitHub, commitSnapshotToGitHub, showToast],
+    [
+      applyRemoteProject,
+      askGitHub,
+      commitSnapshotToGitHub,
+      githubBinding,
+      githubSession,
+      resolveSaveMerge,
+      showToast,
+    ],
   );
 
   const openFromGitHub = useCallback(
@@ -1007,6 +1196,7 @@ export const App = () => {
             syncedDigest: currentDigest,
             syncedAt: new Date().toISOString(),
             htmlUrl: remote.htmlUrl,
+            sceneDigests: sceneDigestMap(project.scenes),
           });
           setBaselineDigest(currentDigest);
           setGithubDecision(null);
@@ -1016,31 +1206,66 @@ export const App = () => {
         }
 
         if (localDirty) {
+          const sameProject =
+            githubBinding !== null &&
+            githubBinding.owner === target.owner &&
+            githubBinding.repo === target.repo &&
+            githubBinding.branch === target.branch &&
+            githubBinding.path === target.path;
+          const baseline = sameProject ? githubBinding.sceneDigests : undefined;
+          const conflicts = conflictingScenes(
+            snapshot.scenes,
+            project.scenes,
+            baseline,
+          );
+          const autoChoices = mergeAutoChoices(
+            snapshot.scenes,
+            project.scenes,
+            baseline,
+          );
+          if (conflicts.length === 0) {
+            resolveOpenMerge(
+              target,
+              remote,
+              project,
+              snapshot,
+              remoteDigest,
+              autoChoices,
+            );
+            return;
+          }
+          let remoteCommit = remote.commit;
+          try {
+            remoteCommit =
+              (await getLatestFileCommit(githubSession.token, target)) ?? remoteCommit;
+          } catch {
+            // Attribution is optional; the conflict picker still works.
+          }
           askGitHub({
-            title: "Replace the local project?",
-            message: `The project at ${target.path} exists and your local project has unsaved changes. Choose which copy to keep.`,
+            title: "Scenes changed in both copies",
+            message: `The project at ${target.path} and your local project have changes on both sides in ${conflicts.length} ${conflicts.length === 1 ? "scene" : "scenes"}. Choose local, remote, or keep both for each scene.`,
             detail: githubTargetLabel(target),
-            options: [
-              {
-                label: "Replace local with remote",
-                tone: "danger",
-                run: () => applyRemoteProject(target, remote, project),
-              },
-              {
-                label: "Overwrite remote",
-                tone: "primary",
-                run: () =>
-                  commitSnapshotToGitHub(
-                    target,
-                    snapshot,
-                    remote.sha,
-                    currentDigest,
-                    "Overwrite project from UMLer",
-                    "manual",
-                    true,
-                  ),
-              },
-            ],
+            options: [],
+            merge: {
+              conflicts,
+              localAuthor:
+                githubSession?.user.name?.trim() ||
+                githubSession?.user.login ||
+                "Local editor",
+              localAssets: snapshot.assets ?? {},
+              remoteAssets: project.assets,
+              remoteCommit,
+              confirmLabel: "Open merged project",
+              onConfirm: (choices) =>
+                resolveOpenMerge(
+                  target,
+                  remote,
+                  project,
+                  snapshot,
+                  remoteDigest,
+                  { ...autoChoices, ...choices },
+                ),
+            },
           });
           return;
         }
@@ -1058,9 +1283,11 @@ export const App = () => {
       createBlankRemoteProject,
       currentDigest,
       currentScenes,
+      githubBinding,
       githubBusy,
       githubSession,
       assetLibrary,
+      resolveOpenMerge,
       scene.id,
       showToast,
     ],
@@ -1151,7 +1378,7 @@ export const App = () => {
         }
 
         if (compareRemoteFile(githubBinding.sha, remote.sha) !== "unchanged") {
-          presentSaveConflict(target, remote, snapshot, digest, mode);
+          await presentSaveConflict(target, remote, snapshot, digest, mode);
           return;
         }
 
@@ -1168,7 +1395,7 @@ export const App = () => {
           try {
             const latest = await getProjectFile(githubSession.token, target);
             if (latest !== null) {
-              presentSaveConflict(target, latest, snapshot, digest, mode);
+              await presentSaveConflict(target, latest, snapshot, digest, mode);
               return;
             }
           } catch (refreshError) {
@@ -1225,6 +1452,124 @@ export const App = () => {
     if (currentDigest === githubBinding.syncedDigest) return;
     void saveToGitHub("auto");
   };
+
+  startupCheckRef.current = () => {
+    if (
+      githubBinding === null ||
+      githubSession === null ||
+      startupCheckedRef.current ||
+      githubBusy !== null ||
+      githubDecision !== null ||
+      githubDialogOpen ||
+      sceneDialog !== null ||
+      pendingProjectImport !== null
+    ) {
+      return;
+    }
+    startupCheckedRef.current = true;
+    const target = targetOf(githubBinding);
+    const binding = githubBinding;
+    const localSnapshot: ProjectSnapshot = {
+      scenes: currentScenes,
+      activeSceneId: scene.id,
+      assets: assetLibrary,
+    };
+    const localDigest = currentDigest;
+    void (async () => {
+      try {
+        const remote = await getProjectFile(githubSession.token, target);
+        if (remote === null) {
+          if (localDigest !== binding.syncedDigest) {
+            showToast(
+              `GitHub conflict: ${target.path} was deleted remotely. Click to review.`,
+              "warning",
+              {
+                sticky: true,
+                action: { label: "Review", run: () => manualSaveRef.current() },
+              },
+            );
+          }
+          return;
+        }
+        if (remote.sha === binding.sha) return;
+
+        let remoteProject: ImportedProject;
+        try {
+          remoteProject = deserializeProjectFile(remote.text);
+        } catch {
+          if (localDigest !== binding.syncedDigest) {
+            showToast(
+              "GitHub conflict: the remote project is invalid. Click to review.",
+              "warning",
+              {
+                sticky: true,
+                action: { label: "Review", run: () => manualSaveRef.current() },
+              },
+            );
+          }
+          return;
+        }
+        const remoteDigest = projectDigest(
+          remoteProject.scenes,
+          remoteProject.activeSceneId,
+        );
+        if (remoteDigest === localDigest) {
+          setGithubBinding({
+            ...target,
+            sha: remote.sha,
+            syncedDigest: localDigest,
+            syncedAt: new Date().toISOString(),
+            htmlUrl: remote.htmlUrl,
+            sceneDigests: sceneDigestMap(remoteProject.scenes),
+          });
+          setBaselineDigest(localDigest);
+          return;
+        }
+
+        const baseline = binding.sceneDigests;
+        const conflicts = conflictingScenes(
+          localSnapshot.scenes,
+          remoteProject.scenes,
+          baseline,
+        );
+        if (conflicts.length > 0) {
+          showToast(
+            `GitHub merge conflict: ${conflicts.length} ${conflicts.length === 1 ? "scene has" : "scenes have"} changes in both copies. Click to review.`,
+            "warning",
+            {
+              sticky: true,
+              action: { label: "Review", run: () => manualSaveRef.current() },
+            },
+          );
+          return;
+        }
+
+        // No overlapping scene edits: merge the remote update on load. A clean
+        // local copy is simply refreshed; disjoint local edits are retained and
+        // become unsaved changes to publish on the next save.
+        const autoChoices = mergeAutoChoices(
+          localSnapshot.scenes,
+          remoteProject.scenes,
+          baseline,
+        );
+        resolveOpenMerge(
+          target,
+          remote,
+          remoteProject,
+          localSnapshot,
+          remoteDigest,
+          autoChoices,
+        );
+      } catch {
+        // A failed background refresh must not block editing or show a toast.
+      }
+    })();
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => startupCheckRef.current(), 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (githubBinding === null || githubSession === null) return;

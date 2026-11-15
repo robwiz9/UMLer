@@ -59,6 +59,7 @@ const binding: GitHubBinding = {
   syncedDigest: "sync-digest",
   syncedAt: "2026-01-01T00:00:00.000Z",
   htmlUrl: "https://github.com/acme/diagrams",
+  sceneDigests: { [activeScene.id]: "scene-digest" },
 };
 
 assert(loadStoredProject() === null, "empty storage should not restore a project");
@@ -87,6 +88,10 @@ assert(restored?.scenes.length === scenes.length, "restored project lost scenes"
 assert(restored?.activeSceneId === activeScene.id, "restored project lost the active scene");
 assert(restored?.githubBinding?.path === binding.path, "restored project lost the GitHub path");
 assert(restored?.githubBinding?.sha === binding.sha, "restored project lost the GitHub SHA");
+assert(
+  restored?.githubBinding?.sceneDigests?.[activeScene.id] === "scene-digest",
+  "restored project lost its per-scene GitHub baseline",
+);
 assert(
   restored?.baselineDigest === projectDigest(scenes, activeScene.id),
   "restored project lost its sync baseline",

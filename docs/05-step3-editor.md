@@ -74,12 +74,17 @@ branch. A debounced contents lookup reports whether the path contains an existin
 - if the local project has unsaved changes, the user chooses **Create blank project** / **Upload current
   project**, or for an existing remote, **Replace local with remote** / **Overwrite remote**.
 
-A bound project records the remote blob SHA and a project digest. The status bar shows the repository path and
-**Save** / **Synced** state; **Save to GitHub** and `Ctrl/Cmd+S` write all scenes plus the active scene. Save
-first checks the remote SHA. If the remote changed, was deleted, or the PUT returns a conflict, UMLer does not
-auto-merge: it offers **Replace local with remote**, **Overwrite remote** / **Recreate remote**, or **Cancel**.
-A remote file that fails `deserializeProjectFile` is rejected before it can touch the local canvas, and image
-bytes remain metadata-only like project-file exports.
+A bound project records the remote blob SHA, a project digest and per-scene baseline digests. The status bar
+shows the repository path and **Save** / **Synced** state; **Save to GitHub** and `Ctrl/Cmd+S` write all scenes
+plus the active scene. On page load, a bound project checks the remote SHA; overlapping edits raise a sticky warning
+toast whose **Review** action opens the merge picker. Save also first checks the remote SHA. If the remote changed,
+was deleted, or the PUT returns a conflict, UMLer does not silently pick a side: it offers **Replace local with
+remote**, **Overwrite remote** / **Recreate remote**, or **Cancel**. Edits to different scenes merge automatically
+and are written back without a warning. When individual scenes changed on both sides, the dialog lists those scenes
+in a three-column local/remote/keep-both picker with local edit times, the remote commit author/time, and optional
+canvas previews. Keeping both inserts the remote scene as a new project scene. A remote file that fails
+`deserializeProjectFile` is rejected before it can touch the local canvas, and image bytes remain metadata-only like
+project-file exports.
 
 The open project (all scenes, active scene, GitHub binding, sync baseline) is autosaved to browser storage and
 restored on refresh, so reopening the app does not reset to the demo. The GitHub session token is stored in

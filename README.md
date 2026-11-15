@@ -82,9 +82,14 @@ an OAuth App at
 [github.com/settings/developers](https://github.com/settings/developers), enable **Device flow**, and use any
 callback URL. A personal access token with `repo` scope is available as a fallback; it is kept in memory only.
 
-Every load/save records the file blob SHA. If the remote changed, or was deleted, UMLer does not auto-merge:
-the dialog offers **Replace local with remote**, **Overwrite remote** (or **Recreate remote**) and **Cancel**.
-Remote JSON is validated before it replaces the local project; a bad remote file never reaches the canvas.
+Every load/save records the file blob SHA and per-scene baseline digests. On page load, a bound project checks the
+remote SHA; overlapping remote/local edits raise a sticky warning toast whose **Review** action opens the merge
+picker. If the remote changed, or was deleted, UMLer does not silently pick a side: the dialog offers **Replace
+local with remote**, **Overwrite remote** (or **Recreate remote**) and **Cancel**. Edits to different scenes merge
+automatically and are written back without a warning; only scenes changed on both sides open the merge picker. That
+picker has three columns with local/remote scene metadata, commit author/time, canvas previews, and **local /
+remote / keep both** choices; keeping both inserts the remote scene as a new scene. Remote JSON is validated before
+it replaces the local project; a bad remote file never reaches the canvas.
 
 The open project, its GitHub path/SHA and the last sync baseline are autosaved locally, so a page refresh
 reopens the same project and repository location instead of the built-in demo. The GitHub token is kept in
