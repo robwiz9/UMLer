@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T20:46:15.273Z",
+  "exportedAt": "2026-11-15T20:46:41.068Z",
   "activeSceneId": "scene_92290cdf",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_e36a97c4",
-      "revision": 1,
+      "revision": 2,
       "meta": {
         "title": "Untitled Entity-Relation diagram",
         "diagramKind": "er",
         "createdAt": "2026-11-15T20:27:32.529Z",
-        "updatedAt": "2026-11-15T20:27:32.529Z",
+        "updatedAt": "2026-11-15T20:46:33.092Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -136,8 +136,8 @@
           "kind": "table",
           "name": "customers",
           "frame": {
-            "x": 36,
-            "y": 72,
+            "x": -72,
+            "y": 315,
             "width": 225,
             "height": 90
           },
@@ -1510,12 +1510,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_92290cdf",
-      "revision": 3,
+      "revision": 4,
       "meta": {
         "title": "Untitled Entity-Relation diagram",
         "diagramKind": "er",
         "createdAt": "2026-11-15T20:44:45.248Z",
-        "updatedAt": "2026-11-15T20:46:11.254Z",
+        "updatedAt": "2026-11-15T20:46:39.356Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -1639,8 +1639,8 @@
           "kind": "table",
           "name": "customers",
           "frame": {
-            "x": -9,
-            "y": 9,
+            "x": 108,
+            "y": 0,
             "width": 225,
             "height": 90
           },
