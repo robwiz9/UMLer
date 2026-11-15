@@ -1,7 +1,7 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T20:35:14.478Z",
+  "exportedAt": "2026-11-15T20:42:35.720Z",
   "activeSceneId": "scene_4cae8430",
   "scenes": [
     {
@@ -1347,12 +1347,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_4cae8430",
-      "revision": 4,
+      "revision": 5,
       "meta": {
         "title": "Untitled Object diagram",
         "diagramKind": "uml-object",
         "createdAt": "2026-11-15T20:33:23.354Z",
-        "updatedAt": "2026-11-15T20:33:37.285Z",
+        "updatedAt": "2026-11-15T20:42:33.684Z",
         "appVersion": "0.1.0-step1"
       },
       "canvas": {
@@ -1474,8 +1474,8 @@
           "id": "object_3de5d8a5",
           "name": ":Class",
           "frame": {
-            "x": -252,
-            "y": -72,
+            "x": -207,
+            "y": -153,
             "width": 180,
             "height": 45
           },
