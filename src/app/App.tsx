@@ -2272,7 +2272,12 @@ export const App = () => {
     (frames: Readonly<Record<string, Rect>>) => {
       setScene(
         (current) => {
-          const next = withNodeFrames(current, frames);
+          let next = withNodeFrames(current, frames);
+          if (current.meta.diagramKind === "circuit") {
+            next = mergeCoincidentCircuitConnections(next);
+            next = normalizeCircuitPinConnections(next);
+            next = normalizeCircuitDuplicateConnections(next);
+          }
           return {
             ...next,
             revision: current.revision + 1,

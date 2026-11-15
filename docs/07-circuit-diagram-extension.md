@@ -1695,6 +1695,8 @@ behaviour; where earlier sections differ, this section wins.
     so they can be selected, moved and show the focus box like other junctions. Component pin/junction
     coincidence uses a half-grid tolerance consistently, so bringing an ending visually onto a junction
     reliably creates the zero-length merge wire instead of creating a second junction.
+42. **Ctrl-drag auto-merge.** Duplicate drags run coincidence merging and pin/duplicate normalization on
+    drop, so a copied object released on an ending or junction auto-merges like a normal drag.
 
 The circuit test suite now covers these cases (108 assertions at the time of writing).
 

@@ -231,7 +231,8 @@ chooser opens.
   junctions at selected endings move with shift-drags, and initial generated branch edges are kept.
   Shift-scroll adjusts branch distance whenever components are selected; markers appear only for
   components with external pin connections. None-style junctions still have a hit target, can be moved,
-  and show their focus box; ending coincidence merges within half a grid cell. Unconnected crossings render an omega bridge. The ANSI/US
+  and show their focus box; ending coincidence merges within half a grid cell. Ctrl-drag duplicates also
+  auto-merge on drop when released on an ending or junction. Unconnected crossings render an omega bridge. The ANSI/US
   resistor uses a symmetric three-peak zigzag. Copy/paste and duplicate preserve component reference labels
   exactly, including intentional duplicates. Circuit scenes skip graph auto-layout and export through the
   same Typst/CeTZ serializer.
