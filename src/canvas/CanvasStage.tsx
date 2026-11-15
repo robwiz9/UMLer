@@ -1289,13 +1289,61 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           : hoveredObjectNodeIdRef.current === null
             ? []
             : [hoveredObjectNodeIdRef.current];
-        const componentIds = targetIds.filter(
+        const selectedSet = new Set(targetIds);
+        const selectedComponentIds = targetIds.filter(
           (id) => sceneRef.current.nodes[id]?.kind === "circuitComponent",
         );
-        if (componentIds.length > 0) {
+        const indicatorIds = selectedComponentIds.filter((id) => {
+          const node = sceneRef.current.nodes[id];
+          if (node?.kind !== "circuitComponent") return false;
+          const definition = circuitComponent(node.component);
+          if (definition === undefined) return false;
+          return Object.values(sceneRef.current.edges).some((edge) => {
+            if (edge.semantic.family !== "circuit") return false;
+            const atPin = definition.pins.some(
+              (pin) =>
+                (edge.source.target === "node" &&
+                  edge.source.nodeId === node.id &&
+                  edge.source.port.kind === "pin" &&
+                  edge.source.port.pinId === pin.id) ||
+                (edge.target.target === "node" &&
+                  edge.target.nodeId === node.id &&
+                  edge.target.port.kind === "pin" &&
+                  edge.target.port.pinId === pin.id),
+            );
+            if (!atPin) return false;
+            const other = edge.source.target === "node" &&
+              edge.source.nodeId === node.id
+              ? edge.target
+              : edge.source;
+            return other.target !== "node" || !selectedSet.has(other.nodeId);
+          });
+        });
+        const junctionIndicatorIds = targetIds.filter((id) => {
+          const node = sceneRef.current.nodes[id];
+          if (node?.kind !== "circuitJunction") return false;
+          return Object.values(sceneRef.current.edges).some((edge) => {
+            if (edge.semantic.family !== "circuit") return false;
+            const atJunction =
+              edge.source.target === "node" &&
+              edge.source.nodeId === node.id &&
+              edge.source.port.kind === "center"
+                ? true
+                : edge.target.target === "node" &&
+                  edge.target.nodeId === node.id &&
+                  edge.target.port.kind === "center";
+            if (!atJunction) return false;
+            const other =
+              edge.source.target === "node" && edge.source.nodeId === node.id
+                ? edge.target
+                : edge.source;
+            return other.target !== "node" || !selectedSet.has(other.nodeId);
+          });
+        });
+        if (selectedComponentIds.length > 0) {
           const direction = event.deltaY < 0 ? 1 : -1;
           setBranchDistance((current) => Math.max(0, current + direction));
-          setBranchTargetIds(componentIds);
+          setBranchTargetIds([...indicatorIds, ...junctionIndicatorIds]);
           return;
         }
       }
@@ -1932,6 +1980,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       if (branchIds.length > 0) {
         branchIntentRef.current = {
           nodeIds: branchIds,
+          junctionIds: movingIds
+            .filter((id) => scene.nodes[id]?.kind === "circuitJunction")
+            .map((id) => id as NodeId),
+          selectedNodeIds: movingIds.map((id) => id as NodeId),
           originalFrames,
           distance: branchDistance * scene.canvas.grid.size,
         };
@@ -1957,8 +2009,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (
       scene.meta.diagramKind === "circuit" &&
       !duplicate &&
-      !detach &&
-      !event.shiftKey
+      !detach
     ) {
       const componentPins: { readonly nodeId: string; readonly point: Point }[] = [];
       const junctionTolerance = Math.max(0.5, scene.canvas.grid.size * 0.25);
@@ -1988,6 +2039,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       }
     }
     movingSet.delete(nodeId);
+    if (branchIntentRef.current !== null) {
+      const branchAllNodeIds = [nodeId, ...movingSet];
+      const branchNodeIds = branchAllNodeIds
+        .filter((id) => scene.nodes[id]?.kind === "circuitComponent")
+        .map((id) => asNodeId(id));
+      branchIntentRef.current = {
+        ...branchIntentRef.current,
+        nodeIds: branchNodeIds,
+        junctionIds: branchAllNodeIds
+          .filter((id) => scene.nodes[id]?.kind === "circuitJunction")
+          .map((id) => asNodeId(id)),
+        selectedNodeIds: branchAllNodeIds.map((id) => asNodeId(id)),
+      };
+    }
     const childIds = [...movingSet];
     const childStartFrames: Record<string, Rect> = Object.fromEntries(
       childIds.flatMap((childId) => {
@@ -3310,11 +3375,26 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               }
               return [{ sourceId: asNodeId(sourceId), duplicateId }];
             });
-            if (pairs.length > 0) {
+            const junctionPairs = intent.nodeIds.flatMap((sourceId) => {
+              const duplicateId = duplicated.nodeIdMap.get(asNodeId(sourceId));
+              if (duplicateId === undefined) return [];
+              const source = sceneRef.current.nodes[sourceId];
+              const duplicate = duplicated.scene.nodes[duplicateId];
+              if (
+                source?.kind !== "circuitJunction" ||
+                duplicate?.kind !== "circuitJunction"
+              ) {
+                return [];
+              }
+              return [{ sourceId: asNodeId(sourceId), duplicateId }];
+            });
+            if (pairs.length > 0 || junctionPairs.length > 0) {
               const parallel = createDuplicateParallelBranches(
                 duplicateScene,
                 pairs,
                 Math.max(0, branchDistance) * sceneRef.current.canvas.grid.size,
+                intent.nodeIds.map((id) => asNodeId(id)),
+                junctionPairs,
               );
               duplicateScene = parallel.scene;
               parallelGroup2Ids = parallel.group2Ids.map(String);
@@ -3608,6 +3688,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         const distance = branchDistance * scene.canvas.grid.size;
         return branchTargetIds.flatMap((nodeId) => {
           const nodeLayout = layout.nodes[nodeId];
+          if (nodeLayout?.kind === "circuitJunction") {
+            return [
+              point(
+                nodeLayout.center.x + distance,
+                nodeLayout.center.y,
+              ),
+            ];
+          }
           if (nodeLayout?.kind !== "circuitComponent") return [];
           return nodeLayout.pins.flatMap((pin) => {
             const external = Object.values(scene.edges).some((edge) => {

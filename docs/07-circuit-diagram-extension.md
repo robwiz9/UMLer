@@ -1682,8 +1682,21 @@ behaviour; where earlier sections differ, this section wins.
     than half a grid cell into one grid-aligned junction before duplicate-wire cleanup. This keeps an
     auto-merged junction aligned on the first move instead of leaving it behind and generating an
     off-grid duplicate.
+40. **Selected junctions inside branch groups.** Shift-drag and Ctrl+Shift-drag treat a selected junction
+    as internal only when **all** of its connected nodes are also selected. An internal junction moves or
+    duplicates with the group without rewiring. A boundary selected junction is branched as a junction:
+    its external wires stay anchored at its original point while a dynamic wire follows the moved or
+    duplicated junction, instead of creating the branch at component pins inside the group. Generated
+    branch edges are exempt from zero-length loop cleanup so the initial branch connection survives.
+    Auto-merged junctions at selected endings are carried by shift-drags too, preventing a stray junction
+    at the old merge point. Shift-scroll always adjusts branch distance when components are selected, but
+    distance markers appear only for components with external connections.
+41. **Visible None junctions and half-grid merging.** None-style junctions keep a transparent hit target,
+    so they can be selected, moved and show the focus box like other junctions. Component pin/junction
+    coincidence uses a half-grid tolerance consistently, so bringing an ending visually onto a junction
+    reliably creates the zero-length merge wire instead of creating a second junction.
 
-The circuit test suite now covers these cases (103 assertions at the time of writing).
+The circuit test suite now covers these cases (108 assertions at the time of writing).
 
 ---
 
@@ -1711,6 +1724,10 @@ The circuit test suite now covers these cases (103 assertions at the time of wri
 - [ ] CeTZ export contains the same components, rotations, junction styles, labels and hops as the
       canvas, with no editor overlays.
 - [ ] `npm run check` passes, including new circuit tests and all existing fixture checks.
+
+
+
+
 
 
 

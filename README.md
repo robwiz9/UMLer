@@ -226,7 +226,12 @@ chooser opens.
   back into a single wire. Shift + wheel shows blue dashed markers for shift-drag
   branch junctions, and Shift-drag spawns fixed Group 1 and moving None-style Group 2 junctions once the
   component reaches the next grid square. The whole gesture is one undo step; branch wires stay straight
-  and collinear results merge back into direct wires. Unconnected crossings render an omega bridge. The ANSI/US
+  and collinear results merge back into direct wires. A selected junction is internal only when all its
+  connected nodes are selected; otherwise the branch is created at that boundary junction. Auto-merged
+  junctions at selected endings move with shift-drags, and initial generated branch edges are kept.
+  Shift-scroll adjusts branch distance whenever components are selected; markers appear only for
+  components with external pin connections. None-style junctions still have a hit target, can be moved,
+  and show their focus box; ending coincidence merges within half a grid cell. Unconnected crossings render an omega bridge. The ANSI/US
   resistor uses a symmetric three-peak zigzag. Copy/paste and duplicate preserve component reference labels
   exactly, including intentional duplicates. Circuit scenes skip graph auto-layout and export through the
   same Typst/CeTZ serializer.
@@ -384,7 +389,7 @@ Clipboard checks passed (26 assertions).
 
 Conversion checks passed (29 assertions).
 
-Circuit checks passed (103 assertions).
+Circuit checks passed (108 assertions).
 
 GitHub project checks passed (33 assertions).
 
@@ -563,6 +568,10 @@ CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ
 **Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
 document builder, and an optional image-resources manifest. Keep the serializer as the single source of
 geometry; the preview and any file export must consume the same `CetzExportResult`.
+
+
+
+
 
 
 

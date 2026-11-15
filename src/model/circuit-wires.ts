@@ -37,8 +37,46 @@ export interface CircuitJunctionInsertion {
   readonly newEdgeId: EdgeId;
 }
 
+const internalJunctionSelection = (
+  scene: SceneDocument,
+  nodeIds: readonly NodeId[],
+): Set<string> => {
+  const selected = new Set(nodeIds.map(String));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const id of [...selected]) {
+      const node = scene.nodes[id];
+      if (node?.kind !== "circuitJunction") continue;
+      const boundary = Object.values(scene.edges).some((edge) => {
+        if (edge.semantic.family !== "circuit") return false;
+        const source =
+          edge.source.target === "node" &&
+          edge.source.nodeId === node.id &&
+          edge.source.port.kind === "center";
+        const target =
+          edge.target.target === "node" &&
+          edge.target.nodeId === node.id &&
+          edge.target.port.kind === "center";
+        if (!source && !target) return false;
+        const other = source ? edge.target : edge.source;
+        return other.target !== "node" || !selected.has(String(other.nodeId));
+      });
+      if (boundary) {
+        selected.delete(id);
+        changed = true;
+      }
+    }
+  }
+  return selected;
+};
+
 export interface ShiftBranchDrag {
   readonly nodeIds: readonly NodeId[];
+  /** Boundary junctions that should branch instead of their enclosed pins. */
+  readonly junctionIds?: readonly NodeId[];
+  /** All selected nodes, including junctions that are internal to the group. */
+  readonly selectedNodeIds?: readonly NodeId[];
   readonly originalFrames: Readonly<Record<string, Rect>>;
   /** Outward offset from the original pin, in scene units. */
   readonly distance: number;
@@ -811,7 +849,14 @@ export const createShiftDragBranchesResult = (
   drag: ShiftBranchDrag,
   mergeStraight = false,
 ): ShiftBranchResult => {
-  const selected = new Set(drag.nodeIds);
+  const allSelected = new Set(
+    (drag.selectedNodeIds ?? drag.nodeIds).map((id) => String(id)),
+  );
+  const internalJunctions = internalJunctionSelection(
+    scene,
+    drag.selectedNodeIds ?? drag.nodeIds,
+  );
+  const selected = allSelected;
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   const edges: Record<string, SceneEdge> = { ...scene.edges };
   const groups: ShiftBranchGroup[] = [];
@@ -923,6 +968,63 @@ export const createShiftDragBranchesResult = (
     }
   }
 
+  for (const junctionId of drag.junctionIds ?? []) {
+    if (internalJunctions.has(String(junctionId))) continue;
+    const junction = scene.nodes[junctionId];
+    if (junction?.kind !== "circuitJunction") continue;
+    const external = Object.values(scene.edges).filter((edge) => {
+      if (edge.semantic.family !== "circuit") return false;
+      const atJunction =
+        edge.source.target === "node" &&
+        edge.source.nodeId === junction.id &&
+        edge.source.port.kind === "center"
+          ? true
+          : edge.target.target === "node" &&
+            edge.target.nodeId === junction.id &&
+            edge.target.port.kind === "center";
+      if (!atJunction) return false;
+      const other =
+        edge.source.target === "node" && edge.source.nodeId === junction.id
+          ? edge.target
+          : edge.source;
+      return other.target !== "node" || !selected.has(String(other.nodeId));
+    });
+    if (external.length === 0) continue;
+    const originalFrame = drag.originalFrames[junction.id] ?? junction.frame;
+    const group1 = {
+      ...createCircuitJunction(
+        scene,
+        add(rectCenter(originalFrame), point(distance, 0)),
+        "filled",
+      ),
+      generatedBranch: true,
+    };
+    nodes[group1.id] = group1;
+    const group1Attachment = nodeAttachment(group1.id, { kind: "center" });
+    for (const edge of external) {
+      const end = edge.source.target === "node" &&
+        edge.source.nodeId === junction.id &&
+        edge.source.port.kind === "center"
+        ? "source"
+        : "target";
+      edges[edge.id] = setEnd(edge, end, group1Attachment);
+    }
+    const dynamic = createCircuitWire(
+      scene,
+      { nodeId: junction.id, port: { kind: "center" } },
+      { nodeId: group1.id, port: { kind: "center" } },
+    );
+    edges[dynamic.id] = dynamic;
+    groups.push({
+      pinNodeId: junction.id,
+      pinId: "",
+      group1Id: group1.id,
+      stubEdgeId: dynamic.id,
+      dynamicEdgeId: dynamic.id,
+      externalEdgeIds: external.map((edge) => edge.id),
+    });
+  }
+
   const committed = commit(scene, { nodes, edges });
   return {
     scene: mergeStraight ? cleanupShiftBranches(committed, groups) : committed,
@@ -945,8 +1047,19 @@ export const createDuplicateParallelBranches = (
   scene: SceneDocument,
   pairs: readonly { readonly sourceId: NodeId; readonly duplicateId: NodeId }[],
   distance: number,
+  selectedNodeIds?: readonly NodeId[],
+  junctionPairs?: readonly {
+    readonly sourceId: NodeId;
+    readonly duplicateId: NodeId;
+  }[],
 ): DuplicateParallelBranchResult => {
-  const selected = new Set(pairs.map((pair) => pair.sourceId));
+  const selected = new Set(
+    (selectedNodeIds ?? pairs.map((pair) => pair.sourceId)).map((id) => String(id)),
+  );
+  const internalJunctions = internalJunctionSelection(
+    scene,
+    selectedNodeIds ?? pairs.map((pair) => pair.sourceId),
+  );
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   const edges: Record<string, SceneEdge> = { ...scene.edges };
   const group2Ids: NodeId[] = [];
@@ -1047,6 +1160,38 @@ export const createDuplicateParallelBranches = (
       const dynamic = createCircuitWire(scene, group2Ref, group1Ref);
       edges[dynamic.id] = dynamic;
     }
+  }
+  for (const pair of junctionPairs ?? []) {
+    if (internalJunctions.has(String(pair.sourceId))) continue;
+    const source = scene.nodes[pair.sourceId];
+    const duplicate = scene.nodes[pair.duplicateId];
+    if (source?.kind !== "circuitJunction" || duplicate?.kind !== "circuitJunction") {
+      continue;
+    }
+    const external = Object.values(scene.edges).filter((edge) => {
+      if (edge.semantic.family !== "circuit") return false;
+      const atJunction =
+        edge.source.target === "node" &&
+        edge.source.nodeId === source.id &&
+        edge.source.port.kind === "center"
+          ? true
+          : edge.target.target === "node" &&
+            edge.target.nodeId === source.id &&
+            edge.target.port.kind === "center";
+      if (!atJunction) return false;
+      const other =
+        edge.source.target === "node" && edge.source.nodeId === source.id
+          ? edge.target
+          : edge.source;
+      return other.target !== "node" || !selected.has(String(other.nodeId));
+    });
+    if (external.length === 0) continue;
+    const dynamic = createCircuitWire(
+      scene,
+      { nodeId: duplicate.id, port: { kind: "center" } },
+      { nodeId: source.id, port: { kind: "center" } },
+    );
+    edges[dynamic.id] = dynamic;
   }
   return { scene: { ...scene, nodes, edges }, group2Ids };
 };
@@ -1248,7 +1393,7 @@ export const mergeCoincidentCircuitConnections = (
   scene: SceneDocument,
 ): SceneDocument => {
   const grid = Math.max(1, scene.canvas.grid.size);
-  const tolerance = Math.max(0.5, grid * 0.25);
+  const tolerance = Math.max(0.5, grid * 0.5 - 1e-6);
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   const edges: Record<string, SceneEdge> = { ...scene.edges };
 
@@ -1701,7 +1846,7 @@ export const normalizeCircuitPinConnections = (
   scene: SceneDocument,
 ): SceneDocument => {
   let current = scene;
-  const tolerance = 0.5;
+  const tolerance = Math.max(0.5, scene.canvas.grid.size * 0.5 - 1e-6);
 
   // First merge junction nodes that occupy the same point; multiple pins
   // landing together must share one junction, not one junction per pin.
@@ -1873,6 +2018,8 @@ export const normalizeCircuitPinConnections = (
         edge.source.nodeId === edge.target.nodeId ||
         (sourceNode?.kind === "circuitJunction" &&
           targetNode?.kind === "circuitJunction" &&
+          sourceNode.generatedBranch !== true &&
+          targetNode.generatedBranch !== true &&
           length(sub(rectCenter(sourceNode.frame), rectCenter(targetNode.frame))) <= tolerance)
       ) {
         delete cleanedEdges[edge.id];

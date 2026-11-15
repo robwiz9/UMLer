@@ -23,6 +23,7 @@ import {
   createCircuitJunction,
   createDuplicateParallelBranches,
   createShiftDragBranches,
+  createShiftDragBranchesResult,
   detachCircuitComponentEndings,
   gridAlignedOrthogonalRoute,
   hideDegreeTwoJunctions,
@@ -33,6 +34,7 @@ import {
   mergeCoincidentCircuitConnections,
   normalizeCircuitPinConnections,
   normalizeCircuitDuplicateConnections,
+  normalizeCircuitJunctionStyles,
   prepareOccupiedPinJunction,
   rewireCircuitComponentPins,
   splitCircuitWireAtCorners,
@@ -595,6 +597,34 @@ check(
   Object.keys(loopConnections.edges).length === 2,
   "a two-point loop between different pins should not be deduplicated",
 );
+const nearMergeBase = withNodes([
+  component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
+]);
+const nearMergeJunction = createCircuitJunction(
+  nearMergeBase,
+  { x: 92, y: 18 },
+  "none",
+);
+const nearMergeScene = withNodes(
+  [
+    component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
+    nearMergeJunction,
+  ],
+);
+const nearMerged = mergeCoincidentCircuitConnections(nearMergeScene);
+check(
+  Object.values(nearMerged.edges).some(
+    (edge) =>
+      edge.source.target === "node" &&
+      edge.source.nodeId === asNodeId("r1") &&
+      edge.source.port.kind === "pin" &&
+      edge.source.port.pinId === "A" &&
+      edge.target.target === "node" &&
+      edge.target.nodeId === nearMergeJunction.id &&
+      edge.target.port.kind === "center",
+  ),
+  "a component ending near a junction should auto-merge within half a grid cell",
+);
 
 // --- orthogonal corner junctions -------------------------------------------
 const cornerScene = withNodes(
@@ -925,7 +955,117 @@ check(
     Object.keys(parallel.scene.edges).length === 4,
   "ctrl+shift duplicate should add parallel Group 1/Group 2 branches",
 );
-const detachScene = withNodes(  [
+const internalBranchJunction = createCircuitJunction(
+  withNodes([
+    component("v1", "V1", "voltage-source", rect(0, 0, 36, 54)),
+    component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
+  ]),
+  { x: 90, y: 18 },
+  "filled",
+);
+const internalBranchScene = withNodes(
+  [
+    component("v1", "V1", "voltage-source", rect(0, 0, 36, 54)),
+    component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
+    internalBranchJunction,
+  ],
+  [
+    {
+      ...wire("internal_w1", "r1", "A", "v1", "+"),
+      target: {
+        target: "node",
+        nodeId: internalBranchJunction.id,
+        port: { kind: "center" },
+      },
+    },
+    {
+      ...wire("internal_w2", "v1", "+", "r1", "A"),
+      target: {
+        target: "node",
+        nodeId: internalBranchJunction.id,
+        port: { kind: "center" },
+      },
+    },
+  ],
+);
+const internalBranch = createShiftDragBranchesResult(
+  internalBranchScene,
+  {
+    nodeIds: [asNodeId("r1")],
+    junctionIds: [internalBranchJunction.id],
+    selectedNodeIds: [
+      asNodeId("r1"),
+      asNodeId("v1"),
+      internalBranchJunction.id,
+    ],
+    originalFrames: { r1: rect(90, 0, 54, 36) },
+    distance: 9,
+  },
+  false,
+);
+check(
+  internalBranch.groups.length === 0,
+  "shift-branch should not rewire a pin connected to an internal selected junction",
+);
+const boundaryBranch = createShiftDragBranchesResult(
+  internalBranchScene,
+  {
+    nodeIds: [asNodeId("r1")],
+    junctionIds: [internalBranchJunction.id],
+    selectedNodeIds: [asNodeId("r1"), internalBranchJunction.id],
+    originalFrames: { r1: rect(90, 0, 54, 36) },
+    distance: 9,
+  },
+  false,
+);
+check(
+  boundaryBranch.groups.length > 0,
+  "a selected junction connected outside the group should be treated normally",
+);
+const boundaryAnchor = boundaryBranch.groups[0]?.group1Id;
+check(
+  boundaryAnchor !== undefined &&
+    Object.values(boundaryBranch.scene.edges).some(
+      (edge) =>
+        (edge.source.target === "node" &&
+          edge.source.nodeId === internalBranchJunction.id &&
+          edge.source.port.kind === "center" &&
+          edge.target.target === "node" &&
+          edge.target.nodeId === boundaryAnchor &&
+          edge.target.port.kind === "center") ||
+        (edge.target.target === "node" &&
+          edge.target.nodeId === internalBranchJunction.id &&
+          edge.target.port.kind === "center" &&
+          edge.source.target === "node" &&
+          edge.source.nodeId === boundaryAnchor &&
+          edge.source.port.kind === "center"),
+    ),
+  "a boundary junction branch should connect the junction to its new anchor",
+);
+const normalizedBoundaryBranch = normalizeCircuitJunctionStyles(
+  mergeNearbyCircuitJunctions(
+    normalizeCircuitDuplicateConnections(
+      normalizeCircuitPinConnections(boundaryBranch.scene),
+    ),
+  ),
+);
+check(
+  boundaryAnchor !== undefined &&
+    Object.values(normalizedBoundaryBranch.edges).some(
+      (edge) =>
+        (edge.source.target === "node" &&
+          edge.source.nodeId === internalBranchJunction.id &&
+          edge.target.target === "node" &&
+          edge.target.nodeId === boundaryAnchor) ||
+        (edge.target.target === "node" &&
+          edge.target.nodeId === internalBranchJunction.id &&
+          edge.source.target === "node" &&
+          edge.source.nodeId === boundaryAnchor),
+    ),
+  "normalization should keep the boundary junction branch connection",
+);
+const detachScene = withNodes(
+  [
     component("v1", "V1", "voltage-source", rect(0, 0, 36, 54)),
     component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
   ],

@@ -1117,8 +1117,7 @@ export const NodeSkeleton = ({
     >
       <title>{`${node.name}${node.locked ? " (locked)" : ""}`}</title>
       {layout.kind === "lifeline" ||
-      layout.kind === "frame" ||
-      (layout.kind === "circuitJunction" && layout.junctionStyle === "none") ? null : hitOutline !== null ? (
+      layout.kind === "frame" ? null : hitOutline !== null ? (
         <polygon
           points={hitOutline.map((entry) => `${entry.x},${entry.y}`).join(" ")}
           fill="transparent"
