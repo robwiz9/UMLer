@@ -1,7 +1,7 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T20:44:47.971Z",
+  "exportedAt": "2026-11-15T20:46:15.273Z",
   "activeSceneId": "scene_92290cdf",
   "scenes": [
     {
@@ -1510,12 +1510,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_92290cdf",
-      "revision": 2,
+      "revision": 3,
       "meta": {
         "title": "Untitled Entity-Relation diagram",
         "diagramKind": "er",
         "createdAt": "2026-11-15T20:44:45.248Z",
-        "updatedAt": "2026-11-15T20:44:46.817Z",
+        "updatedAt": "2026-11-15T20:46:11.254Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -1640,7 +1640,7 @@
           "name": "customers",
           "frame": {
             "x": -9,
-            "y": 45,
+            "y": 9,
             "width": 225,
             "height": 90
           },
