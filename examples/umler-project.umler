@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T21:07:50.119Z",
+  "exportedAt": "2026-11-15T21:08:03.454Z",
   "activeSceneId": "scene_9c10c901",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_e36a97c4",
-      "revision": 2,
+      "revision": 1,
       "meta": {
         "title": "Untitled Entity-Relation diagram",
         "diagramKind": "er",
         "createdAt": "2026-11-15T20:27:32.529Z",
-        "updatedAt": "2026-11-15T20:46:33.092Z",
+        "updatedAt": "2026-11-15T20:27:32.529Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -136,8 +136,8 @@
           "kind": "table",
           "name": "customers",
           "frame": {
-            "x": -72,
-            "y": 315,
+            "x": 36,
+            "y": 72,
             "width": 225,
             "height": 90
           },
@@ -578,12 +578,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_9c10c901",
-      "revision": 15,
+      "revision": 16,
       "meta": {
         "title": "Untitled Class diagram",
         "diagramKind": "uml-class",
         "createdAt": "2026-11-15T20:27:40.534Z",
-        "updatedAt": "2026-11-15T21:07:44.469Z",
+        "updatedAt": "2026-11-15T21:07:56.354Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -707,8 +707,8 @@
           "kind": "table",
           "name": "PaymentMethod",
           "frame": {
-            "x": -63,
-            "y": 9,
+            "x": 171,
+            "y": -27,
             "width": 225,
             "height": 72
           },
@@ -1510,12 +1510,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_92290cdf",
-      "revision": 4,
+      "revision": 3,
       "meta": {
         "title": "Untitled Entity-Relation diagram",
         "diagramKind": "er",
         "createdAt": "2026-11-15T20:44:45.248Z",
-        "updatedAt": "2026-11-15T20:46:39.356Z",
+        "updatedAt": "2026-11-15T20:46:11.254Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -1639,8 +1639,8 @@
           "kind": "table",
           "name": "customers",
           "frame": {
-            "x": 108,
-            "y": 0,
+            "x": -9,
+            "y": 9,
             "width": 225,
             "height": 90
           },
