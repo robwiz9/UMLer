@@ -1,8 +1,8 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T21:08:03.454Z",
-  "activeSceneId": "scene_9c10c901",
+  "exportedAt": "2026-11-15T21:08:14.849Z",
+  "activeSceneId": "scene_4cae8430",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
@@ -578,12 +578,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_9c10c901",
-      "revision": 16,
+      "revision": 17,
       "meta": {
         "title": "Untitled Class diagram",
         "diagramKind": "uml-class",
         "createdAt": "2026-11-15T20:27:40.534Z",
-        "updatedAt": "2026-11-15T21:07:56.354Z",
+        "updatedAt": "2026-11-15T21:08:10.743Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -707,8 +707,8 @@
           "kind": "table",
           "name": "PaymentMethod",
           "frame": {
-            "x": 171,
-            "y": -27,
+            "x": -36,
+            "y": 18,
             "width": 225,
             "height": 72
           },
@@ -1347,12 +1347,12 @@
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_4cae8430",
-      "revision": 7,
+      "revision": 8,
       "meta": {
         "title": "Untitled Object diagram",
         "diagramKind": "uml-object",
         "createdAt": "2026-11-15T20:33:23.354Z",
-        "updatedAt": "2026-11-15T20:44:35.884Z",
+        "updatedAt": "2026-11-15T21:08:13.908Z",
         "appVersion": "0.1.0-step1"
       },
       "canvas": {
@@ -1474,7 +1474,7 @@
           "id": "object_3de5d8a5",
           "name": ":Class",
           "frame": {
-            "x": -126,
+            "x": -333,
             "y": -261,
             "width": 180,
             "height": 45
