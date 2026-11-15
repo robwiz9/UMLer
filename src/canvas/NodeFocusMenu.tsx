@@ -913,17 +913,23 @@ export const NodeFocusMenu = ({
                 >
                   none
                 </button>
-                {VISIBILITIES.map((visibility) => (
-                  <button
-                    key={visibility}
-                    type="button"
-                    className={`chip ${prefixValue === visibility ? "on" : ""}`}
-                    onClick={() => onUpdateRow(node.id, row.id, { visibility, prefix: undefined })}
-                    title={`UML ${visibility} visibility`}
-                  >
+                {VISIBILITIES.map((visibility) => {
+                  let title = `UML ${visibility} visibility`;
+                  if (visibility === "+") title = "Public method";
+                  if (visibility === "-") title = "Private method";
+                  if (visibility === "#") title = "Protected method";
+                  if (visibility === "~") title = "Package method";
+                  return (
+                    <button
+                      key={visibility}
+                      type="button"
+                      className={`chip ${prefixValue === visibility ? "on" : ""}`}
+                      onClick={() => onUpdateRow(node.id, row.id, { visibility, prefix: undefined })}
+                      title={title}
+                    >
                     {visibility}
                   </button>
-                ))}
+                )})}
               </div>
             </div>
             <label className="field-label">

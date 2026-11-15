@@ -83,9 +83,9 @@ bytes remain metadata-only like project-file exports.
 
 The open project (all scenes, active scene, GitHub binding, sync baseline) is autosaved to browser storage and
 restored on refresh, so reopening the app does not reset to the demo. The GitHub session token is stored in
-`sessionStorage`: it survives a page refresh but is cleared when the tab closes. Signing out removes it. The
-path and SHA restore with the project, so **Open from GitHub** starts at the previously bound repository, branch,
-folder and file.
+`localStorage`, so a refresh and additional tabs stay signed in. Signing out removes it. A session from the older
+tab-scoped `sessionStorage` key is migrated on load. The path and SHA restore with the project, so **Open from
+GitHub** starts at the previously bound repository, branch, folder and file.
 
 A bound project auto-saves to GitHub every two minutes when its project digest differs from the last sync. The
 status bar shows **Saving…**, and a sticky progress toast stays visible until the request resolves. Manual
@@ -808,8 +808,8 @@ Browser checks:
   the project and repository path return instead of the demo; reopen the path and confirm a non-empty ER project
   loads with its nodes; exercise both **Replace local with remote** and **Overwrite remote** on load/save
   conflicts and **Recreate remote** after a deletion;
-- confirm the GitHub token survives a refresh but is removed on sign-out (tab-scoped session storage); confirm the
-  client-id setup can be reopened and forgotten without losing the current project;
+- confirm the GitHub token survives a refresh and opens in a new tab, then is removed on sign-out (shared local
+  storage); confirm the client-id setup can be reopened and forgotten without losing the current project;
 - accelerate the two-minute auto-save timer and confirm a dirty bound project saves; make the remote file differ
   and confirm auto-save shows a sticky **Review** warning toast without opening a dialog until the toast is
   clicked; confirm a delayed save shows the **Saving to GitHub…** progress toast and then the success toast;

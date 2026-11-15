@@ -151,6 +151,10 @@ const apiRequest = async (
   try {
     response = await fetch(`${API_ROOT}${path}`, {
       ...init,
+      // Conflict resolution must observe the latest remote blob SHA. A cached
+      // Contents API response would make an explicit overwrite keep supplying
+      // the same stale SHA and fail repeatedly.
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
@@ -503,6 +507,7 @@ export const listDirectoryContents = async (
     response = await fetch(
       `${API_ROOT}${repoPath(target)}/contents${suffix}?ref=${encodeURIComponent(target.branch)}`,
       {
+        cache: "no-store",
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
@@ -545,6 +550,7 @@ export const getProjectFile = async (
   let response: Response;
   try {
     response = await fetch(fileUrl, {
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
@@ -595,6 +601,7 @@ export const getProjectFile = async (
   let rawResponse: Response;
   try {
     rawResponse = await fetch(fileUrl, {
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github.raw",
         Authorization: `Bearer ${token}`,
@@ -662,7 +669,10 @@ export const writeProjectFile = async (
 export const isGitHubConflict = (error: unknown): boolean => {
   if (!(error instanceof GitHubApiError)) return false;
   if (error.status === 409) return true;
-  return error.status === 422 && /sha|conflict|already exists/i.test(error.message);
+  // The Contents API's stale-blob response is `"<path> does not match <sha>"`.
+  // It names neither "sha" nor "conflict", so the plain message must also be
+  // classified as a conflict or explicit overwrite retries never run.
+  return error.status === 422 && /sha|conflict|already exists|does not match/i.test(error.message);
 };
 
 export const describeGitHubError = (error: unknown): string => {

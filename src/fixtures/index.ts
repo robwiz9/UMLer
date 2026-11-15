@@ -401,11 +401,11 @@ export const ER_COMMERCE: SceneDocument = scene(
         section("customers_attrs", "attributes", [
           row("customers_id", "id", "attribute", {
             type: "uuid",
-            constraints: ["PK", "NN"],
+            constraints: ["PK"],
           }),
           row("customers_email", "email", "attribute", {
             type: "citext",
-            constraints: ["UQ", "NN"],
+            constraints: ["UQ"],
           }),
           row("customers_name", "name", "attribute", { type: "text" }),
         ]),
@@ -420,19 +420,19 @@ export const ER_COMMERCE: SceneDocument = scene(
         section("orders_attrs", "attributes", [
           row("orders_id", "id", "attribute", {
             type: "uuid",
-            constraints: ["PK", "NN"],
+            constraints: ["PK"],
           }),
           row("orders_customer_id", "customer_id", "attribute", {
             type: "uuid",
-            constraints: ["FK", "NN"],
+            constraints: ["FK"],
           }),
           row("orders_total", "total", "attribute", {
             type: "numeric(12,2)",
-            constraints: ["NN"],
+            constraints: [],
           }),
           row("orders_placed_at", "placed_at", "attribute", {
-            type: "timestamptz",
-            constraints: ["NN"],
+            type: "timestamp",
+            constraints: [],
           }),
         ]),
       ],
@@ -444,11 +444,11 @@ export const ER_COMMERCE: SceneDocument = scene(
       [
         row("order_line_quantity", "quantity", "attribute", {
           type: "int",
-          constraints: ["NN"],
+          constraints: [],
         }),
         row("order_line_unit_price", "unit_price", "attribute", {
           type: "numeric(12,2)",
-          constraints: ["NN"],
+          constraints: [],
         }),
       ],
     ),

@@ -1,6 +1,6 @@
 /**
- * GitHub sign-in is kept in sessionStorage so a page refresh does not require
- * another device-flow round. Closing the tab/browser drops the token again.
+ * GitHub sign-in is kept in localStorage so a refresh and additional tabs use
+ * the same device-flow session instead of asking for another sign-in.
  */
 
 import type { GitHubSession } from "./github-client.ts";
@@ -13,11 +13,29 @@ const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 export const loadStoredGitHubSession = (): GitHubSession | null => {
-  let raw: string | null;
+  let raw: string | null = null;
   try {
-    raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
   } catch {
-    return null;
+    // Fall through to the legacy per-tab location.
+  }
+  if (raw === null) {
+    try {
+      const legacy = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (legacy !== null) {
+        raw = legacy;
+        // Migrate a tab-scoped session from before this change so the user
+        // does not have to sign in again after upgrading.
+        try {
+          window.localStorage.setItem(SESSION_STORAGE_KEY, legacy);
+          window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        } catch {
+          // Keep using the legacy value for this tab even if migration fails.
+        }
+      }
+    } catch {
+      return null;
+    }
   }
   if (raw === null) return null;
 
@@ -44,11 +62,16 @@ export const loadStoredGitHubSession = (): GitHubSession | null => {
 
 export const storeGitHubSession = (session: GitHubSession | null): void => {
   try {
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // Ignore a blocked legacy storage area; localStorage below is canonical.
+  }
+  try {
     if (session === null) {
-      window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
       return;
     }
-    window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
   } catch {
     // A blocked storage area should not prevent the current session from working.
   }

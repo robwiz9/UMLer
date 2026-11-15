@@ -222,6 +222,15 @@ assert(
   "422 sha mismatch should be a save conflict",
 );
 assert(
+  isGitHubConflict(
+    new GitHubApiError(
+      "examples/umler-project.umler does not match e443c7607560c713931f377751849c991f840082",
+      422,
+    ),
+  ),
+  "the Contents API 'does not match' message should be a save conflict",
+);
+assert(
   !isGitHubConflict(new GitHubApiError("bad request", 400)),
   "ordinary validation errors should not be conflicts",
 );

@@ -88,7 +88,7 @@ Remote JSON is validated before it replaces the local project; a bad remote file
 
 The open project, its GitHub path/SHA and the last sync baseline are autosaved locally, so a page refresh
 reopens the same project and repository location instead of the built-in demo. The GitHub token is kept in
-`sessionStorage` (refresh-safe, tab-scoped); signing out removes it.
+`localStorage` so refreshes and additional tabs stay signed in; signing out removes it.
 
 A bound project also auto-saves to GitHub every 2 minutes when it has changes. The progress toast shows while a
 save is running. If the remote changed, auto-save does not open a modal: it shows a sticky warning toast and does
@@ -275,8 +275,8 @@ chooser opens.
   Rectangular perimeter endpoints are re-anchored to the side facing the partner after each pass, so TB layouts
   do not keep stale east/west attachment sides.
 - **Local recovery across refresh**: the open project (all scenes plus active scene), its GitHub binding and
-  sync baseline are autosaved to browser storage; the GitHub session token is kept in `sessionStorage`, so a
-  refresh keeps you signed in but closing the tab clears the token. **New project** clears the GitHub binding.
+  sync baseline are autosaved to browser storage; the GitHub session token is kept in `localStorage`, so a
+  refresh and new tabs keep you signed in until you sign out. **New project** clears the GitHub binding.
 - **GitHub autosave**: a bound project saves every 2 minutes when it has changes. Saving shows a progress toast;
   an auto-save conflict raises a clickable warning toast instead of a blocking dialog, and only opens the conflict
   chooser when that toast is clicked.

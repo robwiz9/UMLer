@@ -735,29 +735,39 @@ export const App = () => {
       }
       setGithubBusy("save");
       try {
-        let result: { sha: string; htmlUrl: string };
-        try {
-          result = await uploadProjectSnapshot(
-            githubSession,
-            target,
-            snapshot,
-            sha,
-            message,
-          );
-        } catch (error) {
-          // An explicit overwrite can still race with a just-landed commit.
-          // Refetch the latest blob SHA once and retry with the user's chosen
-          // overwrite, rather than making them export and save manually.
-          if (!retryConflict || !isGitHubConflict(error)) throw error;
-          const latest = await getProjectFile(githubSession.token, target);
-          result = await uploadProjectSnapshot(
-            githubSession,
-            target,
-            snapshot,
-            latest?.sha ?? null,
-            message,
-          );
-        }
+        const writeWithRetry = async (): Promise<{ sha: string; htmlUrl: string }> => {
+          let candidateSha = sha;
+          const attempts = retryConflict ? 3 : 1;
+          for (let attempt = 0; attempt < attempts; attempt += 1) {
+            try {
+              return await uploadProjectSnapshot(
+                githubSession,
+                target,
+                snapshot,
+                candidateSha,
+                message,
+              );
+            } catch (error) {
+              // An explicit overwrite can still race with a just-landed
+              // commit. Refetch the current blob SHA and retry the chosen
+              // overwrite instead of making the user export and save manually.
+              if (
+                !retryConflict ||
+                !isGitHubConflict(error) ||
+                attempt === attempts - 1
+              ) {
+                throw error;
+              }
+              await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 150 * (attempt + 1));
+              });
+              const latest = await getProjectFile(githubSession.token, target);
+              candidateSha = latest?.sha ?? null;
+            }
+          }
+          throw new Error("GitHub did not complete the save.");
+        };
+        const result = await writeWithRetry();
         setGithubBinding({
           ...target,
           sha: result.sha,
