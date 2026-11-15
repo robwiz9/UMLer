@@ -262,6 +262,8 @@ export interface CircuitJunctionNode extends NodeBase {
   readonly junctionStyle: CircuitJunctionStyle;
   /** Generated branch intermediate; must not be merged away during normalization. */
   readonly generatedBranch?: boolean;
+  /** Created by coincidence merging; may be refined to None at degree two. */
+  readonly autoMerged?: boolean;
   /** Label anchor in scene coordinates, relative to the junction centre. */
   readonly labelOffset?: Point;
   readonly style: ShapeNodeStyle;

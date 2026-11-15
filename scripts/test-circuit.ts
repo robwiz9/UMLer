@@ -35,6 +35,7 @@ import {
   normalizeCircuitPinConnections,
   normalizeCircuitDuplicateConnections,
   normalizeCircuitJunctionStyles,
+  refineAutoMergedJunctionStyles,
   prepareOccupiedPinJunction,
   rewireCircuitComponentPins,
   splitCircuitWireAtCorners,
@@ -624,6 +625,29 @@ check(
       edge.target.port.kind === "center",
   ),
   "a component ending near a junction should auto-merge within half a grid cell",
+);
+const autoMergeScene = withNodes([
+  component("r1", "R1", "resistor", rect(90, 0, 54, 36)),
+  component("r2", "R2", "resistor", rect(90, 0, 54, 36)),
+]);
+const autoMergeNormalized = normalizeCircuitPinConnections(autoMergeScene);
+const autoMergeJunction = Object.values(autoMergeNormalized.nodes).find(
+  (node) => node.kind === "circuitJunction",
+);
+check(
+  autoMergeJunction?.kind === "circuitJunction" &&
+    autoMergeJunction.autoMerged === true,
+  "coincident pins should create an auto-merged junction",
+);
+const autoMergeRefined = refineAutoMergedJunctionStyles(autoMergeNormalized);
+const refinedAutoMergeJunction =
+  autoMergeJunction?.kind === "circuitJunction"
+    ? autoMergeRefined.nodes[autoMergeJunction.id]
+    : undefined;
+check(
+  refinedAutoMergeJunction?.kind === "circuitJunction" &&
+    refinedAutoMergeJunction.junctionStyle === "none",
+  "a degree-two auto-merged junction should become None under visual refinements",
 );
 
 // --- orthogonal corner junctions -------------------------------------------

@@ -266,6 +266,16 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
           "generatedBranch must be a boolean",
         );
       }
+      if (
+        node.autoMerged !== undefined &&
+        typeof node.autoMerged !== "boolean"
+      ) {
+        error(
+          "circuit/auto-merge-marker",
+          `${path}.autoMerged`,
+          "autoMerged must be a boolean",
+        );
+      }
     }
 
     if (

@@ -79,6 +79,7 @@ import {
   mergeCoincidentCircuitConnections,
   normalizeCircuitDuplicateConnections,
   normalizeCircuitPinConnections,
+  refineAutoMergedJunctionStyles,
   prepareOccupiedPinJunction,
   reattachCircuitEdgeToPoint,
   rewireCircuitComponentPins,
@@ -2277,6 +2278,9 @@ export const App = () => {
             next = mergeCoincidentCircuitConnections(next);
             next = normalizeCircuitPinConnections(next);
             next = normalizeCircuitDuplicateConnections(next);
+            if (current.layout.visualRefinements !== false) {
+              next = refineAutoMergedJunctionStyles(next);
+            }
           }
           return {
             ...next,

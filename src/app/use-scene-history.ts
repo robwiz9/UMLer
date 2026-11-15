@@ -13,6 +13,7 @@ import {
   normalizeCircuitDuplicateConnections,
   normalizeCircuitJunctionStyles,
   normalizeCircuitPinConnections,
+  refineAutoMergedJunctionStyles,
 } from "../model/circuit-wires.ts";
 
 const HISTORY_LIMIT = 100;
@@ -65,6 +66,9 @@ export const useSceneHistory = (initial: SceneDocument) => {
           next = mergeNearbyCircuitJunctions(next);
           next = normalizeCircuitDuplicateConnections(next);
           next = normalizeCircuitJunctionStyles(next);
+          if (raw.layout.visualRefinements !== false) {
+            next = refineAutoMergedJunctionStyles(next);
+          }
         }
         if (next === current.present) return current;
         const now = Date.now();

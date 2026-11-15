@@ -313,7 +313,7 @@ const mosfet = (
   return result;
 };
 
-const meter = (letter: string) => (standard: CircuitStandard): readonly CircuitSymbolPrimitive[] =>
+const meter = (letter: string, standard: CircuitStandard): CircuitSymbolPrimitive[] =>
   sourceCircle(standard, [label(0, 0, letter)]);
 
 const switchSymbol = (_standard: CircuitStandard): readonly CircuitSymbolPrimitive[] => [
@@ -418,8 +418,8 @@ export const CIRCUIT_COMPONENTS: readonly CircuitComponentDef[] = [
   def("mosfet-p", "P-MOSFET", "semiconductors", "P-channel enhancement MOSFET", ["fet", "pmos", "enhancement", "q"], 54, 54, mosfetPins(), p(0, 36), (standard) => mosfet(standard, "p")),
   def("switch", "Switch", "outputs", "Single-pole switch", ["sw", "spst", "toggle", "break"], 54, 36, commonPins(12), p(0, 22), switchSymbol),
   def("lightbulb", "Lightbulb", "outputs", "Incandescent lamp / load", ["lamp", "bulb", "light", "load", "lp"], 54, 36, commonPins(), p(0, 25), lightbulb),
-  def("voltmeter", "Voltmeter", "meters", "Voltage meter", ["voltmeter", "multimeter", "meter"], 36, 54, verticalPins(), p(28, 0), meter("V")),
-  def("ammeter", "Ammeter", "meters", "Current meter", ["ammeter", "multimeter", "meter"], 36, 54, verticalPins(), p(28, 0), meter("A")),
+  def("voltmeter", "Voltmeter", "meters", "Voltage meter", ["voltmeter", "multimeter", "meter"], 36, 54, verticalPins(), p(28, 0), (standard) => meter("V", standard)),
+  def("ammeter", "Ammeter", "meters", "Current meter", ["ammeter", "multimeter", "meter"], 36, 54, verticalPins(), p(28, 0), (standard) => meter("A", standard)),
 ];
 
 export const circuitComponent = (

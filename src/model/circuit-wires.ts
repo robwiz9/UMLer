@@ -1809,6 +1809,38 @@ export const hideDegreeTwoJunctions = (
   return changed ? { ...scene, nodes } : scene;
 };
 
+/** Visual refinement: a two-way auto-merged junction needs no visible dot. */
+export const refineAutoMergedJunctionStyles = (
+  scene: SceneDocument,
+): SceneDocument => {
+  const nodes: Record<string, SceneNode> = { ...scene.nodes };
+  let changed = false;
+  for (const node of Object.values(scene.nodes)) {
+    if (
+      node.kind !== "circuitJunction" ||
+      node.autoMerged !== true ||
+      node.junctionStyle === "none"
+    ) {
+      continue;
+    }
+    const connections = Object.values(scene.edges).filter(
+      (edge) =>
+        edge.semantic.family === "circuit" &&
+        ((edge.source.target === "node" &&
+          edge.source.nodeId === node.id &&
+          edge.source.port.kind === "center") ||
+          (edge.target.target === "node" &&
+            edge.target.nodeId === node.id &&
+            edge.target.port.kind === "center")),
+    ).length;
+    if (connections === 2) {
+      nodes[node.id] = { ...node, junctionStyle: "none" };
+      changed = true;
+    }
+  }
+  return changed ? { ...scene, nodes } : scene;
+};
+
 /** A None-style junction becomes visible once it is a real three-way branch. */
 export const normalizeCircuitJunctionStyles = (
   scene: SceneDocument,
@@ -1943,7 +1975,11 @@ export const normalizeCircuitPinConnections = (
     if (!needsJunction) continue;
     const existing = nearestCircuitJunction(current, first.point, tolerance);
     const baseJunction = existing ?? createCircuitJunction(current, first.point, "filled");
-    const junction: CircuitJunctionNode = { ...baseJunction, junctionStyle: "filled" };
+    const junction: CircuitJunctionNode = {
+      ...baseJunction,
+      junctionStyle: "filled",
+      ...(existing === undefined ? { autoMerged: true } : {}),
+    };
     const nodes: Record<string, SceneNode> = {
       ...current.nodes,
       [junction.id]: junction,

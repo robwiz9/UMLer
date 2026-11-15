@@ -1697,8 +1697,11 @@ behaviour; where earlier sections differ, this section wins.
     reliably creates the zero-length merge wire instead of creating a second junction.
 42. **Ctrl-drag auto-merge.** Duplicate drags run coincidence merging and pin/duplicate normalization on
     drop, so a copied object released on an ending or junction auto-merges like a normal drag.
+43. **Auto-merged junction refinement.** Junctions created by coincidence merging are marked and, when
+    Visual layout refinements is enabled, rendered in None style while they have exactly two connections.
+    If a third connection is added they become visible again; with refinements disabled they stay visible.
 
-The circuit test suite now covers these cases (108 assertions at the time of writing).
+The circuit test suite now covers these cases (110 assertions at the time of writing).
 
 ---
 
@@ -1726,6 +1729,7 @@ The circuit test suite now covers these cases (108 assertions at the time of wri
 - [ ] CeTZ export contains the same components, rotations, junction styles, labels and hops as the
       canvas, with no editor overlays.
 - [ ] `npm run check` passes, including new circuit tests and all existing fixture checks.
+
 
 
 

@@ -232,7 +232,8 @@ chooser opens.
   Shift-scroll adjusts branch distance whenever components are selected; markers appear only for
   components with external pin connections. None-style junctions still have a hit target, can be moved,
   and show their focus box; ending coincidence merges within half a grid cell. Ctrl-drag duplicates also
-  auto-merge on drop when released on an ending or junction. Unconnected crossings render an omega bridge. The ANSI/US
+  auto-merge on drop when released on an ending or junction. Auto-merged junctions with two connections
+  use None style when Visual layout refinements is enabled. Unconnected crossings render an omega bridge. The ANSI/US
   resistor uses a symmetric three-peak zigzag. Copy/paste and duplicate preserve component reference labels
   exactly, including intentional duplicates. Circuit scenes skip graph auto-layout and export through the
   same Typst/CeTZ serializer.
@@ -390,7 +391,7 @@ Clipboard checks passed (26 assertions).
 
 Conversion checks passed (29 assertions).
 
-Circuit checks passed (108 assertions).
+Circuit checks passed (110 assertions).
 
 GitHub project checks passed (33 assertions).
 
@@ -569,6 +570,7 @@ CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ
 **Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
 document builder, and an optional image-resources manifest. Keep the serializer as the single source of
 geometry; the preview and any file export must consume the same `CetzExportResult`.
+
 
 
 
