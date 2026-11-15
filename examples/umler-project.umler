@@ -1,7 +1,7 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T21:36:51.330Z",
+  "exportedAt": "2026-11-15T21:45:58.554Z",
   "activeSceneId": "scene_uml_use_case_shop",
   "scenes": [
     {
@@ -2042,7 +2042,7 @@
         "title": "UML Use Case — shop",
         "diagramKind": "uml-use-case",
         "createdAt": "2026-11-09T12:00:00.000Z",
-        "updatedAt": "2026-11-15T21:36:50.301Z",
+        "updatedAt": "2026-11-15T21:36:55.580Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -2200,8 +2200,8 @@
           "kind": "actor",
           "name": "Customer",
           "frame": {
-            "x": -54,
-            "y": 27,
+            "x": -63,
+            "y": -18,
             "width": 72,
             "height": 126
           },
