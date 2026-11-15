@@ -1,18 +1,18 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-15T21:48:31.703Z",
+  "exportedAt": "2026-11-15T21:52:06.201Z",
   "activeSceneId": "scene_er_commerce",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_er_commerce",
-      "revision": 56,
+      "revision": 57,
       "meta": {
         "title": "ER — commerce",
         "diagramKind": "er",
         "createdAt": "2026-11-09T12:00:00.000Z",
-        "updatedAt": "2026-11-15T21:46:25.289Z",
+        "updatedAt": "2026-11-15T21:52:04.204Z",
         "appVersion": "0.1.0-step1",
         "description": "Step 1 schema fixture"
       },
@@ -137,7 +137,7 @@
           "name": "customers",
           "frame": {
             "x": -27,
-            "y": -18,
+            "y": -45,
             "width": 225,
             "height": 126
           },
