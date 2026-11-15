@@ -680,6 +680,16 @@ check(
   "each corner should get an invisible junction",
 );
 check(
+  hiddenJunctions.every((node) => {
+    const center = rectCenter(node.frame);
+    return (
+      Math.abs(center.x / 9 - Math.round(center.x / 9)) < 1e-6 &&
+      Math.abs(center.y / 9 - Math.round(center.y / 9)) < 1e-6
+    );
+  }),
+  "orthogonal corner junctions should snap to the scene grid",
+);
+check(
   Object.keys(cornerSplit.edges).length === reroutedCorners.length + 1,
   "the rerouted wire should be split into a chain of straight segments",
 );

@@ -212,8 +212,8 @@ chooser opens.
   wire dropped on another wire creates a filled junction and splits/rewires both segments. A None-style
   junction that gains a third connection becomes filled. Right-clicking
   a wire computes an obstacle-aware orthogonal path with the fewest bends and splits it at each bend
-  into separate straight wires joined by junctions; double-clicking adds a small filled junction
-  at the nearest grid point and splits the wire. A wire between two junctions can be dragged sideways
+  into separate straight wires joined by grid-snapped corner junctions; double-clicking adds a small
+  filled junction at the nearest grid point and splits the wire. A wire between two junctions can be dragged sideways
   (perpendicular to itself), carrying both junctions and stretching perpendicular branches. None-style
   junctions have no hit area, so dragging at their bends selects the wire; visible junctions select normally.
   At most one wire is kept between the same two attachment ports; different pins on the same object pair
@@ -391,7 +391,7 @@ Clipboard checks passed (26 assertions).
 
 Conversion checks passed (29 assertions).
 
-Circuit checks passed (110 assertions).
+Circuit checks passed (111 assertions).
 
 GitHub project checks passed (33 assertions).
 
@@ -570,6 +570,7 @@ CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ
 **Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
 document builder, and an optional image-resources manifest. Keep the serializer as the single source of
 geometry; the preview and any file export must consume the same `CetzExportResult`.
+
 
 
 

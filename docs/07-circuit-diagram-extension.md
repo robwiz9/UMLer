@@ -1580,8 +1580,9 @@ behaviour; where earlier sections differ, this section wins.
     `N → V−`, all horizontal or vertical, with the junction on the bottom return.
 18. **Right-click reroute, double-click junction.** A single right click on a circuit wire computes an
     obstacle-aware orthogonal route with the fewest bends, then splits the wire at every bend into
-    separate straight wires joined by junctions. Double-clicking a wire creates a small filled junction
-    at the nearest grid point and splits the wire.
+    separate straight wires joined by junctions. Corner junctions snap to the scene grid while retaining
+    horizontal/vertical segments. Double-clicking a wire creates a small filled junction at the nearest
+    grid point and splits the wire.
 19. **Unconnected-junction warning.** A junction with no attached wire renders as a gray dashed hollow
     circle, regardless of its configured dot style, in the canvas and CeTZ export.
 20. **Delete from label fields.** Circuit label inputs carry a scope marker. Delete at the end of a
@@ -1701,7 +1702,7 @@ behaviour; where earlier sections differ, this section wins.
     Visual layout refinements is enabled, rendered in None style while they have exactly two connections.
     If a third connection is added they become visible again; with refinements disabled they stay visible.
 
-The circuit test suite now covers these cases (110 assertions at the time of writing).
+The circuit test suite now covers these cases (111 assertions at the time of writing).
 
 ---
 
@@ -1729,6 +1730,7 @@ The circuit test suite now covers these cases (110 assertions at the time of wri
 - [ ] CeTZ export contains the same components, rotations, junction styles, labels and hops as the
       canvas, with no editor overlays.
 - [ ] `npm run check` passes, including new circuit tests and all existing fixture checks.
+
 
 
 

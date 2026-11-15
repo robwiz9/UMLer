@@ -566,16 +566,22 @@ export const splitCircuitWireAtCorners = (
   const nodes: Record<string, SceneNode> = { ...scene.nodes };
   const junctionIds: NodeId[] = [];
   const seen = new Set<string>();
+  const grid = Math.max(1, scene.canvas.grid.size);
   for (const corner of corners) {
-    const key = `${Math.round(corner.x * 1000)}:${Math.round(corner.y * 1000)}`;
+    const snappedCorner = point(snap(corner.x, grid), snap(corner.y, grid));
+    const key = `${Math.round(snappedCorner.x * 1000)}:${Math.round(snappedCorner.y * 1000)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const existing = nearestCircuitJunction({ ...scene, nodes }, corner, tolerance);
+    const existing = nearestCircuitJunction(
+      { ...scene, nodes },
+      snappedCorner,
+      tolerance,
+    );
     if (existing !== undefined) {
       junctionIds.push(existing.id);
       continue;
     }
-    const junction = createCircuitJunction(scene, corner, "none");
+    const junction = createCircuitJunction(scene, snappedCorner, "none");
     nodes[junction.id] = junction;
     junctionIds.push(junction.id);
   }
