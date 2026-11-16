@@ -87,14 +87,14 @@ const TableBody = ({
   readonly onPartClick?: (focus: NodeFocus) => void;
 }) => {
   const style = theme.table;
-  const headerText = layout.header.text;
-  const headerTextY = layout.header.textFrame.y + layout.header.textFrame.height / 2;
   const stereotype = layout.header.stereotype;
   const stereotypeFrame = layout.header.stereotypeFrame;
+  const showStereotype = stereotype !== undefined && stereotypeFrame !== undefined
+  const headerText = layout.header.text;
+  const headerTextY = layout.header.textFrame.y + layout.header.textFrame.height / 2 + (showStereotype ? 2 : 0);
   const stereotypeY = stereotypeFrame === undefined
     ? headerTextY
-    : stereotypeFrame.y + stereotypeFrame.height / 2;
-
+    : stereotypeFrame.y + stereotypeFrame.height / 2 - 1;
   return (
     <>
       <rect
@@ -137,7 +137,7 @@ const TableBody = ({
         >
           {headerText.text}
         </text>
-        {stereotype !== undefined && stereotypeFrame !== undefined ? (
+        {showStereotype ? (
           <text
             x={stereotypeFrame.x + stereotypeFrame.width / 2}
             y={stereotypeY}
