@@ -932,6 +932,110 @@ const adjustPerimeterAttachments = (
   if (!sourceDynamic && !targetDynamic) return { source, target };
   if (sourceNodeId !== undefined && sourceNodeId === targetNodeId) return { source, target };
 
+  const sourceSide =
+    sourceDynamic && edge.source.target === "node" && edge.source.port.kind === "perimeter"
+      ? edge.source.port.side
+      : null;
+  const targetSide =
+    targetDynamic && edge.target.target === "node" && edge.target.port.kind === "perimeter"
+      ? edge.target.port.side
+      : null;
+  const horizontalFacing =
+    (sourceSide === "east" && targetSide === "west") ||
+    (sourceSide === "west" && targetSide === "east");
+  const verticalFacing =
+    (sourceSide === "south" && targetSide === "north") ||
+    (sourceSide === "north" && targetSide === "south");
+  if (
+    sourceFrame !== undefined &&
+    targetFrame !== undefined &&
+    (horizontalFacing || verticalFacing)
+  ) {
+    const horizontal = horizontalFacing;
+    const gapFacing = horizontal
+      ? sourceSide === "east"
+        ? targetFrame.x >= rectRight(sourceFrame) - EPSILON
+        : rectRight(targetFrame) <= sourceFrame.x + EPSILON
+      : sourceSide === "south"
+        ? targetFrame.y >= rectBottom(sourceFrame) - EPSILON
+        : rectBottom(targetFrame) <= sourceFrame.y + EPSILON;
+    if (gapFacing) {
+      const insetFor = (frame: Rect): number =>
+        Math.min(
+          Math.max(6, gridSize),
+          Math.max(0, Math.min(frame.width, frame.height) / 2 - 0.5),
+        );
+      const sourceInset = insetFor(sourceFrame);
+      const targetInset = insetFor(targetFrame);
+      const sourceLow = horizontal ? sourceFrame.y + sourceInset : sourceFrame.x + sourceInset;
+      const sourceHigh = horizontal
+        ? rectBottom(sourceFrame) - sourceInset
+        : rectRight(sourceFrame) - sourceInset;
+      const targetLow = horizontal ? targetFrame.y + targetInset : targetFrame.x + targetInset;
+      const targetHigh = horizontal
+        ? rectBottom(targetFrame) - targetInset
+        : rectRight(targetFrame) - targetInset;
+      const low = Math.max(sourceLow, targetLow);
+      const high = Math.min(sourceHigh, targetHigh);
+      if (low <= high + EPSILON) {
+        const grid = Math.max(1, gridSize);
+        const preferred = edge.routing.preferredPosition;
+        const base = typeof preferred === "number" && Number.isFinite(preferred)
+          ? Math.min(high, Math.max(low, preferred))
+          : (low + high) / 2;
+        const sourceUsed = usedAnchorsByNode(used, sourceNodeId as string);
+        const targetUsed = usedAnchorsByNode(used, targetNodeId as string);
+        const conflicts = (anchors: readonly PerimeterAnchor[], side: string, value: number): boolean =>
+          anchors.some(
+            (anchor) =>
+              anchor.side === side &&
+              Math.abs((horizontal ? anchor.point.y : anchor.point.x) - value) < grid,
+          );
+        const candidates = [0, grid, -grid, grid * 2, -grid * 2, grid * 3, -grid * 3]
+          .map((offset) => Math.min(high, Math.max(low, base + offset)))
+          .filter((value, index, values) =>
+            values.findIndex((other) => Math.abs(other - value) <= EPSILON) === index);
+        const coordinate = candidates.find(
+          (value) =>
+            !conflicts(sourceUsed, sourceSide as string, value) &&
+            !conflicts(targetUsed, targetSide as string, value),
+        ) ?? base;
+        const sourcePoint = horizontal
+          ? point(
+              sourceSide === "east" ? rectRight(sourceFrame) : sourceFrame.x,
+              coordinate,
+            )
+          : point(
+              coordinate,
+              sourceSide === "south" ? rectBottom(sourceFrame) : sourceFrame.y,
+            );
+        const targetPoint = horizontal
+          ? point(
+              targetSide === "west" ? targetFrame.x : rectRight(targetFrame),
+              coordinate,
+            )
+          : point(
+              coordinate,
+              targetSide === "north" ? targetFrame.y : rectBottom(targetFrame),
+            );
+        sourceUsed.push({ side: sourceSide as PerimeterSide, point: sourcePoint });
+        targetUsed.push({ side: targetSide as PerimeterSide, point: targetPoint });
+        return {
+          source: {
+            ...source,
+            point: sourcePoint,
+            normal: compassNormal(sourceSide as PerimeterSide),
+          },
+          target: {
+            ...target,
+            point: targetPoint,
+            normal: compassNormal(targetSide as PerimeterSide),
+          },
+        };
+      }
+    }
+  }
+
   const sourceCandidates = sourceDynamic && sourceFrame !== undefined
     ? (["north", "east", "south", "west"] as const).flatMap((side) =>
         perimeterCandidates(
@@ -1668,10 +1772,45 @@ const computeEdges = (
   measurer: TextMeasurer,
   labelObstacles: readonly Rect[],
   placedLabelFrames: Rect[],
+  seedEdges?: Readonly<Record<string, EdgeLayout>>,
+  rerouteEdges?: ReadonlySet<string>,
 ): Readonly<Record<string, EdgeLayout>> => {
   const result = new Map<string, EdgeLayout>();
-  const pending = Object.values(scene.edges);
   const usedPerimeterAnchors = new Map<string, PerimeterAnchor[]>();
+  if (seedEdges !== undefined) {
+    for (const [edgeId, layout] of Object.entries(seedEdges)) {
+      if (rerouteEdges?.has(edgeId) === true) continue;
+      result.set(edgeId, layout);
+      const edge = scene.edges[edgeId];
+      if (edge === undefined) continue;
+      const seedAnchor = (
+        end: "source" | "target",
+        pointAtEnd: Point | undefined,
+      ): void => {
+        const attachment = edge[end];
+        if (
+          attachment.target !== "node" ||
+          attachment.port.kind !== "perimeter" ||
+          pointAtEnd === undefined
+        ) {
+          return;
+        }
+        const side = attachment.port.side;
+        if (side !== "north" && side !== "east" && side !== "south" && side !== "west") {
+          return;
+        }
+        usedAnchorsByNode(usedPerimeterAnchors, attachment.nodeId).push({
+          side,
+          point: pointAtEnd,
+        });
+      };
+      seedAnchor("source", layout.points[0]);
+      seedAnchor("target", layout.points[layout.points.length - 1]);
+    }
+  }
+  const pending = Object.values(scene.edges).filter(
+    (edge) => rerouteEdges === undefined || rerouteEdges.has(edge.id),
+  );
   // Bound by the initial count: edge-to-edge attachments can form a chain and
   // each pass only resolves one more link, while `pending` shrinks every pass.
   const maxPasses = pending.length + 1;
@@ -1735,67 +1874,106 @@ const countRouteCollisions = (
   return collisions;
 };
 
+export interface BuildLayoutOptions {
+  /**
+   * Reuse connector geometry from a previous snapshot. With `rerouteEdges` this
+   * is a partial preview: only those edge ids are routed again. Without it the
+   * whole edge map is reused (low-performance drag).
+   */
+  readonly reuseEdges?: Readonly<Record<string, EdgeLayout>>;
+  /** Edge ids that must be recomputed even when `reuseEdges` is supplied. */
+  readonly rerouteEdges?: ReadonlySet<string>;
+}
+
 export const buildLayoutSnapshot = (
   scene: SceneDocument,
   measurer: TextMeasurer,
+  options: BuildLayoutOptions = {},
 ): LayoutSnapshot => {
   const ports = new Map<PortId, PortGeometry>();
   const nodeLayouts = Object.fromEntries(
     Object.values(scene.nodes).map((node) => [node.id, measureNode(node, scene, measurer, ports)]),
   ) as Readonly<Record<string, NodeLayout>>;
   const portRecord = Object.fromEntries(ports) as Readonly<Record<string, PortGeometry>>;
-  const labelObstacles = Object.values(nodeLayouts)
-    .filter((node) => node.kind !== "frame" && node.kind !== "lifeline")
-    .flatMap((node) => {
-      const frames = [node.frame];
-      if (
-        (node.kind === "circuitComponent" || node.kind === "circuitJunction") &&
-        node.labelFrame !== undefined
-      ) {
-        frames.push(node.labelFrame);
-      }
-      return frames;
-    });
-  const placedLabelFrames: Rect[] = [];
-  const routedEdgeLayouts = computeEdges(
-    scene,
-    nodeLayouts,
-    portRecord,
-    measurer,
-    labelObstacles,
-    placedLabelFrames,
-  );
+  const partialReroute =
+    options.reuseEdges !== undefined && options.rerouteEdges !== undefined;
+  const computesEdges = options.reuseEdges === undefined || partialReroute;
+  const labelObstacles = computesEdges
+    ? Object.values(nodeLayouts)
+        .filter((node) => node.kind !== "frame" && node.kind !== "lifeline")
+        .flatMap((node) => {
+          const frames = [node.frame];
+          if (
+            (node.kind === "circuitComponent" || node.kind === "circuitJunction") &&
+            node.labelFrame !== undefined
+          ) {
+            frames.push(node.labelFrame);
+          }
+          return frames;
+        })
+    : [];
+  const placedLabelFrames: Rect[] = options.reuseEdges === undefined
+    ? []
+    : Object.values(options.reuseEdges)
+        .filter((edge) => options.rerouteEdges?.has(edge.edgeId) !== true)
+        .flatMap((edge) => edge.labels.map((label) => label.frame));
+  const routedEdgeLayouts = options.reuseEdges !== undefined && !partialReroute
+    ? options.reuseEdges
+    : computeEdges(
+        scene,
+        nodeLayouts,
+        portRecord,
+        measurer,
+        labelObstacles,
+        placedLabelFrames,
+        options.reuseEdges,
+        options.rerouteEdges,
+      );
 
-  const circuitEdges = Object.values(routedEdgeLayouts).filter((edge) => {
-    const sceneEdge = scene.edges[edge.edgeId];
-    return sceneEdge?.visible !== false && sceneEdge?.semantic.family === "circuit";
-  });
-  const bridgeMap = computeWireBridges(
-    circuitEdges.map((edge) => ({
-      edgeId: edge.edgeId,
-      points: edge.points,
-      z: scene.edges[edge.edgeId]?.z ?? 10,
-    })),
-    Object.values(nodeLayouts).flatMap((node) =>
-      node.kind === "circuitJunction" ? [node.center] : [],
-    ),
-    resolveCircuitSettings(scene),
-  );
-  const edgeLayouts = Object.fromEntries(
-    Object.entries(routedEdgeLayouts).map(([edgeId, edge]) => {
-      const bridges = bridgeMap.get(edgeId);
-      if (bridges === undefined || bridges.length === 0) return [edgeId, edge];
-      const radius = Math.max(...bridges.map((bridge) => bridge.radius));
-      return [
-        edgeId,
-        {
-          ...edge,
-          bridges,
-          bounds: expandRect(edge.bounds, radius),
-        },
-      ];
-    }),
-  ) as Readonly<Record<string, EdgeLayout>>;
+  let edgeLayouts: Readonly<Record<string, EdgeLayout>>;
+  let edgeCrossingCount = 0;
+  if (options.reuseEdges !== undefined && !partialReroute) {
+    edgeLayouts = options.reuseEdges;
+    edgeCrossingCount = Object.values(edgeLayouts).reduce(
+      (sum, edge) => sum + (edge.bridges?.length ?? 0),
+      0,
+    );
+  } else {
+    const circuitEdges = Object.values(routedEdgeLayouts).filter((edge) => {
+      const sceneEdge = scene.edges[edge.edgeId];
+      return sceneEdge?.visible !== false && sceneEdge?.semantic.family === "circuit";
+    });
+    const bridgeMap = computeWireBridges(
+      circuitEdges.map((edge) => ({
+        edgeId: edge.edgeId,
+        points: edge.points,
+        z: scene.edges[edge.edgeId]?.z ?? 10,
+      })),
+      Object.values(nodeLayouts).flatMap((node) =>
+        node.kind === "circuitJunction" ? [node.center] : [],
+      ),
+      resolveCircuitSettings(scene),
+    );
+    edgeCrossingCount = [...bridgeMap.values()].reduce(
+      (sum, bridges) => sum + bridges.length,
+      0,
+    );
+    edgeLayouts = Object.fromEntries(
+      Object.entries(routedEdgeLayouts).map(([edgeId, edge]) => {
+        const bridges = bridgeMap.get(edgeId);
+        if (bridges === undefined || bridges.length === 0) return [edgeId, edge];
+        const radius = Math.max(...bridges.map((bridge) => bridge.radius));
+        return [
+          edgeId,
+          {
+            ...edge,
+            bridges,
+            bounds: expandRect(edge.bounds, radius),
+          },
+        ];
+      }),
+    ) as Readonly<Record<string, EdgeLayout>>;
+  }
 
   const nodeRects = Object.values(nodeLayouts).map((node) => node.bounds);
   const edgeRects = Object.values(edgeLayouts).map((edge) => edge.bounds);
@@ -1849,7 +2027,7 @@ export const buildLayoutSnapshot = (
     exportBounds,
     diagnostics: {
       routeCollisions: countRouteCollisions(nodeLayouts, edgeLayouts),
-      edgeCrossings: [...bridgeMap.values()].reduce((sum, bridges) => sum + bridges.length, 0),
+      edgeCrossings: edgeCrossingCount,
       overlappingNodes,
       unplacedLabels: 0,
     },

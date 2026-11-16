@@ -9,7 +9,7 @@ import { asNodeId, type ActivationId, type NodeId, type RowId, type SectionId } 
 import { NodeFocusMenu } from "./NodeFocusMenu.tsx";
 import { DraggablePanel } from "./DraggablePanel.tsx";
 import type { Point, Rect } from "../model/geometry.ts";
-import { add, expandRect, point, rectCenter, rectContainsPoint, rectFromPoints, scale, snap, sub } from "../model/geometry.ts";
+import { add, expandRect, point, rectCenter, rectContainsPoint, rectFromPoints, rectsIntersect, scale, snap, sub } from "../model/geometry.ts";
 import { rotatePoint } from "../layout/circuit.ts";
 import { normalizeRotation, resolveCircuitSettings } from "../model/circuit.ts";
 import { canExtendToEmpty, MIN_EXTEND_SCREEN_PX, minExtendWorld } from "./circuit-draw.ts";
@@ -27,7 +27,7 @@ import { EdgeInspector } from "../app/EdgeInspector.tsx";
 import { isSupportedImageFile } from "../app/image-assets.ts";
 import { PortHandles } from "./PortHandles.tsx";
 import type { EdgeEnd } from "../model/markers.ts";
-import type { EdgeLabelZone, EdgeRoutingMode } from "../model/edges.ts";
+import type { EdgeLabelZone, EdgeRoutingMode, SceneEdge } from "../model/edges.ts";
 import type { ShiftBranchDrag, ShiftBranchGroup, WireOrientation } from "../model/circuit-wires.ts";
 import { createShiftDragBranchesResult, createDuplicateParallelBranches, detachCircuitComponentEndings } from "../model/circuit-wires.ts";
 import { circuitComponent } from "../model/circuit-catalog.ts";
@@ -81,6 +81,10 @@ interface CanvasStageProps {
   readonly majorEvery: number;
   readonly snapEnabled: boolean;
   readonly showCompactAddButton: boolean;
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
   readonly imageAssets: Readonly<Record<string, ImageAsset>>;
   readonly onDropImageFiles: (files: readonly File[], world: Point) => void;
   readonly onAssignImageToNode: (nodeId: string, file: File) => Promise<void>;
@@ -144,6 +148,7 @@ interface CanvasStageProps {
     target: PortAttachmentRef | EdgeAttachmentRef,
   ) => void;
   readonly onMoveSequenceEdge: (edgeId: string, deltaY: number) => void;
+  readonly onSlideStraightEdge: (edgeId: string, position: number) => void;
   readonly onMoveEdgeLabel: (
     edgeId: string,
     labelId: string,
@@ -298,6 +303,18 @@ type Interaction =
       lastDelta: number;
     }
   | {
+      readonly kind: "edge-slide";
+      readonly pointerId: number;
+      readonly edgeId: string;
+      readonly axis: "x" | "y";
+      readonly startWorld: Point;
+      readonly startPosition: number;
+      readonly min: number;
+      readonly max: number;
+      lastPosition: number;
+      moved: boolean;
+    }
+  | {
       readonly kind: "label-drag";
       readonly pointerId: number;
       readonly edgeId: string;
@@ -345,6 +362,81 @@ const clampValue = (value: number, min: number, max: number): number =>
 /** Lifelines are selected by their head; the tall time axis is not a target. */
 const selectionFrameFor = (node: NodeLayout): Rect =>
   node.kind === "lifeline" ? node.headFrame : node.frame;
+
+interface StraightSlideInfo {
+  readonly axis: "x" | "y";
+  readonly min: number;
+  readonly max: number;
+}
+
+/**
+ * A straight connector between two table-like objects on facing parallel
+ * borders can be slid along that shared border. Corners, row ports and mixed
+ * orientations are deliberately excluded.
+ */
+const straightSlideInfo = (
+  edge: SceneEdge,
+  scene: SceneDocument,
+  points: readonly Point[],
+  gridSize: number,
+): StraightSlideInfo | null => {
+  if (points.length !== 2) return null;
+  if (edge.source.target !== "node" || edge.target.target !== "node") return null;
+  if (edge.source.port.kind !== "perimeter" || edge.target.port.kind !== "perimeter") {
+    return null;
+  }
+  const sourceNode = scene.nodes[edge.source.nodeId];
+  const targetNode = scene.nodes[edge.target.nodeId];
+  if (
+    sourceNode === undefined ||
+    targetNode === undefined ||
+    (sourceNode.kind !== "table" && sourceNode.kind !== "relationAttribute") ||
+    (targetNode.kind !== "table" && targetNode.kind !== "relationAttribute")
+  ) {
+    return null;
+  }
+  const sourceSide = edge.source.port.side;
+  const targetSide = edge.target.port.side;
+  const horizontal =
+    (sourceSide === "east" && targetSide === "west") ||
+    (sourceSide === "west" && targetSide === "east");
+  const vertical =
+    (sourceSide === "south" && targetSide === "north") ||
+    (sourceSide === "north" && targetSide === "south");
+  if (!horizontal && !vertical) return null;
+
+  const source = sourceNode.frame;
+  const target = targetNode.frame;
+  const gapFacing = horizontal
+    ? sourceSide === "east"
+      ? target.x >= source.x + source.width - 0.001
+      : target.x + target.width <= source.x + 0.001
+    : sourceSide === "south"
+      ? target.y >= source.y + source.height - 0.001
+      : target.y + target.height <= source.y + 0.001;
+  if (!gapFacing) return null;
+
+  const grid = Math.max(1, gridSize);
+  const insetFor = (frame: Rect): number =>
+    Math.min(
+      Math.max(6, grid),
+      Math.max(0, Math.min(frame.width, frame.height) / 2 - 0.5),
+    );
+  const sourceInset = insetFor(source);
+  const targetInset = insetFor(target);
+  const sourceLow = horizontal ? source.y + sourceInset : source.x + sourceInset;
+  const sourceHigh = horizontal
+    ? source.y + source.height - sourceInset
+    : source.x + source.width - sourceInset;
+  const targetLow = horizontal ? target.y + targetInset : target.x + targetInset;
+  const targetHigh = horizontal
+    ? target.y + target.height - targetInset
+    : target.x + target.width - targetInset;
+  const min = Math.max(sourceLow, targetLow);
+  const max = Math.min(sourceHigh, targetHigh);
+  if (max < min) return null;
+  return { axis: horizontal ? "y" : "x", min, max };
+};
 
 const pointInPolygon = (value: Point, polygon: readonly Point[]): boolean => {
   let inside = false;
@@ -522,12 +614,14 @@ const EdgeHitLayer = ({
   onReroute,
   onAddJunction,
   allowContextReroute,
+  slideEdgeIds,
 }: {
   readonly edges: readonly { readonly id: string; readonly points: readonly Point[] }[];
   readonly onSelect: (edgeId: string, event: React.PointerEvent<SVGPolylineElement>) => void;
   readonly onReroute: (edgeId: string) => void;
   readonly onAddJunction?: (edgeId: string, event: React.MouseEvent<SVGPolylineElement>) => void;
   readonly allowContextReroute?: boolean;
+  readonly slideEdgeIds?: ReadonlySet<string>;
 }) => (
   <g>
     {edges.map((edge) => {
@@ -557,7 +651,7 @@ const EdgeHitLayer = ({
             stroke="transparent"
             strokeWidth={14}
             vectorEffect="non-scaling-stroke"
-            style={{ cursor: "pointer" }}
+            style={{ cursor: slideEdgeIds?.has(edge.id) ? "grab" : "pointer" }}
             pointerEvents="stroke"
             onPointerDown={(event) => {
               if (event.button !== 0) return;
@@ -990,6 +1084,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   majorEvery,
   snapEnabled,
   showCompactAddButton,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   imageAssets,
   onDropImageFiles,
   onAssignImageToNode,
@@ -1025,6 +1123,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onInsertComponentOnWire,
   onReattachEdge,
   onMoveSequenceEdge,
+  onSlideStraightEdge,
   onMoveEdgeLabel,
   onTextDoubleClick,
   nodeFocus,
@@ -1153,6 +1252,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     readonly edgeId: string;
     readonly deltaY: number;
   } | null>(null);
+  const [edgeSlidePreview, setEdgeSlidePreview] = useState<{
+    readonly edgeId: string;
+    readonly axis: "x" | "y";
+    readonly position: number;
+  } | null>(null);
   const [labelDraft, setLabelDraft] = useState<{
     readonly edgeId: string;
     readonly labelId: string;
@@ -1194,6 +1298,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   useEffect(() => {
     setAddMenu(null);
     setDraftEdge(null);
+    setEdgeSlidePreview(null);
   }, [scene.id]);
 
   useEffect(() => {
@@ -1676,7 +1781,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       onSelectEdge(edgeId);
       onClearNodeFocus();
       if (menu === "line") {
-        openLineMenuAt(edgeId, world, true, true);
+        openLineMenuAt(edgeId, world, true);
       } else if (end !== undefined) {
         openTerminalMenu(edgeId, end, true);
       }
@@ -2221,7 +2326,41 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     }
     if (scene.meta.diagramKind !== "circuit" && Math.min(sourceDistance, targetDistance) <= 16) {
       setActiveEndpoint(sourceDistance <= targetDistance ? "source" : "target");
-    } else if (scene.edges[edgeId]?.semantic.family === "sequence") {
+      return;
+    }
+    const edge = scene.edges[edgeId];
+    const slide = edge === undefined
+      ? null
+      : straightSlideInfo(edge, scene, edgeLayout.points, gridSize);
+    const firstPoint = edgeLayout.points[0];
+    if (slide !== null && firstPoint !== undefined) {
+      const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+      const startPosition = slide.axis === "y" ? firstPoint.y : firstPoint.x;
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      setSequenceMovePreview(null);
+      setEdgeSlidePreview(null);
+      interactionRef.current = {
+        kind: "edge-slide",
+        pointerId: event.pointerId,
+        edgeId,
+        axis: slide.axis,
+        startWorld: world,
+        startPosition,
+        min: slide.min,
+        max: slide.max,
+        lastPosition: Math.min(slide.max, Math.max(slide.min, startPosition)),
+        moved: false,
+      };
+      try {
+        svg.setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic pointer events cannot own capture.
+      }
+      event.preventDefault();
+      return;
+    }
+    if (scene.edges[edgeId]?.semantic.family === "sequence") {
       const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
       setActiveEndpoint(null);
       setSequenceMovePreview(null);
@@ -2257,83 +2396,126 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     edgeId: string,
     world: Point,
     focusField: boolean,
-    fromLabel = false,
   ): void => {
     const screen = {
       x: world.x * zoom + camera.x,
       y: world.y * zoom + camera.y,
     };
-    const centerLabel = layout.edges[edgeId]?.labels.find((label) => label.zone === "center");
+    const edgeLayout = layout.edges[edgeId];
+    const centerLabel = edgeLayout?.labels.find((label) => label.zone === "center");
     const menuWidth = 320;
-    const menuHeight = 390;
+    // The compact inspector is about 294 px tall; leave a small buffer without
+    // pretending it fills the old 390 px estimate, which caused clamped menus
+    // to jump back over their label on shorter viewports.
+    const menuHeight = 310;
+    const gap = 14;
+    const margin = 10;
     const clamp = (value: number, min: number, max: number): number =>
       Math.max(min, Math.min(value, max));
-    let left: number;
-    let top: number;
-
-    if (fromLabel && centerLabel !== undefined) {
-      const labelLeft = centerLabel.frame.x * zoom + camera.x;
-      const labelRight = (centerLabel.frame.x + centerLabel.frame.width) * zoom + camera.x;
-      const labelTop = centerLabel.frame.y * zoom + camera.y;
-      const labelBottom = (centerLabel.frame.y + centerLabel.frame.height) * zoom + camera.y;
-      const labelCenterX = (labelLeft + labelRight) / 2;
-      const labelCenterY = (labelTop + labelBottom) / 2;
-      const anchor = centerLabel.anchorPoint;
-      const lineX = anchor.x * zoom + camera.x;
-      const lineY = anchor.y * zoom + camera.y;
-
-      // Pick the segment under the label so vertical lines get a side menu
-      // and horizontal lines get a menu below or above the label.
-      let horizontal = true;
-      const points = layout.edges[edgeId]?.points ?? [];
-      let bestDistance = Number.POSITIVE_INFINITY;
-      for (let index = 0; index + 1 < points.length; index += 1) {
-        const a = points[index];
-        const b = points[index + 1];
-        if (a === undefined || b === undefined) continue;
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const lengthSquared = dx * dx + dy * dy;
-        const t = lengthSquared === 0
-          ? 0
-          : clamp(((anchor.x - a.x) * dx + (anchor.y - a.y) * dy) / lengthSquared, 0, 1);
-        const distance = Math.hypot(anchor.x - (a.x + dx * t), anchor.y - (a.y + dy * t));
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          horizontal = Math.abs(dx) >= Math.abs(dy);
-        }
+    const screenOf = (value: Point): Point => ({
+      x: value.x * zoom + camera.x,
+      y: value.y * zoom + camera.y,
+    });
+    const labelLeft = centerLabel === undefined ? screen.x : centerLabel.frame.x * zoom + camera.x;
+    const labelRight = centerLabel === undefined
+      ? screen.x
+      : (centerLabel.frame.x + centerLabel.frame.width) * zoom + camera.x;
+    const labelTop = centerLabel === undefined ? screen.y : centerLabel.frame.y * zoom + camera.y;
+    const labelBottom = centerLabel === undefined
+      ? screen.y
+      : (centerLabel.frame.y + centerLabel.frame.height) * zoom + camera.y;
+    const labelCenterX = (labelLeft + labelRight) / 2;
+    const labelCenterY = (labelTop + labelBottom) / 2;
+    const anchor = centerLabel?.anchorPoint ?? world;
+    const anchorScreen = screenOf(anchor);
+    const points = edgeLayout?.points ?? [];
+    let horizontal = true;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let index = 0; index + 1 < points.length; index += 1) {
+      const a = points[index];
+      const b = points[index + 1];
+      if (a === undefined || b === undefined) continue;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared === 0
+        ? 0
+        : clamp(((anchor.x - a.x) * dx + (anchor.y - a.y) * dy) / lengthSquared, 0, 1);
+      const distance = Math.hypot(anchor.x - (a.x + dx * t), anchor.y - (a.y + dy * t));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        horizontal = Math.abs(dx) >= Math.abs(dy);
       }
+    }
 
-      if (horizontal) {
-        left = clamp(
-          labelCenterX - menuWidth / 2,
-          10,
-          Math.max(10, viewport.width - menuWidth - 10),
-        );
-        top = Math.max(labelBottom, lineY) + 16;
-        if (top + menuHeight > viewport.height - 10) {
-          top = Math.min(labelTop, lineY) - menuHeight - 16;
-        }
-        top = clamp(top, 10, Math.max(10, viewport.height - menuHeight - 10));
-      } else {
-        left = Math.max(labelRight, lineX) + 16;
-        if (left + menuWidth > viewport.width - 10) {
-          left = Math.min(labelLeft, lineX) - menuWidth - 16;
-        }
-        left = clamp(left, 10, Math.max(10, viewport.width - menuWidth - 10));
-        top = clamp(
-          labelCenterY - menuHeight / 2,
-          10,
-          Math.max(10, viewport.height - menuHeight - 10),
-        );
+    const labelRects: Rect[] = (edgeLayout?.labels ?? []).map((label) => {
+      const topLeft = screenOf({ x: label.frame.x, y: label.frame.y });
+      return {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: label.frame.width * zoom,
+        height: label.frame.height * zoom,
+      };
+    });
+    const lineRects: Rect[] = [];
+    for (let index = 0; index + 1 < points.length; index += 1) {
+      const a = points[index];
+      const b = points[index + 1];
+      if (a === undefined || b === undefined) continue;
+      const from = screenOf(a);
+      const to = screenOf(b);
+      lineRects.push({
+        x: Math.min(from.x, to.x) - 5,
+        y: Math.min(from.y, to.y) - 5,
+        width: Math.abs(to.x - from.x) + 10,
+        height: Math.abs(to.y - from.y) + 10,
+      });
+    }
+
+    const candidates: { left: number; top: number }[] = horizontal
+      ? [
+          { left: labelCenterX - menuWidth / 2, top: Math.max(labelBottom, anchorScreen.y) + gap },
+          { left: labelCenterX - menuWidth / 2, top: Math.min(labelTop, anchorScreen.y) - menuHeight - gap },
+          { left: Math.max(labelRight, anchorScreen.x) + gap, top: labelCenterY - menuHeight / 2 },
+          { left: Math.min(labelLeft, anchorScreen.x) - menuWidth - gap, top: labelCenterY - menuHeight / 2 },
+        ]
+      : [
+          { left: Math.max(labelRight, anchorScreen.x) + gap, top: labelCenterY - menuHeight / 2 },
+          { left: Math.min(labelLeft, anchorScreen.x) - menuWidth - gap, top: labelCenterY - menuHeight / 2 },
+          { left: labelCenterX - menuWidth / 2, top: Math.max(labelBottom, anchorScreen.y) + gap },
+          { left: labelCenterX - menuWidth / 2, top: Math.min(labelTop, anchorScreen.y) - menuHeight - gap },
+        ];
+
+    let left = margin;
+    let top = margin;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < candidates.length; index += 1) {
+      const candidate = candidates[index] as { left: number; top: number };
+      const nextLeft = clamp(
+        candidate.left,
+        margin,
+        Math.max(margin, viewport.width - menuWidth - margin),
+      );
+      const nextTop = clamp(
+        candidate.top,
+        margin,
+        Math.max(margin, viewport.height - menuHeight - margin),
+      );
+      const rect = {
+        x: nextLeft,
+        y: nextTop,
+        width: menuWidth,
+        height: menuHeight,
+      };
+      const overlapsLine = lineRects.filter((line) => rectsIntersect(rect, line)).length;
+      const overlapsLabels = labelRects.filter((label) => rectsIntersect(rect, label)).length;
+      const shift = Math.abs(nextLeft - candidate.left) + Math.abs(nextTop - candidate.top);
+      const score = overlapsLine * 10_000 + overlapsLabels * 5_000 + shift + index;
+      if (score < bestScore) {
+        bestScore = score;
+        left = nextLeft;
+        top = nextTop;
       }
-    } else {
-      const halfWidth = ((centerLabel?.frame.width ?? 0) / 2) * zoom;
-      const right = screen.x + halfWidth + 14 + menuWidth <= viewport.width - 10;
-      left = right
-        ? screen.x + halfWidth + 14
-        : Math.max(10, screen.x - halfWidth - 14 - menuWidth);
-      top = screen.y - 170;
     }
 
     setActiveEndpoint(null);
@@ -2843,6 +3025,24 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       return;
     }
 
+    if (interaction.kind === "edge-slide") {
+      if (commit) {
+        if (interaction.moved) {
+          onSlideStraightEdge(interaction.edgeId, interaction.lastPosition);
+        } else {
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+        }
+      }
+      setEdgeSlidePreview(null);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
     if (interaction.kind === "node-label-drag") {
       if (commit && interaction.moved) {
         const localDelta = interaction.rotation === 0
@@ -2871,7 +3071,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             y: interaction.startOffset.y + interaction.lastDelta.y,
           });
         } else if (interaction.menu === "line") {
-          openLineMenuAt(interaction.edgeId, interaction.startWorld, false, true);
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
         } else if (interaction.end !== undefined) {
           openTerminalMenu(interaction.edgeId, interaction.end, false);
         }
@@ -3162,6 +3362,32 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       const deltaY = snap(world.y - interaction.startWorld.y, Math.max(1, gridSize));
       interaction.lastDelta = deltaY;
       setSequenceMovePreview({ edgeId: interaction.edgeId, deltaY });
+      return;
+    }
+
+    if (interaction.kind === "edge-slide") {
+      const moved = interaction.moved ||
+        Math.hypot(world.x - interaction.startWorld.x, world.y - interaction.startWorld.y) * zoomRef.current > 3;
+      interaction.moved = moved;
+      if (!moved) return;
+      const pointerAxis = interaction.axis === "y" ? world.y : world.x;
+      const originAxis = interaction.axis === "y"
+        ? interaction.startWorld.y
+        : interaction.startWorld.x;
+      const step = snapEnabled ? Math.max(1, gridSize) : 1;
+      const position = Math.min(
+        interaction.max,
+        Math.max(
+          interaction.min,
+          interaction.startPosition + snap(pointerAxis - originAxis, step),
+        ),
+      );
+      interaction.lastPosition = position;
+      setEdgeSlidePreview({
+        edgeId: interaction.edgeId,
+        axis: interaction.axis,
+        position,
+      });
       return;
     }
 
@@ -3683,6 +3909,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const edgeLayout = layout.edges[edge.id];
     return edgeLayout === undefined ? [] : [{ id: edge.id, points: edgeLayout.points }];
   });
+  const slideEdgeIds = new Set(
+    hitEdges.flatMap(({ id, points }) => {
+      const edge = scene.edges[id];
+      return edge !== undefined && straightSlideInfo(edge, scene, points, gridSize) !== null
+        ? [id]
+        : [];
+    }),
+  );
   const terminalHitItems = Object.values(scene.edges).flatMap((edge) => {
     if (scene.meta.diagramKind === "circuit") return [];
     const edgeLayout = layout.edges[edge.id];
@@ -4047,6 +4281,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             onSelect={handleEdgePointerDown}
             onReroute={onRerouteEdge}
             allowContextReroute={scene.meta.diagramKind === "circuit"}
+            slideEdgeIds={slideEdgeIds}
             onAddJunction={
               scene.meta.diagramKind === "circuit"
                 ? (edgeId, event) => {
@@ -4082,7 +4317,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             zoom={zoom}
             onDragStart={(edgeId, labelId, event) =>
               beginLabelDrag(edgeId, labelId, event, "line")}
-            onDoublePress={(edgeId, world) => openLineMenuAt(edgeId, world, true, true)}
+            onDoublePress={(edgeId, world) => openLineMenuAt(edgeId, world, true)}
           />
           {sortedNodes.map((nodeLayout) => {
             const node = scene.nodes[nodeLayout.nodeId];
@@ -4377,7 +4612,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             : null}
           {selectedEdgeLayout !== undefined &&
           sequenceMovePreview === null &&
-          reattachPreview === null ? (
+          reattachPreview === null &&
+          edgeSlidePreview?.edgeId !== selectedEdgeLayout.edgeId ? (
             <>
               {activeEndpoint === null ? (
                 <path
@@ -4431,6 +4667,44 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               ) : null}
             </>
           ) : null}
+          {edgeSlidePreview !== null &&
+          selectedEdgeLayout?.edgeId === edgeSlidePreview.edgeId &&
+          selectedEdgeLayout.points.length === 2 ? (() => {
+            const first = selectedEdgeLayout.points[0];
+            const last = selectedEdgeLayout.points[selectedEdgeLayout.points.length - 1];
+            if (first === undefined || last === undefined) return null;
+            const from = edgeSlidePreview.axis === "y"
+              ? { x: first.x, y: edgeSlidePreview.position }
+              : { x: edgeSlidePreview.position, y: first.y };
+            const to = edgeSlidePreview.axis === "y"
+              ? { x: last.x, y: edgeSlidePreview.position }
+              : { x: edgeSlidePreview.position, y: last.y };
+            return (
+              <g pointerEvents="none">
+                <line
+                  x1={from.x}
+                  y1={from.y}
+                  x2={to.x}
+                  y2={to.y}
+                  stroke={scene.theme.colors.selection}
+                  strokeWidth={2.2}
+                  strokeDasharray={`${5 / zoom} ${3 / zoom}`}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {[from, to].map((handle, index) => (
+                  <circle
+                    key={`edge-slide-preview-${index}`}
+                    cx={handle.x}
+                    cy={handle.y}
+                    r={3.5 / zoom}
+                    fill={scene.theme.colors.selection}
+                    stroke="white"
+                    strokeWidth={1 / zoom}
+                  />
+                ))}
+              </g>
+            );
+          })() : null}
           {visiblePorts.length > 0 && activationDraft === null ? (
             <PortHandles
               ports={visiblePorts}
@@ -4626,8 +4900,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       {linePopover !== null && selectedEdge !== undefined && selectedEdgeLayout !== undefined ? (
         <DraggablePanel
           className="line-popover-position"
-          left={Math.max(10, Math.min(linePopover.x, Math.max(10, viewport.width - 330)))}
-          top={Math.max(10, Math.min(linePopover.y, Math.max(10, viewport.height - 430)))}
+          left={Math.max(10, Math.min(linePopover.x, Math.max(10, viewport.width - 320)))}
+          top={Math.max(10, Math.min(linePopover.y, Math.max(10, viewport.height - 310)))}
           bounds={viewport}
           resetKey={`${linePopover.edgeId}:${linePopover.x}:${linePopover.y}`}
         >
@@ -4666,6 +4940,29 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           </div>
         </DraggablePanel>
       ) : null}
+
+      <div className={`canvas-history-controls${showCompactAddButton ? " with-add" : ""}`}>
+        <button
+          type="button"
+          className="canvas-history-button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title="Undo (Ctrl+Z)"
+          aria-label="Undo"
+        >
+          ↶
+        </button>
+        <button
+          type="button"
+          className="canvas-history-button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          title="Redo (Ctrl+Shift+Z)"
+          aria-label="Redo"
+        >
+          ↷
+        </button>
+      </div>
 
       {showCompactAddButton ? (
         <button

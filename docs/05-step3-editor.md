@@ -305,7 +305,8 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
   label and waypoint IDs, preserve image assets, and leave the new objects selected. The pasted group is
   centred under the mouse pointer; if the pointer is not over the canvas, the visible canvas centre is used.
   Selecting a table header makes the whole table the copy subject; Ctrl/Cmd+C copies that table even while the
-  header name field is focused.
+  header name field is focused. The payload is also written to a shared local clipboard, so another UMLer tab or
+  window in the same browser profile can paste it; a storage event keeps already-open tabs synchronized.
 - **Cross-diagram paste** — copied objects can be pasted into a scene of another diagram type. All objects
   with an equivalent are converted at paste time and the group is centred at the paste point:
   ER entity/associative/relationship-attribute tables → class table; class table (and ER table) → class
@@ -499,8 +500,10 @@ nodes stack vertically, instead of being forced to leave from the old horizontal
 node. Use-case ellipses keep the automatic angle-anchor logic instead. Tether source ports are re-anchored the
 same way, so relation attributes leave the side facing their relationship.
 
-The layout panel reports moved nodes, layer count and approximate crossings before/after. It also exposes
-three spacing presets above the run button:
+The layout panel reports moved nodes, layer count and approximate crossings before/after. During a live object
+move only connectors attached to or near the moved objects are rerouted; unaffected routes reuse the previous
+snapshot. **Low performance mode** freezes every connector route until the object is dropped, which is useful on
+very large scenes. The panel also exposes three spacing presets above the run button:
 
 | Preset | Rank gap | Node gap | Edge gap |
 |---|---:|---:|---:|

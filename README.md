@@ -147,8 +147,10 @@ chooser opens.
   junctions whose component endings all belong to the group, snapping their start positions to the grid;
   nearby junction pairs are also merged into one grid-aligned junction during normalization. A single click opens an object's menu without
   focusing its label; double-click the object or label to edit the text. Ctrl/Cmd+click toggles an object; dragging any selected object
-  moves the whole selection. Ctrl/Cmd+C, X and V copy, cut and paste objects within the scene; connectors are
-  copied only when both endpoint objects are selected, so a connector cannot be copied alone. Pasted objects
+  moves the whole selection. Ctrl/Cmd+C, X and V copy, cut and paste objects within the scene or into another
+  UMLer tab/window in the same browser profile; the shared clipboard is stored locally and synchronized with
+  storage events. Connectors are copied only when both endpoint objects are selected, so a connector cannot be
+  copied alone. Pasted objects
   are selected, given fresh IDs and placed under the mouse pointer (or the visible canvas centre when the
   pointer is elsewhere); image assets travel with their nodes. Selecting a table header makes the whole table
   the copy subject, including while its name field is focused. Any number of copied objects can be pasted into
@@ -271,7 +273,11 @@ chooser opens.
   and ER diamonds; class title + stereotype headers stay vertically centred.
 - Row-level and perimeter ports for tables, plus spine/activation ports for sequence diagrams.
 - Sparse orthogonal **A\*** routing with bend penalty, obstacle inflation, equal-length/fewer-bend
-  preference, dynamic non-row perimeter anchors and double-click reroute.
+  preference, dynamic non-row perimeter anchors and double-click reroute. Facing table borders share one
+  aligned coordinate instead of independently drifting by half a grid square; a straight table-to-table
+  connector can be dragged along those parallel borders to set a preferred position. Live object moves
+  reroute only incident and nearby connectors; the rest reuse their previous geometry. **Low performance
+  mode** in the Layout panel freezes all connector routes until the object is dropped.
 - **ER relationship-label conversion**: the line menu shows a square `▦` action beside an ER relationship’s
   center label. It creates a relation-attribute table named after the label, tethers it to the relationship
   line, removes the old center label and selects the new table in one revision.

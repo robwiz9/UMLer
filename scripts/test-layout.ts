@@ -31,6 +31,7 @@ import {
   moveSequenceEdge,
   setEdgeAttachment,
   setEdgeLabelTextStyle,
+  setEdgePreferredPosition,
   setEndpointLabel,
   setSceneTheme,
   updateRow,
@@ -222,6 +223,65 @@ assert.ok(!overlapsTable, "relation-attribute label must clear its table");
 // A chain of edge-to-edge attachments needs one resolution pass per link.
 // The pass limit must not shrink with the pending list, or the last edge is
 // silently dropped from the snapshot.
+// Facing table borders with overlapping ranges should meet at one shared
+// coordinate, not two independently chosen row/center offsets.
+const straightEr = layout.edges.edge_places;
+assert.ok(straightEr !== undefined);
+assert.equal(straightEr.points.length, 2, "aligned table sides should route straight");
+assert.equal(straightEr.points[0]?.y, straightEr.points[1]?.y);
+const preferredScene = setEdgePreferredPosition(
+  ER_COMMERCE,
+  asEdgeId("edge_places"),
+  132,
+);
+const preferredLayout = buildLayoutSnapshot(preferredScene, measurer);
+const preferredEr = preferredLayout.edges.edge_places;
+assert.ok(preferredEr !== undefined);
+assert.equal(preferredEr.points.length, 2, "preferred straight position should stay straight");
+assert.equal(preferredEr.points[0]?.y, 132);
+assert.equal(preferredEr.points[1]?.y, 132);
+assert.notEqual(
+  preferredEr.points[0]?.y,
+  straightEr.points[0]?.y,
+  "preferred position should move the shared attachment coordinate",
+);
+
+// Low-performance drag preview updates node frames but reuses connector routes
+// until the object is dropped.
+const movedCustomers = withNodeFrames(ER_COMMERCE, {
+  customers: {
+    ...(ER_COMMERCE.nodes.customers?.frame ?? { x: 0, y: 0, width: 1, height: 1 }),
+    y: (ER_COMMERCE.nodes.customers?.frame.y ?? 0) + 45,
+  },
+});
+const reusedPreview = buildLayoutSnapshot(movedCustomers, measurer, {
+  reuseEdges: layout.edges,
+});
+assert(
+  reusedPreview.edges === layout.edges,
+  "low-performance preview should reuse connector layouts",
+);
+assert(
+  reusedPreview.nodes.customers?.frame.y ===
+    (layout.nodes.customers?.frame.y ?? 0) + 45,
+  "low-performance preview should still move the node frame",
+);
+
+const partialPreview = buildLayoutSnapshot(movedCustomers, measurer, {
+  reuseEdges: layout.edges,
+  rerouteEdges: new Set(["edge_places", "edge_order_line"]),
+});
+assert(
+  partialPreview.edges.edge_places !== layout.edges.edge_places,
+  "targeted preview should reroute the affected connector",
+);
+assert(
+  partialPreview.edges.edge_places?.points.some(
+    (point, index) => point.y !== layout.edges.edge_places?.points[index]?.y,
+  ) === true,
+  "targeted reroute should reflect the moved endpoint",
+);
+
 const chainedEdge = createEdgeForDiagram(
   ER_COMMERCE,
   { nodeId: asNodeId("customers"), port: { kind: "perimeter", side: "south" } },

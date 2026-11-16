@@ -718,6 +718,26 @@ export const setStrokeWidth = (
     style: { ...edge.style, stroke: { ...edge.style.stroke, width: Math.max(0.25, width) } },
   }));
 
+/** Moves a straight table-to-table connector along its facing borders. */
+export const setEdgePreferredPosition = (
+  scene: SceneDocument,
+  edgeId: EdgeId,
+  position: number | undefined,
+): SceneDocument =>
+  updateEdge(scene, edgeId, (edge) => {
+    if (position === undefined) {
+      const { preferredPosition: _ignored, ...routing } = edge.routing;
+      return { ...edge, routing };
+    }
+    return {
+      ...edge,
+      routing: {
+        ...edge.routing,
+        preferredPosition: Number.isFinite(position) ? position : edge.routing.preferredPosition,
+      },
+    };
+  });
+
 export const setRoutingMode = (
   scene: SceneDocument,
   edgeId: EdgeId,

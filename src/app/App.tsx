@@ -20,6 +20,7 @@ import {
   type ImportedProject,
 } from "../model/persistence.ts";
 import { buildLayoutSnapshot, pointOnPolyline, withNodeFrames, withNodeRotations } from "../layout/build-layout.ts";
+import type { EdgeLayout, LayoutSnapshot } from "../model/layout.ts";
 import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
 import { zoomAtScreenPoint, type Camera, type ViewportSize } from "../canvas/camera.ts";
@@ -96,11 +97,16 @@ import {
   type WireOrientation,
 } from "../model/circuit-wires.ts";
 import { asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, newId, type ActivationId, type SceneId } from "../model/ids.ts";
-import { snap, unionRects, type Point } from "../model/geometry.ts";
+import { expandRect, rectsIntersect, snap, unionRects, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import { createImageObject, createObjectFromTemplate } from "../model/object-catalog.ts";
 import { collectProjectAssets, pruneUnusedProjectAssets, unusedProjectAssets } from "../model/assets.ts";
 import { copySceneNodes, pasteSceneClipboard, type SceneClipboard } from "../model/clipboard.ts";
+import {
+  loadSceneClipboard,
+  storeSceneClipboard,
+  subscribeSceneClipboard,
+} from "./clipboard-storage.ts";
 import { convertClipboardForDiagram } from "../model/convert.ts";
 import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
 import { createImageAssetFromFile, isSupportedImageFile } from "./image-assets.ts";
@@ -128,6 +134,7 @@ import {
   rerouteEdge,
   setEdgeAttachment,
   setEdgeLabelOffset,
+  setEdgePreferredPosition,
   setEdgeLabelTextStyle,
   setEndpointLabel,
   setMarker,
@@ -317,21 +324,32 @@ export const App = () => {
   const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
   const [gridVisible, setGridVisible] = useState(initialUi.gridVisible);
   const [snapEnabled, setSnapEnabled] = useState(initialUi.snapEnabled);
+  const [lowPerformanceMode, setLowPerformanceMode] = useState(
+    initialUi.lowPerformanceMode,
+  );
   const [fitNonce, setFitNonce] = useState(0);
   const [fontTick, setFontTick] = useState(0);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
   const [focusRequest, setFocusRequest] = useState<CanvasTextFocusRequest | null>(null);
   const [nodeFocus, setNodeFocus] = useState<NodeFocus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const clipboardRef = useRef<SceneClipboard | null>(null);
+  const clipboardRef = useRef<SceneClipboard | null>(loadSceneClipboard());
   const importTargetRef = useRef<ImportTarget>("scene");
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
   const manualSaveRef = useRef<() => void>(() => {});
   const autoSaveRef = useRef<() => void>(() => {});
   const startupCheckRef = useRef<() => void>(() => {});
   const startupCheckedRef = useRef(false);
+  const fullLayoutRef = useRef<LayoutSnapshot | null>(null);
 
   const measurer = useMemo(() => new CanvasTextMeasurer(), [fontTick]);
+
+  useEffect(
+    () => subscribeSceneClipboard((clipboard) => {
+      clipboardRef.current = clipboard;
+    }),
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -353,8 +371,33 @@ export const App = () => {
   }, [scene]);
 
   useEffect(() => {
-    saveUiPreferences({ panelVisible, codePanelVisible, gridVisible, snapEnabled });
-  }, [panelVisible, codePanelVisible, gridVisible, snapEnabled]);
+    saveUiPreferences({
+      panelVisible,
+      codePanelVisible,
+      gridVisible,
+      snapEnabled,
+      lowPerformanceMode,
+    });
+  }, [
+    panelVisible,
+    codePanelVisible,
+    gridVisible,
+    snapEnabled,
+    lowPerformanceMode,
+  ]);
+
+  useEffect(() => {
+    // Level 2 compacts the top bar; keep the canvas usable by collapsing the
+    // side panel when the viewport enters that narrow layout.
+    const query = window.matchMedia("(max-width: 1040px)");
+    const collapse = (matches: boolean): void => {
+      if (matches) setPanelVisible(false);
+    };
+    collapse(query.matches);
+    const listener = (event: MediaQueryListEvent): void => collapse(event.matches);
+    query.addEventListener("change", listener);
+    return () => query.removeEventListener("change", listener);
+  }, []);
 
   useEffect(() => {
     if (toast === null || toast.sticky === true) return;
@@ -415,10 +458,88 @@ export const App = () => {
     () => withNodeRotations(withNodeFrames(scene, previewFrames), rotationPreview),
     [scene, previewFrames, rotationPreview],
   );
-  const layout = useMemo(
-    () => buildLayoutSnapshot(effectiveScene, measurer),
-    [effectiveScene, measurer, fontTick],
-  );
+  const layout = useMemo(() => {
+    const hasPreview =
+      Object.keys(previewFrames).length > 0 || Object.keys(rotationPreview).length > 0;
+    const previous = fullLayoutRef.current;
+    const movedIds = new Set([
+      ...Object.keys(previewFrames),
+      ...Object.keys(rotationPreview),
+    ]);
+    let reuseEdges: Readonly<Record<string, EdgeLayout>> | undefined;
+    let rerouteEdges: ReadonlySet<string> | undefined;
+    if (hasPreview && previous !== null) {
+      if (lowPerformanceMode) {
+        reuseEdges = previous.edges;
+      } else if (movedIds.size > 0) {
+        const affected = new Set<string>();
+        const boxes = [...movedIds].flatMap((nodeId) => {
+          const frame = scene.nodes[nodeId]?.frame;
+          const preview = previewFrames[nodeId];
+          return [frame, preview]
+            .filter((value): value is Rect => value !== undefined)
+            .map((value) => expandRect(value, 32));
+        });
+        for (const edge of Object.values(scene.edges)) {
+          const sourceNode =
+            edge.source.target === "node" ? edge.source.nodeId : undefined;
+          const targetNode =
+            edge.target.target === "node" ? edge.target.nodeId : undefined;
+          if (
+            (sourceNode !== undefined && movedIds.has(sourceNode)) ||
+            (targetNode !== undefined && movedIds.has(targetNode))
+          ) {
+            affected.add(edge.id);
+            continue;
+          }
+          const previousLayout = previous.edges[edge.id];
+          if (
+            previousLayout !== undefined &&
+            boxes.some((box) => rectsIntersect(previousLayout.bounds, box))
+          ) {
+            affected.add(edge.id);
+          }
+        }
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const edge of Object.values(scene.edges)) {
+            if (affected.has(edge.id)) continue;
+            const sourceAffected =
+              edge.source.target === "edge" && affected.has(edge.source.edgeId);
+            const targetAffected =
+              edge.target.target === "edge" && affected.has(edge.target.edgeId);
+            if (sourceAffected || targetAffected) {
+              affected.add(edge.id);
+              changed = true;
+            }
+          }
+        }
+        reuseEdges = previous.edges;
+        rerouteEdges = affected;
+      }
+    }
+    const next = buildLayoutSnapshot(
+      effectiveScene,
+      measurer,
+      reuseEdges === undefined
+        ? undefined
+        : {
+            reuseEdges,
+            ...(rerouteEdges === undefined ? {} : { rerouteEdges }),
+          },
+    );
+    if (!lowPerformanceMode || !hasPreview) fullLayoutRef.current = next;
+    return next;
+  }, [
+    effectiveScene,
+    scene,
+    measurer,
+    fontTick,
+    lowPerformanceMode,
+    previewFrames,
+    rotationPreview,
+  ]);
   const exportAssets = useMemo(
     () => ({ ...scene.assets, ...assetLibrary }),
     [scene.assets, assetLibrary],
@@ -2232,11 +2353,13 @@ export const App = () => {
       return;
     }
     clipboardRef.current = payload;
+    const shared = storeSceneClipboard(payload);
     const connectors = payload.edges.length === 0
       ? ""
       : ` and ${payload.edges.length} connector${payload.edges.length === 1 ? "" : "s"}`;
     showToast(
-      `Copied ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}${connectors}.`,
+      `Copied ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}${connectors}.${shared ? " Available in other UMLer tabs." : " Too large to share across tabs."}`,
+      shared ? "info" : "warning",
     );
   }, [nodeFocus, scene, selectedEdgeId, selectedNodeIds, showToast]);
 
@@ -2255,20 +2378,25 @@ export const App = () => {
       return;
     }
     clipboardRef.current = payload;
+    const shared = storeSceneClipboard(payload);
     setScene((current) =>
       deleteNodes(current, cutIds.map((nodeId) => asNodeId(nodeId))),
     );
     selectNodes([], null);
     setSelectedEdgeId(null);
-    showToast(`Cut ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}.`);
+    showToast(
+      `Cut ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}.${shared ? " Available in other UMLer tabs." : " Too large to share across tabs."}`,
+      shared ? "info" : "warning",
+    );
   }, [nodeFocus, scene, selectedNodeIds, selectNodes, showToast]);
 
   const handlePasteSelection = useCallback(() => {
-    const clipboard = clipboardRef.current;
+    const clipboard = clipboardRef.current ?? loadSceneClipboard();
     if (clipboard === null) {
       showToast("Nothing to paste.", "warning");
       return;
     }
+    clipboardRef.current = clipboard;
     // Paste under the pointer when it is over the canvas; otherwise fall back
     // to the centre of the canvas viewport.
     const pastePoint: Point = canvasStageRef.current?.getPointerWorld() ?? {
@@ -2787,6 +2915,12 @@ export const App = () => {
     setLayoutNote("Sequence message moved vertically.");
   }, []);
 
+  const handleSlideStraightEdge = useCallback((edgeId: string, position: number) => {
+    setScene((current) =>
+      setEdgePreferredPosition(current, asEdgeId(edgeId), position));
+    setLayoutNote("Connector position set along the table borders.");
+  }, []);
+
   const handleMoveEdgeLabel = useCallback(
     (edgeId: string, labelId: string, offset: Point) => {
       setScene((current) =>
@@ -2926,11 +3060,7 @@ export const App = () => {
         scene={scene}
         scenes={scenes}
         activeSceneId={activeSceneId}
-        canUndo={canUndo}
-        canRedo={canRedo}
         canDeleteScene={scenes.length > 1}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
         onSceneChange={loadScene}
         panelVisible={panelVisible}
         onTogglePanel={() => setPanelVisible((value) => !value)}
@@ -3009,9 +3139,11 @@ export const App = () => {
                   note={layoutNote}
                   variant="circuit"
                   visualRefinements={scene.layout.visualRefinements !== false}
+                  lowPerformanceMode={lowPerformanceMode}
                   onDirectionChange={handleLayoutDirection}
                   onSpacingChange={handleLayoutSpacing}
                   onVisualRefinementsChange={handleVisualRefinements}
+                  onLowPerformanceModeChange={setLowPerformanceMode}
                   onRun={runAutoLayout}
                 />
               </>
@@ -3024,8 +3156,10 @@ export const App = () => {
                 spacing={scene.layout.spacing ?? "normal"}
                 engine={scene.layout.engine}
                 note={layoutNote}
+                lowPerformanceMode={lowPerformanceMode}
                 onDirectionChange={handleLayoutDirection}
                 onSpacingChange={handleLayoutSpacing}
+                onLowPerformanceModeChange={setLowPerformanceMode}
                 onRun={runAutoLayout}
                 />
                 </>
@@ -3044,6 +3178,10 @@ export const App = () => {
           majorEvery={scene.canvas.grid.majorEvery}
           snapEnabled={snapEnabled}
           showCompactAddButton={!panelVisible}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
           imageAssets={assetLibrary}
           onDropImageFiles={(files, world) => {
             void handleDropImageFiles(files, world);
@@ -3081,6 +3219,7 @@ export const App = () => {
           onInsertComponentOnWire={handleInsertComponentOnWire}
           onReattachEdge={handleReattachEdge}
           onMoveSequenceEdge={handleMoveSequenceEdge}
+          onSlideStraightEdge={handleSlideStraightEdge}
           onMoveEdgeLabel={handleMoveEdgeLabel}
           onTextDoubleClick={handleCanvasTextDoubleClick}
           nodeFocus={nodeFocus}

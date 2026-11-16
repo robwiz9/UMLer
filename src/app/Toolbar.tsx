@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { DiagramKind, SceneDocument } from "../model/scene.ts";
 import { DIAGRAM_KIND_LABELS } from "../model/scene.ts";
 import { AppMenuBar } from "./AppMenuBar.tsx";
@@ -6,11 +7,7 @@ interface ToolbarProps {
   readonly scene: SceneDocument;
   readonly scenes: readonly SceneDocument[];
   readonly activeSceneId: string;
-  readonly canUndo: boolean;
-  readonly canRedo: boolean;
   readonly canDeleteScene: boolean;
-  readonly onUndo: () => void;
-  readonly onRedo: () => void;
   readonly onSceneChange: (sceneId: string) => void;
   readonly panelVisible: boolean;
   readonly onTogglePanel: () => void;
@@ -46,11 +43,7 @@ export const Toolbar = ({
   scene,
   scenes,
   activeSceneId,
-  canUndo,
-  canRedo,
   canDeleteScene,
-  onUndo,
-  onRedo,
   onSceneChange,
   panelVisible,
   onTogglePanel,
@@ -80,8 +73,28 @@ export const Toolbar = ({
   onToggleGrid,
   onToggleSnap,
   onGridSizeChange,
-}: ToolbarProps) => (
-  <header className="topbar">
+}: ToolbarProps) => {
+  const [compactOpen, setCompactOpen] = useState(false);
+  const compactRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!compactOpen) return;
+    const close = (event: PointerEvent): void => {
+      if (!compactRef.current?.contains(event.target as Node)) setCompactOpen(false);
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setCompactOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", escape);
+    };
+  }, [compactOpen]);
+
+  return (
+    <header className="topbar">
     <div className="brand">
       <div className="brand-mark">U</div>
       <div>
@@ -125,31 +138,13 @@ export const Toolbar = ({
     </div>
 
     <div className="topbar-group toolbar-actions">
-      <button
-        type="button"
-        className="icon-button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        title="Undo (Ctrl+Z)"
-        aria-label="Undo"
-      >
-        ↶
-      </button>
-      <button
-        type="button"
-        className="icon-button"
-        onClick={onRedo}
-        disabled={!canRedo}
-        title="Redo (Ctrl+Shift+Z)"
-        aria-label="Redo"
-      >
-        ↷
-      </button>
       {scene.meta.diagramKind == "circuit" ? null :
         <><button type="button" className={`tool-toggle ${gridVisible ? "on" : ""}`} onClick={onToggleGrid} title="Toggle grid">
-          # Grid
+          <span className="tool-icon" aria-hidden="true">#</span>
+          <span className="tool-label">Grid</span>
         </button><button type="button" className={`tool-toggle ${snapEnabled ? "on" : ""}`} onClick={onToggleSnap} title="Toggle snapping">
-            ⌁ Snap
+            <span className="tool-icon" aria-hidden="true">⌁</span>
+            <span className="tool-label">Snap</span>
           </button></>
       }
       <button
@@ -158,7 +153,8 @@ export const Toolbar = ({
         onClick={onTogglePanel}
         title="Toggle layout panel"
       >
-        ◧ Panel
+        <span className="tool-icon" aria-hidden="true">◧</span>
+        <span className="tool-label">Panel</span>
       </button>
       <button
         type="button"
@@ -167,7 +163,8 @@ export const Toolbar = ({
         title="Toggle the Typst / CeTZ export panel"
         aria-pressed={codePanelVisible}
       >
-        {"</> Typst"}
+        <span className="tool-icon" aria-hidden="true">{"</>"}</span>
+        <span className="tool-label">Typst</span>
       </button>
 
       {scene.meta.diagramKind == "circuit" ? null : <label className="grid-size">
@@ -189,6 +186,92 @@ export const Toolbar = ({
       </label>}
     </div>
 
+    <div className="toolbar-compact" ref={compactRef}>
+      <button
+        type="button"
+        className={`toolbar-compact-trigger ${compactOpen ? "on" : ""}`}
+        onClick={() => setCompactOpen((open) => !open)}
+        title="More toolbar options"
+        aria-label="More toolbar options"
+        aria-haspopup="menu"
+        aria-expanded={compactOpen}
+      >
+        ⋯
+      </button>
+      {compactOpen ? (
+        <div className="toolbar-compact-menu" role="menu">
+          {scene.meta.diagramKind === "circuit" ? null : (
+            <>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={gridVisible}
+                className={gridVisible ? "on" : ""}
+                onClick={onToggleGrid}
+              >
+                <span className="toolbar-menu-icon" aria-hidden="true">#</span>
+                <span>Grid</span>
+                <span className="toolbar-menu-check">{gridVisible ? "✓" : ""}</span>
+              </button>
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={snapEnabled}
+                className={snapEnabled ? "on" : ""}
+                onClick={onToggleSnap}
+              >
+                <span className="toolbar-menu-icon" aria-hidden="true">⌁</span>
+                <span>Snap</span>
+                <span className="toolbar-menu-check">{snapEnabled ? "✓" : ""}</span>
+              </button>
+              <label className="toolbar-compact-step">
+                Grid step
+                <span>
+                  <input
+                    type="number"
+                    min={3}
+                    max={72}
+                    step={1}
+                    value={gridSize}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      if (Number.isFinite(value) && value >= 3 && value <= 72) {
+                        onGridSizeChange(value);
+                      }
+                    }}
+                  />
+                  pt
+                </span>
+              </label>
+              <div className="toolbar-menu-divider" />
+            </>
+          )}
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={panelVisible}
+            className={panelVisible ? "on" : ""}
+            onClick={onTogglePanel}
+          >
+            <span className="toolbar-menu-icon" aria-hidden="true">◧</span>
+            <span>Layout panel</span>
+            <span className="toolbar-menu-check">{panelVisible ? "✓" : ""}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={codePanelVisible}
+            className={codePanelVisible ? "on" : ""}
+            onClick={onToggleCodePanel}
+          >
+            <span className="toolbar-menu-icon" aria-hidden="true">{"</>"}</span>
+            <span>Typst panel</span>
+            <span className="toolbar-menu-check">{codePanelVisible ? "✓" : ""}</span>
+          </button>
+        </div>
+      ) : null}
+    </div>
+
     <div className="topbar-group zoom-group">
       <button type="button" className="icon-button" onClick={onZoomOut} title="Zoom out">
         −
@@ -202,4 +285,5 @@ export const Toolbar = ({
       </button>
     </div>
   </header>
-);
+  );
+};

@@ -11,9 +11,11 @@ interface LayoutPanelProps {
   readonly note: string | null;
   readonly variant?: "full" | "circuit";
   readonly visualRefinements?: boolean;
+  readonly lowPerformanceMode?: boolean;
   readonly onDirectionChange: (direction: LayoutDirection) => void;
   readonly onSpacingChange: (spacing: LayoutSpacing) => void;
   readonly onVisualRefinementsChange?: (enabled: boolean) => void;
+  readonly onLowPerformanceModeChange?: (enabled: boolean) => void;
   readonly onRun: () => void;
 }
 
@@ -23,11 +25,28 @@ export const LayoutPanel = ({
   note,
   variant = "full",
   visualRefinements,
+  lowPerformanceMode = false,
   onDirectionChange,
   onSpacingChange,
   onVisualRefinementsChange,
+  onLowPerformanceModeChange,
   onRun,
 }: LayoutPanelProps) => {
+  const lowPerformanceToggle = (
+    <label
+      className="theme-transparent layout-refinements"
+      title="Keep connector routes frozen while an object is dragged; reroute once it is dropped."
+    >
+      <input
+        type="checkbox"
+        checked={lowPerformanceMode}
+        onChange={(event) =>
+          onLowPerformanceModeChange?.(event.target.checked)}
+      />
+      Low performance mode
+    </label>
+  );
+
   if (variant === "circuit") {
     return (
       <section className="panel layout-panel">
@@ -43,6 +62,7 @@ export const LayoutPanel = ({
           />
           Visual layout refinements
         </label>
+        {lowPerformanceToggle}
       </section>
     );
   }
@@ -80,6 +100,7 @@ export const LayoutPanel = ({
           </button>
         ))}
       </div>
+      {lowPerformanceToggle}
       <button type="button" className="primary-action" onClick={onRun}>
         Run crossing-reduction layout
       </button>

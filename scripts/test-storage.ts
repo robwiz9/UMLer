@@ -7,7 +7,14 @@
 
 import { STEP1_FIXTURES } from "../src/fixtures/index.ts";
 import { collectProjectAssets } from "../src/model/assets.ts";
+import { copySceneNodes } from "../src/model/clipboard.ts";
 import { asAssetId } from "../src/model/ids.ts";
+import {
+  CLIPBOARD_STORAGE_KEY,
+  loadSceneClipboard,
+  parseSceneClipboard,
+  storeSceneClipboard,
+} from "../src/app/clipboard-storage.ts";
 import { projectDigest, type GitHubBinding } from "../src/model/github-project.ts";
 import { loadStoredGitHubSession, storeGitHubSession } from "../src/app/github-session.ts";
 import { loadStoredProject, saveStoredProject } from "../src/app/project-storage.ts";
@@ -171,11 +178,16 @@ saveUiPreferences({
   codePanelVisible: true,
   gridVisible: false,
   snapEnabled: false,
+  lowPerformanceMode: true,
 });
 assert(loadUiPreferences().panelVisible === false, "layout panel visibility should restore");
 assert(loadUiPreferences().codePanelVisible === true, "Typst panel visibility should restore");
 assert(loadUiPreferences().gridVisible === false, "grid visibility should restore");
 assert(loadUiPreferences().snapEnabled === false, "snap setting should restore");
+assert(
+  loadUiPreferences().lowPerformanceMode === true,
+  "low performance mode should restore",
+);
 assert(
   parseUiPreferences('{"panelVisible":"yes","gridVisible":true}').panelVisible === true,
   "invalid toggle values should fall back to defaults",
@@ -185,5 +197,34 @@ assert(
   "corrupt toggle data should be ignored",
 );
 localStorage.removeItem(UI_PREFERENCES_KEY);
+
+const clipboardScene = scenes[0];
+if (clipboardScene === undefined) throw new Error("fixture set is missing a clipboard scene");
+const clipboardNodeId = Object.keys(clipboardScene.nodes)[0];
+if (clipboardNodeId === undefined) throw new Error("clipboard fixture has no nodes");
+const clipboard = copySceneNodes(clipboardScene, [clipboardNodeId]);
+if (clipboard === null) throw new Error("clipboard fixture could not be copied");
+assert(storeSceneClipboard(clipboard) === true, "clipboard should persist for other tabs");
+assert(
+  localStorage.getItem(CLIPBOARD_STORAGE_KEY) !== null,
+  "clipboard should use the shared storage key",
+);
+const restoredClipboard = loadSceneClipboard();
+assert(
+  restoredClipboard?.nodes.length === clipboard.nodes.length,
+  "clipboard nodes should round-trip across tabs",
+);
+assert(
+  restoredClipboard?.diagramKind === clipboard.diagramKind,
+  "clipboard diagram kind should round-trip",
+);
+assert(parseSceneClipboard(null) === null, "empty clipboard storage should be ignored");
+localStorage.setItem(CLIPBOARD_STORAGE_KEY, "{not json");
+assert(loadSceneClipboard() === null, "corrupt clipboard storage should be ignored");
+localStorage.setItem(
+  CLIPBOARD_STORAGE_KEY,
+  JSON.stringify({ version: 1, clipboard: { sceneId: "x" } }),
+);
+assert(loadSceneClipboard() === null, "invalid clipboard payload should be ignored");
 
 console.log(`Storage checks passed (${checked} assertions).`);

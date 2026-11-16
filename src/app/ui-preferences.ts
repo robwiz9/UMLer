@@ -10,6 +10,8 @@ export interface UiPreferences {
   readonly codePanelVisible: boolean;
   readonly gridVisible: boolean;
   readonly snapEnabled: boolean;
+  /** Freeze connector routing while an object is being dragged. */
+  readonly lowPerformanceMode: boolean;
 }
 
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
@@ -17,6 +19,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   codePanelVisible: false,
   gridVisible: true,
   snapEnabled: true,
+  lowPerformanceMode: false,
 };
 
 export const UI_PREFERENCES_KEY = "umler.ui.preferences";
@@ -40,6 +43,10 @@ export const parseUiPreferences = (raw: string | null): UiPreferences => {
       ),
       gridVisible: asBoolean(record.gridVisible, DEFAULT_UI_PREFERENCES.gridVisible),
       snapEnabled: asBoolean(record.snapEnabled, DEFAULT_UI_PREFERENCES.snapEnabled),
+      lowPerformanceMode: asBoolean(
+        record.lowPerformanceMode,
+        DEFAULT_UI_PREFERENCES.lowPerformanceMode,
+      ),
     };
   } catch {
     return DEFAULT_UI_PREFERENCES;

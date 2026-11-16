@@ -103,6 +103,11 @@ export interface EdgeRouting {
   readonly obstaclePadding: number;
   /** Minimum length of the first/last orthogonal segment. */
   readonly stubLength: number;
+  /**
+   * User-chosen shared coordinate along two facing parallel table borders.
+   * The axis is y for east/west connections and x for north/south connections.
+   */
+  readonly preferredPosition?: number;
   readonly waypoints: readonly Waypoint[];
   readonly sourceDirection?: Direction;
   readonly targetDirection?: Direction;
