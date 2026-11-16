@@ -46,9 +46,9 @@ import {
 
 const LABEL_DOUBLE_PRESS_MS = 400;
 /** Uniform terminal hover radius in scene units for every marker family. */
-const TERMINAL_HOVER_RADIUS = 15;
+const TERMINAL_HOVER_RADIUS = 9;
 /** Keep the terminal target usable at low zoom without shrinking the ring. */
-const TERMINAL_HOVER_MIN_SCREEN_RADIUS = 14;
+const TERMINAL_HOVER_MIN_SCREEN_RADIUS = 8;
 
 const sameNodeFocus = (a: NodeFocus | null, b: NodeFocus | null): boolean => {
   if (a === b) return true;
