@@ -128,7 +128,8 @@ chooser opens.
   rather than embedded bytes.
 - Infinite pan/zoom SVG canvas with fit (max 150% for small diagrams); pan on right- or middle-drag.
 - Configurable 9 pt grid (3–72 pt), major lines every 4 cells.
-- Grid snapping and node-to-node alignment guides.
+- Grid snapping and node-to-node alignment guides. The **Panel**, **Grid**, **Snap** and **Typst** toggles
+  are remembered across refreshes in browser storage.
 - Node drag, **four-corner resize** and live commit/revision handling. The corners of the selection frame are
   resize handles; corner connection arrows are gone, and table/class east-west ports sit at the header centre
   above the row-level arrows.
@@ -136,11 +137,13 @@ chooser opens.
   rectangle (lifelines count by their head only); Ctrl/Cmd+click toggles an object; dragging any selected object
   moves the whole selection. Ctrl/Cmd+C, X and V copy, cut and paste objects within the scene; connectors are
   copied only when both endpoint objects are selected, so a connector cannot be copied alone. Pasted objects
-  are offset, selected and given fresh IDs, and image assets travel with their nodes. Selecting a table header
-  makes the whole table the copy subject, including while its name field is focused. A single copied object
-  can also be pasted into a scene of another diagram type: ER tables become class tables, class tables become
-  object instances or lifelines, and the reverse conversions preserve names and usable rows while dropping
-  notation-specific details.
+  are selected, given fresh IDs and placed under the mouse pointer (or the visible canvas centre when the
+  pointer is elsewhere); image assets travel with their nodes. Selecting a table header makes the whole table
+  the copy subject, including while its name field is focused. Any number of copied objects can be pasted into
+  another diagram type: every object with an equivalent is converted, connectors between converted objects
+  (including edge-to-edge tethers) are rebuilt, and objects without an equivalent are skipped with a warning.
+  ER tables become class tables, class tables become object instances or lifelines, and the reverse
+  conversions preserve names and usable rows while dropping notation-specific details.
 - **Diagram-aware object palette** via the full-width **+ Add object** button at the top of the left panel, the
   filled **+** square in the canvas top-left when the panel is collapsed, or a single right-click on empty
   canvas space. The menu only offers valid objects for the active diagram:
@@ -308,11 +311,11 @@ Persistence checks passed (38 assertions).
 
 Clipboard checks passed (26 assertions).
 
-Conversion checks passed (29 assertions).
+Conversion checks passed (53 assertions).
 
 GitHub project checks passed (33 assertions).
 
-Storage checks passed (16 assertions).
+Storage checks passed (23 assertions).
 
 CeTZ serializer checks passed (172 assertions).
 
@@ -375,10 +378,13 @@ it, and **File → Purge unused images** removes it immediately. Selection check
 selected only fully contained objects, a partially covered table stayed unselected, a lifeline selected from
 its head rectangle but not from its vertical axis, Ctrl+click toggled members, and dragging one member moved
 the whole selection. Clipboard checks: copying two connected tables preserved their connector, copying a
-connector alone warned instead of producing a payload, paste offset and selected fresh copies, and cut/paste
-restored the objects. Cross-diagram checks: copied an ER entity table into the class scene and confirmed the
-pasted table was a class table with its rows, then copied that class and pasted it into an object scene as
-`:orders`, and into a sequence scene as a lifeline with an `:orders` head. Latest typography checks: verified larger UI/diagram type, header/row/comment/connector
+connector alone warned instead of producing a payload, pasted copies landed under the pointer with fresh IDs,
+and cut/paste restored the objects. Cross-diagram checks: copied multiple ER objects into the class scene and
+confirmed all converted objects were pasted together at the pointer; the conversion tests cover preserved
+relationships and edge tethers, plus skipped unconvertible objects. Then copied a class and pasted it into an
+object scene as `:orders`, and into a sequence scene as a lifeline with an `:orders` head. UI preference
+checks: toggled **Panel**, **Grid**, **Snap** and **Typst** off/on and confirmed the same states returned after
+a page refresh. Latest typography checks: verified larger UI/diagram type, header/row/comment/connector
 Text style controls, B/I/M + size/Color overrides, live theme tint and size changes, transparent object
 background, Reset theme, badge baseline centring, and the tighter new-use-case default; confirmed new objects
 inherit the active theme and per-row overrides beat theme defaults. Latest checks covered transparent tint,

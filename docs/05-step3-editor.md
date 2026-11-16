@@ -28,7 +28,8 @@ with the one new scene and clears any GitHub binding. It warns that the current 
 
 Scene operations reset the undo history after switching/creating/deleting and fit the canvas to the new scene.
 The layout panel can be hidden with the **Panel** toolbar toggle; the workspace then becomes a single canvas
-column and the canvas refits to the larger area.
+column and the canvas refits to the larger area. The **Panel**, **Grid**, **Snap** and **Typst** panel states
+are stored separately from the project in `localStorage` and restored on refresh.
 
 ### Scene and project files
 
@@ -289,17 +290,20 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
 - **Copy / cut / paste** — `Ctrl/Cmd+C`, `Ctrl/Cmd+X`, `Ctrl/Cmd+V`. Only objects are copied; connectors are
   included when both of their endpoint objects are part of the copy. A connector alone offers no clipboard
   payload and the app explains that connectors travel with their objects. Pastes allocate fresh node, edge,
-  label and waypoint IDs, shift by 18 pt per successive paste, preserve image assets, and leave the new objects
-  selected. Selecting a table header makes the whole table the copy subject; Ctrl/Cmd+C copies that table even
-  while the header name field is focused.
-- **Cross-diagram paste** — a **single** copied object can be pasted into a scene of another diagram type.
-  The pasted object is converted at paste time and placed clear of existing objects:
+  label and waypoint IDs, preserve image assets, and leave the new objects selected. The pasted group is
+  centred under the mouse pointer; if the pointer is not over the canvas, the visible canvas centre is used.
+  Selecting a table header makes the whole table the copy subject; Ctrl/Cmd+C copies that table even while the
+  header name field is focused.
+- **Cross-diagram paste** — copied objects can be pasted into a scene of another diagram type. All objects
+  with an equivalent are converted at paste time and the group is centred at the paste point:
   ER entity/associative/relationship-attribute tables → class table; class table (and ER table) → class
   instance / communication object with a `:Name` label; class table → sequence lifeline with a `:Name` head;
   object/lifeline → class or ER table (name preserved, rows and notation-only details are discarded), and
   object ↔ sequence lifeline both ways. Comments and images are common to every diagram and paste unchanged.
-  Repeating the conversion is allowed, so lossy chains such as ER table → class → object → lifeline work.
-  Multi-object cross-diagram paste is rejected with a one-object hint.
+  Connectors whose two converted endpoints survive are rebuilt with the target diagram's semantics and
+  markers; edge-to-edge tethers are rebuilt after their parent connector. Objects without an equivalent and
+  connectors that cannot be attached are skipped, and the toast reports both counts. Repeating the conversion
+  is allowed, so lossy chains such as ER table → class → object → lifeline work.
 - Shortcuts defer to native editing while focus is in an input, textarea, select or content-editable field,
   except object paste while the scene switcher select is focused and Ctrl/Cmd+C for a focused table header.
 
@@ -613,7 +617,8 @@ existing text is visibly selected.
 | `src/app/LayoutPanel.tsx` | Direction choice, auto-layout action, result note |
 | `src/app/Inspector.tsx` | Read-only selection/geometry inspector |
 | `src/model/clipboard.ts` | Selection-scoped node/edge copy and ID-remapped paste |
-| `src/model/convert.ts` | Lossy cross-diagram object conversion used by cross-scene paste |
+| `src/model/convert.ts` | Lossy multi-object cross-diagram conversion with connector rebuild |
+| `src/app/ui-preferences.ts` | Persisted panel/grid/snap/Typst toggle state |
 
 ## 7. Verification
 
@@ -648,18 +653,22 @@ npm run check
     tethered relation attributes copy with their parent connector
     paste remaps node/edge IDs and offsets frames
     cut prunes image assets and paste restores them
-  test:convert: 29 assertions
+  test:convert: 53 assertions
     ER table ⇄ class table keeps names, sections and usable rows
     class table → object/lifeline and object → class/lifeline
     relation-attribute → class section conversion
     common image nodes survive target diagram changes
     unsupported shape/type combinations return no conversion
-  test:github: 30 assertions
+    multi-object conversion keeps direct connectors and edge tethers
+    multi-object conversion is centred at the requested paste point
+    mixed copies keep convertible objects and count skipped ones
+  test:github: 33 assertions
     path normalization/traversal rejection, stable project digests
     remote SHA conflict classification, device-flow error messages
-  test:storage: 16 assertions
+  test:storage: 23 assertions
     project + GitHub binding recovery round trip
     corrupt recovery data cleared; session token restore/sign-out
+    panel/Typst/grid/snap toggles round trip with defaults for bad data
 ```
 
 `npm run build` passes.
@@ -745,14 +754,19 @@ Browser checks:
   of an object and confirm it is not selected; Ctrl/Cmd+click a third object and confirm it toggles;
 - drag one selected member and confirm every selected object moves by the same snapped delta while connectors
   stay attached; confirm resize handles/ports are hidden for the multi-selection;
-- select two connected objects, press `Ctrl/Cmd+C` then `Ctrl/Cmd+V`, and confirm fresh copies appear offset
-  and selected with their internal connector; select only a connector, press `Ctrl/Cmd+C`, and confirm the
-  warning instead of a copy;
+- select two connected objects, press `Ctrl/Cmd+C`, move the pointer over the canvas and press `Ctrl/Cmd+V`;
+  confirm fresh copies appear centred under the pointer and selected with their internal connector; move the
+  pointer outside the canvas, paste again and confirm the copies use the viewport centre; select only a
+  connector, press `Ctrl/Cmd+C`, and confirm the warning instead of a copy;
 - copy one ER table, switch to the class scene and press `Ctrl/Cmd+V`; confirm a class table with the same
   rows appears; copy that table, create/switch to an object scene and paste, and confirm `:Name` underlined
   object; paste the same copied table into a sequence scene and confirm a lifeline with the `:Name` head;
-- copy two objects and try pasting them into a scene of another diagram type; confirm the single-object
-  warning and no scene change;
+- copy multiple ER objects, including a relationship and a tethered relationship attribute, switch to the
+  class scene and paste; confirm every convertible object appears together at the pointer and the direct
+  relationship and tether are rebuilt; repeat into an object and a sequence scene;
+- copy a mixed selection containing an image and an ER table into a use-case scene; confirm the image pastes,
+  the table is skipped, and the toast reports the skipped object;
+- toggle **Panel**, **Grid**, **Snap** and **Typst**, reload the page, and confirm the same four states return;
 - create a scene with the **Object** type and confirm the palette and the new **Class instance** object work;
 - press `Ctrl/Cmd+X` and `Ctrl/Cmd+V` and confirm the cut objects disappear and paste back; select two objects
   and press Delete and confirm both and their attached connectors are removed;

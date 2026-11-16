@@ -11,6 +11,13 @@ import { asAssetId } from "../src/model/ids.ts";
 import { projectDigest, type GitHubBinding } from "../src/model/github-project.ts";
 import { loadStoredGitHubSession, storeGitHubSession } from "../src/app/github-session.ts";
 import { loadStoredProject, saveStoredProject } from "../src/app/project-storage.ts";
+import {
+  DEFAULT_UI_PREFERENCES,
+  loadUiPreferences,
+  parseUiPreferences,
+  saveUiPreferences,
+  UI_PREFERENCES_KEY,
+} from "../src/app/ui-preferences.ts";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -117,5 +124,29 @@ assert(session?.token === "token", "session token should restore");
 assert(session?.user.login === "octocat", "session user should restore");
 storeGitHubSession(null);
 assert(loadStoredGitHubSession() === null, "signing out should clear the session");
+
+assert(
+  JSON.stringify(loadUiPreferences()) === JSON.stringify(DEFAULT_UI_PREFERENCES),
+  "empty storage should restore default UI toggles",
+);
+saveUiPreferences({
+  panelVisible: false,
+  codePanelVisible: true,
+  gridVisible: false,
+  snapEnabled: false,
+});
+assert(loadUiPreferences().panelVisible === false, "layout panel visibility should restore");
+assert(loadUiPreferences().codePanelVisible === true, "Typst panel visibility should restore");
+assert(loadUiPreferences().gridVisible === false, "grid visibility should restore");
+assert(loadUiPreferences().snapEnabled === false, "snap setting should restore");
+assert(
+  parseUiPreferences('{"panelVisible":"yes","gridVisible":true}').panelVisible === true,
+  "invalid toggle values should fall back to defaults",
+);
+assert(
+  parseUiPreferences("{not json").gridVisible === true,
+  "corrupt toggle data should be ignored",
+);
+localStorage.removeItem(UI_PREFERENCES_KEY);
 
 console.log(`Storage checks passed (${checked} assertions).`);

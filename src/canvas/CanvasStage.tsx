@@ -154,6 +154,8 @@ interface CanvasStageProps {
 
 export interface CanvasStageHandle {
   readonly openAddObjectMenu: () => void;
+  /** Last pointer position over the canvas, in scene coordinates. */
+  readonly getPointerWorld: () => Point | null;
 }
 
 type Interaction =
@@ -672,9 +674,16 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const zoomRef = useRef(zoom);
   const onViewChangeRef = useRef(onViewChange);
   const onViewportRef = useRef(onViewport);
+  const lastPointerScreenRef = useRef<Point | null>(null);
 
   useImperativeHandle(ref, () => ({
     openAddObjectMenu: () => openAddMenuRef.current?.("panel"),
+    getPointerWorld: () => {
+      const screen = lastPointerScreenRef.current;
+      return screen === null
+        ? null
+        : screenToWorld(screen, cameraRef.current, zoomRef.current);
+    },
   }), []);
 
   layoutRef.current = layout;
@@ -1820,6 +1829,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const svg = svgRef.current;
     if (svg === null) return;
     const screen = pointFromEvent(event, svg);
+    lastPointerScreenRef.current = screen;
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setCursorWorld(world);
 
@@ -2284,7 +2294,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onPointerLeave={() => setHoveredPort(null)}
+        onPointerLeave={() => {
+          lastPointerScreenRef.current = null;
+          setHoveredPort(null);
+        }}
         onContextMenu={handleContextMenu}
         onAuxClick={(event) => {
           if (event.button === 1) event.preventDefault();

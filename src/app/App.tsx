@@ -36,6 +36,7 @@ import { Toolbar } from "./Toolbar.tsx";
 import { downloadTextFile, readTextFile } from "./file-transfer.ts";
 import { loadStoredGitHubSession, storeGitHubSession } from "./github-session.ts";
 import { loadStoredProject, saveStoredProject } from "./project-storage.ts";
+import { loadUiPreferences, saveUiPreferences } from "./ui-preferences.ts";
 import {
   describeGitHubError,
   getProjectFile,
@@ -65,12 +66,12 @@ import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-tar
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
 import { asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, newId, type ActivationId, type SceneId } from "../model/ids.ts";
-import { snap, type Point } from "../model/geometry.ts";
+import { snap, unionRects, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import { createImageObject, createObjectFromTemplate } from "../model/object-catalog.ts";
 import { collectProjectAssets, pruneUnusedProjectAssets, unusedProjectAssets } from "../model/assets.ts";
 import { copySceneNodes, pasteSceneClipboard, type SceneClipboard } from "../model/clipboard.ts";
-import { convertNodeForDiagram } from "../model/convert.ts";
+import { convertClipboardForDiagram } from "../model/convert.ts";
 import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
 import { createImageAssetFromFile, isSupportedImageFile } from "./image-assets.ts";
 import type { EdgeAttachmentRef, EdgeTargetRef, PortAttachmentRef } from "../model/edge-create.ts";
@@ -260,8 +261,9 @@ export const App = () => {
   const [githubDialogOpen, setGithubDialogOpen] = useState(false);
   const [githubBusy, setGithubBusy] = useState<"open" | "save" | null>(null);
   const [githubDecision, setGithubDecision] = useState<GitHubDecision | null>(null);
-  const [panelVisible, setPanelVisible] = useState(true);
-  const [codePanelVisible, setCodePanelVisible] = useState(false);
+  const [initialUi] = useState(loadUiPreferences);
+  const [panelVisible, setPanelVisible] = useState(initialUi.panelVisible);
+  const [codePanelVisible, setCodePanelVisible] = useState(initialUi.codePanelVisible);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
@@ -274,8 +276,8 @@ export const App = () => {
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
-  const [gridVisible, setGridVisible] = useState(true);
-  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [gridVisible, setGridVisible] = useState(initialUi.gridVisible);
+  const [snapEnabled, setSnapEnabled] = useState(initialUi.snapEnabled);
   const [fitNonce, setFitNonce] = useState(0);
   const [fontTick, setFontTick] = useState(0);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
@@ -283,7 +285,6 @@ export const App = () => {
   const [nodeFocus, setNodeFocus] = useState<NodeFocus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const clipboardRef = useRef<SceneClipboard | null>(null);
-  const pasteOffsetRef = useRef(0);
   const importTargetRef = useRef<ImportTarget>("scene");
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
   const manualSaveRef = useRef<() => void>(() => {});
@@ -309,6 +310,10 @@ export const App = () => {
       return current.map((item) => (item.id === scene.id ? scene : item));
     });
   }, [scene]);
+
+  useEffect(() => {
+    saveUiPreferences({ panelVisible, codePanelVisible, gridVisible, snapEnabled });
+  }, [panelVisible, codePanelVisible, gridVisible, snapEnabled]);
 
   useEffect(() => {
     if (toast === null || toast.sticky === true) return;
@@ -1556,7 +1561,6 @@ export const App = () => {
       return;
     }
     clipboardRef.current = payload;
-    pasteOffsetRef.current = 0;
     const connectors = payload.edges.length === 0
       ? ""
       : ` and ${payload.edges.length} connector${payload.edges.length === 1 ? "" : "s"}`;
@@ -1580,7 +1584,6 @@ export const App = () => {
       return;
     }
     clipboardRef.current = payload;
-    pasteOffsetRef.current = 0;
     setScene((current) =>
       deleteNodes(current, cutIds.map((nodeId) => asNodeId(nodeId))),
     );
@@ -1595,37 +1598,55 @@ export const App = () => {
       showToast("Nothing to paste.", "warning");
       return;
     }
+    // Paste under the pointer when it is over the canvas; otherwise fall back
+    // to the centre of the canvas viewport.
+    const pastePoint: Point = canvasStageRef.current?.getPointerWorld() ?? {
+      x: (viewport.width / 2 - camera.x) / zoom,
+      y: (viewport.height / 2 - camera.y) / zoom,
+    };
+
     if (clipboard.sceneId !== scene.id && clipboard.diagramKind !== scene.meta.diagramKind) {
-      if (clipboard.nodes.length !== 1) {
-        showToast("Copy a single object to paste it into another diagram type.", "warning");
+      const conversion = convertClipboardForDiagram(clipboard, scene, pastePoint);
+      if (conversion.nodes.length === 0) {
+        showToast("None of the copied objects can be converted to this diagram type.", "warning");
         return;
       }
-      const source = clipboard.nodes[0];
-      if (source === undefined) {
-        showToast("Nothing to paste.", "warning");
-        return;
-      }
-      const converted = convertNodeForDiagram(source, scene.meta.diagramKind, scene);
-      if (converted === null) {
-        showToast("This object cannot be converted to the target diagram type.", "warning");
-        return;
-      }
-      pasteOffsetRef.current += 1;
-      setScene((current) => insertSubgraph(current, [converted], [], clipboard.assets));
-      selectNodes([converted.id], converted.id);
-      showToast("Pasted 1 object and converted it for this diagram.");
+      setScene((current) =>
+        insertSubgraph(current, conversion.nodes, conversion.edges, clipboard.assets),
+      );
+      selectNodes(
+        conversion.nodes.map((node) => node.id),
+        conversion.nodes[conversion.nodes.length - 1]?.id ?? null,
+      );
+      const objectPart = `${conversion.nodes.length} object${conversion.nodes.length === 1 ? "" : "s"}`;
+      const connectorPart = conversion.edges.length === 0
+        ? ""
+        : ` and ${conversion.edges.length} connector${conversion.edges.length === 1 ? "" : "s"}`;
+      const skippedObjectPart = conversion.skippedNodes === 0
+        ? ""
+        : ` Skipped ${conversion.skippedNodes} object${conversion.skippedNodes === 1 ? "" : "s"} with no equivalent.`;
+      const skippedEdgePart = conversion.skippedEdges === 0
+        ? ""
+        : ` Skipped ${conversion.skippedEdges} connector${conversion.skippedEdges === 1 ? "" : "s"} that could not attach.`;
+      showToast(
+        `Pasted ${objectPart}${connectorPart}, converted for this diagram.${skippedObjectPart}${skippedEdgePart}`,
+        conversion.skippedNodes > 0 || conversion.skippedEdges > 0 ? "warning" : undefined,
+      );
       return;
     }
-    const pasteNumber = pasteOffsetRef.current + 1;
-    const result = pasteSceneClipboard(scene, clipboard, {
-      x: pasteNumber * 18,
-      y: pasteNumber * 18,
-    });
+
+    const bounds = unionRects(clipboard.nodes.map((node) => node.frame));
+    const offset = bounds === null
+      ? pastePoint
+      : {
+          x: pastePoint.x - (bounds.x + bounds.width / 2),
+          y: pastePoint.y - (bounds.y + bounds.height / 2),
+        };
+    const result = pasteSceneClipboard(scene, clipboard, offset);
     if (result === null) {
       showToast("Nothing to paste.", "warning");
       return;
     }
-    pasteOffsetRef.current = pasteNumber;
     setScene(result.scene);
     selectNodes(result.nodeIds, result.nodeIds[result.nodeIds.length - 1] ?? null);
     const connectors = result.edgeIds.length === 0
@@ -1634,7 +1655,7 @@ export const App = () => {
     showToast(
       `Pasted ${result.nodeIds.length} object${result.nodeIds.length === 1 ? "" : "s"}${connectors}.`,
     );
-  }, [scene, selectNodes, showToast]);
+  }, [camera, scene, selectNodes, showToast, viewport.height, viewport.width, zoom]);
 
   useEffect(() => {
     const handleClipboardKey = (event: KeyboardEvent): void => {

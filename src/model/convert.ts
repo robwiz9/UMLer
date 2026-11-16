@@ -16,7 +16,12 @@ import type {
   TableRow,
   TableSection,
 } from "./nodes.ts";
-import { asNodeId, asRowId, asSectionId, newId } from "./ids.ts";
+import type { SceneClipboard } from "./clipboard.ts";
+import type { NodePortRef, SceneEdge } from "./edges.ts";
+import type { CompassSide, Point } from "./geometry.ts";
+import { rectCenter, unionRects } from "./geometry.ts";
+import { asLabelId, asNodeId, asRowId, asSectionId, newId, type NodeId } from "./ids.ts";
+import { createEdgeForDiagram } from "./edge-create.ts";
 import { placeObjectFrame } from "./object-catalog.ts";
 
 const cleanName = (name: string): string => name.replace(/^:\s*/, "").trim();
@@ -215,4 +220,223 @@ export const convertNodeForDiagram = (
     case "uml-state-machine":
       return null;
   }
+};
+
+export interface ConvertedClipboard {
+  readonly nodes: readonly SceneNode[];
+  readonly edges: readonly SceneEdge[];
+  readonly sourceToTarget: ReadonlyMap<string, NodeId>;
+  readonly skippedNodes: number;
+  readonly skippedEdges: number;
+}
+
+const centerOf = (node: SceneNode): Point => ({
+  x: node.frame.x + node.frame.width / 2,
+  y: node.frame.y + node.frame.height / 2,
+});
+
+const sideToward = (from: SceneNode, to: SceneNode): CompassSide => {
+  const a = centerOf(from);
+  const b = centerOf(to);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? "east" : "west";
+  return dy >= 0 ? "south" : "north";
+};
+
+const sideForAngle = (angle: number): CompassSide => {
+  const normalized = ((angle % 360) + 360) % 360;
+  if (normalized < 45 || normalized >= 315) return "east";
+  if (normalized < 135) return "south";
+  if (normalized < 225) return "west";
+  return "north";
+};
+
+/**
+ * Converts a source port to a port the converted node can resolve. Row ports
+ * become perimeter ports; a lifeline receives a spine port so sequence messages
+ * still land on the lifeline body rather than its head.
+ */
+const portForConversion = (
+  port: NodePortRef,
+  source: SceneNode,
+  target: SceneNode,
+  other: SceneNode,
+): NodePortRef => {
+  if (target.kind === "lifeline") {
+    return port.kind === "spine" ? port : { kind: "spine", t: 0.5 };
+  }
+  if (port.kind === "spine") {
+    return { kind: "perimeter", side: sideToward(source, other) };
+  }
+  if (port.kind === "row") {
+    return { kind: "perimeter", side: port.side };
+  }
+  if (port.kind === "perimeter") return port;
+  return { kind: "perimeter", side: sideForAngle(port.angle) };
+};
+
+/**
+ * Converts every source object that has an equivalent in the target notation,
+ * then rebuilds each connector whose two converted endpoints survive. The
+ * result is a self-contained subgraph for `insertSubgraph`; unconvertible
+ * objects and their dangling connectors are counted and skipped.
+ */
+export const convertClipboardForDiagram = (
+  clipboard: SceneClipboard,
+  target: SceneDocument,
+  center?: Point,
+): ConvertedClipboard => {
+  const converted: SceneNode[] = [];
+  const sourceToTarget = new Map<string, NodeId>();
+
+  for (const source of clipboard.nodes) {
+    const node = convertNodeForDiagram(source, target.meta.diagramKind, target);
+    if (node === null) continue;
+    converted.push(node);
+    sourceToTarget.set(source.id, node.id);
+  }
+
+  let nodes = converted;
+  if (center !== undefined && nodes.length > 0) {
+    const bounds = unionRects(nodes.map((node) => node.frame));
+    if (bounds !== null) {
+      const current = rectCenter(bounds);
+      const delta = { x: center.x - current.x, y: center.y - current.y };
+      nodes = nodes.map((node) => ({
+        ...node,
+        frame: {
+          ...node.frame,
+          x: node.frame.x + delta.x,
+          y: node.frame.y + delta.y,
+        },
+      }));
+    }
+  }
+
+  const nodeById = new Map<string, SceneNode>();
+  for (const node of nodes) nodeById.set(node.id, node);
+  const working: SceneDocument = {
+    ...target,
+    nodes: {
+      ...target.nodes,
+      ...Object.fromEntries(nodes.map((node) => [node.id, node])),
+    },
+  };
+
+  const edges: SceneEdge[] = [];
+  const createdBySource = new Map<string, SceneEdge>();
+  let skippedEdges = 0;
+  const withSourceProperties = (created: SceneEdge, sourceEdge: SceneEdge): SceneEdge => ({
+    ...created,
+    labels: sourceEdge.labels.map((label) => ({
+      ...label,
+      id: asLabelId(newId("label")),
+    })),
+    locked: sourceEdge.locked,
+    visible: sourceEdge.visible,
+    z: sourceEdge.z,
+  });
+  const deferredTethers = new Set<string>();
+
+  // First pass: node-to-node connectors. Tethers whose target is another edge
+  // wait until their parent edge has an ID in the target document.
+  for (const sourceEdge of clipboard.edges) {
+    if (sourceEdge.source.target === "node" && sourceEdge.target.target === "edge") {
+      deferredTethers.add(sourceEdge.id);
+      continue;
+    }
+    if (sourceEdge.source.target !== "node" || sourceEdge.target.target !== "node") {
+      skippedEdges += 1;
+      continue;
+    }
+    const convertedSourceId = sourceToTarget.get(sourceEdge.source.nodeId);
+    const convertedTargetId = sourceToTarget.get(sourceEdge.target.nodeId);
+    if (convertedSourceId === undefined || convertedTargetId === undefined) {
+      skippedEdges += 1;
+      continue;
+    }
+    const convertedSource = nodeById.get(convertedSourceId);
+    const convertedTarget = nodeById.get(convertedTargetId);
+    if (convertedSource === undefined || convertedTarget === undefined) {
+      skippedEdges += 1;
+      continue;
+    }
+    const sourcePort = portForConversion(
+      sourceEdge.source.port,
+      convertedSource,
+      convertedSource,
+      convertedTarget,
+    );
+    const targetPort = portForConversion(
+      sourceEdge.target.port,
+      convertedTarget,
+      convertedTarget,
+      convertedSource,
+    );
+    const created = createEdgeForDiagram(
+      working,
+      { nodeId: convertedSourceId, port: sourcePort },
+      { nodeId: convertedTargetId, port: targetPort },
+    );
+    if (created === null) {
+      skippedEdges += 1;
+      continue;
+    }
+    const edge = withSourceProperties(created, sourceEdge);
+    edges.push(edge);
+    createdBySource.set(sourceEdge.id, edge);
+  }
+
+  if (deferredTethers.size > 0) {
+    const edgeWorking: SceneDocument = {
+      ...working,
+      edges: {
+        ...target.edges,
+        ...Object.fromEntries(edges.map((edge) => [edge.id, edge])),
+      },
+    };
+    for (const sourceEdge of clipboard.edges) {
+      if (!deferredTethers.has(sourceEdge.id)) continue;
+      if (sourceEdge.source.target !== "node" || sourceEdge.target.target !== "edge") {
+        skippedEdges += 1;
+        continue;
+      }
+      const convertedSourceId = sourceToTarget.get(sourceEdge.source.nodeId);
+      const convertedSource = convertedSourceId === undefined
+        ? undefined
+        : nodeById.get(convertedSourceId);
+      const parent = createdBySource.get(sourceEdge.target.edgeId);
+      if (convertedSourceId === undefined || convertedSource === undefined || parent === undefined) {
+        skippedEdges += 1;
+        continue;
+      }
+      const sourcePort = portForConversion(
+        sourceEdge.source.port,
+        convertedSource,
+        convertedSource,
+        convertedSource,
+      );
+      const created = createEdgeForDiagram(
+        edgeWorking,
+        { nodeId: convertedSourceId, port: sourcePort },
+        { edgeId: parent.id, t: sourceEdge.target.t },
+      );
+      if (created === null) {
+        skippedEdges += 1;
+        continue;
+      }
+      const edge = withSourceProperties(created, sourceEdge);
+      edges.push(edge);
+      createdBySource.set(sourceEdge.id, edge);
+    }
+  }
+
+  return {
+    nodes,
+    edges,
+    sourceToTarget,
+    skippedNodes: clipboard.nodes.length - nodes.length,
+    skippedEdges,
+  };
 };
