@@ -3538,7 +3538,24 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     onPreviewFrames({ [interaction.nodeId]: snapped });
   };
 
-  const handlePointerUp = (): void => {
+  const handlePointerUp = (event: React.PointerEvent<SVGSVGElement>): void => {
+    const interaction = interactionRef.current;
+    if (interaction?.kind === "marquee") {
+      const svg = svgRef.current;
+      if (svg !== null) {
+        // Pointer-up can land at a position that had no preceding pointermove
+        // (fast release, touch, or a pointer captured on the way out). Commit
+        // the marquee against the release position, not a stale move.
+        const screen = pointFromEvent(event, svg);
+        const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+        interaction.currentWorld = world;
+        interaction.moved = interaction.moved ||
+          Math.hypot(
+            world.x - interaction.startWorld.x,
+            world.y - interaction.startWorld.y,
+          ) * zoomRef.current > 3;
+      }
+    }
     finish(true);
   };
 
@@ -3960,11 +3977,30 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     };
   })();
 
+  const takeCanvasFocus = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      target.closest("input, textarea, select, button, a, [contenteditable='true']") !== null
+    ) {
+      return;
+    }
+    // Canvas pointer handlers preventDefault to keep drags from scrolling or
+    // selecting page text, which also means the browser would leave focus in
+    // whichever field was last edited. That stale field then receives Delete
+    // and Ctrl+C and the object shortcuts bail out. Take focus explicitly.
+    containerRef.current?.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    if (selection !== null && selection.rangeCount > 0) selection.removeAllRanges();
+  };
+
   return (
     <div
       ref={containerRef}
       className="canvas-stage"
+      tabIndex={-1}
       style={{ cursor: panning ? "grabbing" : undefined }}
+      onPointerDownCapture={takeCanvasFocus}
       onDragOver={handleImageDragOver}
       onDrop={handleImageDrop}
     >

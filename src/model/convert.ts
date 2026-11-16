@@ -275,6 +275,9 @@ const portForConversion = (
     return { kind: "perimeter", side: port.side };
   }
   if (port.kind === "perimeter") return port;
+  if (port.kind === "pin" || port.kind === "center") {
+    return { kind: "perimeter", side: sideToward(source, other) };
+  }
   return { kind: "perimeter", side: sideForAngle(port.angle) };
 };
 

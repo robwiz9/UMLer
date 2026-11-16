@@ -573,6 +573,10 @@ button {
   box-shadow: var(--shadow);
 }
 
+.canvas-stage:focus {
+  outline: none;
+}
+
 .canvas-stage svg {
   display: block;
   width: 100%;

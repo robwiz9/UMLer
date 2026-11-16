@@ -401,11 +401,11 @@ Conversion checks passed (53 assertions).
 
 Circuit checks passed (111 assertions).
 
-GitHub project checks passed (33 assertions).
+GitHub project checks passed (73 assertions).
 
-Storage checks passed (23 assertions).
+Storage checks passed (30 assertions).
 
-CeTZ serializer checks passed (188 assertions).
+CeTZ serializer checks passed (190 assertions).
 
 OAuth relay checks passed (18 assertions).
 ```
@@ -465,7 +465,9 @@ aspect-locked with the caption present; confirmed project export/save omits an u
 it, and **File → Purge unused images** removes it immediately. Selection checks: a left-drag rubber band
 selected only fully contained objects, a partially covered table stayed unselected, a lifeline selected from
 its head rectangle but not from its vertical axis, Ctrl+click toggled members, and dragging one member moved
-the whole selection. Clipboard checks: copying two connected tables preserved their connector, copying a
+the whole selection. Canvas-focus checks: focused an input, then pressed on the canvas and confirmed focus
+moved to the canvas; a marquee released without a final move still selected its object; Ctrl+C copied it and
+Delete removed it. Clipboard checks: copying two connected tables preserved their connector, copying a
 connector alone warned instead of producing a payload, pasted copies landed under the pointer with fresh IDs,
 and cut/paste restored the objects. Cross-diagram checks: copied multiple ER objects into the class scene and
 confirmed all converted objects were pasted together at the pointer; the conversion tests cover preserved

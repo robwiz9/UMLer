@@ -286,7 +286,13 @@ label, **+ Add activation bar here**, and **Delete lifeline**.
 
 - **Rubber-band selection** — left-drag from empty canvas. An object is selected only when its whole frame is
   inside the rectangle. Lifelines are the exception: only their head rectangle must be enclosed, so the tall
-  time axis never makes a lifeline select out of a region that does not contain its head.
+  time axis never makes a lifeline select out of a region that does not contain its head. The marquee is
+  committed against the pointer-up position, so a fast release or a release without a final move still uses
+  the true end of the drag.
+- **Canvas focus** — pressing on the canvas moves keyboard focus to the canvas container and clears any
+  document text selection. Without this, the pointer handlers' `preventDefault()` could leave focus in a
+  previously edited field, so `Delete` and `Ctrl/Cmd+C` would be treated as field editing and the selected
+  objects would not respond.
 - **Ctrl/Cmd+click** toggles one object in or out of the current selection. A plain click replaces the selection
   with that object; clicking an already selected member starts a group drag.
 - **Group drag** — dragging any selected member moves every selected object, plus children of selected
@@ -650,7 +656,7 @@ npm run check
     relation-attribute tables avoid parent frames and occupy opposite sides
     TB layout re-anchors rectangular endpoints to facing sides
     relation-attribute tethers re-anchor their source side and parent t
-  test:persistence: 38 assertions
+  test:persistence: 41 assertions
     scene + bare-scene + BOM round trips
     project round trip and active-scene fallback
     malformed/duplicate/invalid imports rejected
@@ -668,10 +674,10 @@ npm run check
     multi-object conversion keeps direct connectors and edge tethers
     multi-object conversion is centred at the requested paste point
     mixed copies keep convertible objects and count skipped ones
-  test:github: 33 assertions
+  test:github: 73 assertions
     path normalization/traversal rejection, stable project digests
     remote SHA conflict classification, device-flow error messages
-  test:storage: 23 assertions
+  test:storage: 30 assertions
     project + GitHub binding recovery round trip
     corrupt recovery data cleared; session token restore/sign-out
     panel/Typst/grid/snap toggles round trip with defaults for bad data
