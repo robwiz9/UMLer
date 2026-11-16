@@ -1,6 +1,4 @@
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -21,14 +19,16 @@ import {
   serializeSceneFile,
   type ImportedProject,
 } from "../model/persistence.ts";
-import { buildLayoutSnapshot, withNodeFrames } from "../layout/build-layout.ts";
+import { buildLayoutSnapshot, pointOnPolyline, withNodeFrames, withNodeRotations } from "../layout/build-layout.ts";
 import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
 import { zoomAtScreenPoint, type Camera, type ViewportSize } from "../canvas/camera.ts";
 import { CanvasStage, type CanvasStageHandle } from "../canvas/CanvasStage.tsx";
+import { CodePanel } from "./CodePanel.tsx";
 import { GitHubDecisionDialog, type GitHubDecision, type GitHubDecisionOption } from "./GitHubDecisionDialog.tsx";
 import { GitHubProjectDialog } from "./GitHubProjectDialog.tsx";
 import { LayoutPanel } from "./LayoutPanel.tsx";
+import { CircuitPanel } from "./CircuitPanel.tsx";
 import { ProjectImportDialog } from "./ProjectImportDialog.tsx";
 import { SceneDialog, type SceneDialogMode } from "./SceneDialog.tsx";
 import { ThemePanel } from "./ThemePanel.tsx";
@@ -39,6 +39,7 @@ import { loadStoredProject, saveStoredProject } from "./project-storage.ts";
 import { loadUiPreferences, saveUiPreferences } from "./ui-preferences.ts";
 import {
   describeGitHubError,
+  getLatestFileCommit,
   getProjectFile,
   isGitHubConflict,
   writeProjectFile,
@@ -48,11 +49,16 @@ import {
 import { useSceneHistory } from "./use-scene-history.ts";
 import {
   compareRemoteFile,
+  conflictingScenes,
   githubTargetLabel,
+  mergeAutoChoices,
+  mergeProjectScenes,
   projectDigest,
   projectTitleFromPath,
+  sceneDigestMap,
   type GitHubBinding,
   type GitHubTarget,
+  type MergeChoice,
   type ProjectSnapshot,
 } from "../model/github-project.ts";
 import type {
@@ -60,11 +66,35 @@ import type {
   EdgeLabelZone,
   EdgeRoutingMode,
 } from "../model/edges.ts";
+import { portKey } from "../model/edges.ts";
 import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
 import type { StrokePattern, TextStyleOverride, Theme } from "../model/styles.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import { resolveCircuitSettings, setCircuitStandard, type CircuitStandard } from "../model/circuit.ts";
+import {
+  addCircuitJunctionToWire,
+  cleanupShiftBranches,
+  connectCircuitWireToPoint,
+  connectCircuitWireToWire,
+  createCircuitWire,
+  hideDegreeTwoJunctions,
+  insertCircuitComponentOnWire,
+  mergeCircuitJunction,
+  mergeCircuitJunctionResult,
+  mergeCoincidentCircuitConnections,
+  normalizeCircuitDuplicateConnections,
+  normalizeCircuitPinConnections,
+  refineAutoMergedJunctionStyles,
+  prepareOccupiedPinJunction,
+  reattachCircuitEdgeToPoint,
+  rewireCircuitComponentPins,
+  reattachCircuitEdgeToWire,
+  splitCircuitWireAtCorners,
+  type ShiftBranchGroup,
+  type WireOrientation,
+} from "../model/circuit-wires.ts";
 import { asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, newId, type ActivationId, type SceneId } from "../model/ids.ts";
 import { snap, unionRects, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
@@ -91,6 +121,7 @@ import {
   insertObject,
   insertSubgraph,
   insertConnectedObject,
+  moveRow,
   moveSequenceEdge,
   patchLayout,
   patchNode,
@@ -110,14 +141,8 @@ import {
   updateSection,
 } from "../model/edits.ts";
 
-/**
- * typst.ts and the compiler/renderer wrappers are sizeable and only needed
- * while the export panel is open, so keep them out of the editor's initial
- * bundle. The 28 MB WASM is still requested only on first preview compile.
- */
-const CodePanel = lazy(() =>
-  import("./CodePanel.tsx").then((module) => ({ default: module.CodePanel })),
-);
+// The export panel is cheap to render; its Typst compiler is imported lazily
+// by useTypstPreview only once the preview is expanded.
 
 const cloneSceneAs = (source: SceneDocument, title: string): SceneDocument => {
   const now = new Date().toISOString();
@@ -246,9 +271,18 @@ export const App = () => {
   const [githubSession, setGithubSession] = useState<GitHubSession | null>(() =>
     loadStoredGitHubSession(),
   );
-  const [githubBinding, setGithubBinding] = useState<GitHubBinding | null>(() =>
-    initialProject === null ? null : initialProject.githubBinding,
-  );
+  const [githubBinding, setGithubBinding] = useState<GitHubBinding | null>(() => {
+    const binding = initialProject?.githubBinding ?? null;
+    if (binding === null || binding.sceneDigests !== undefined) return binding;
+    if (initialProject === null) return binding;
+    // Migrate a binding saved before per-scene baselines existed. Only do this
+    // when the local project is clean; otherwise the last synced scene state
+    // is unknown.
+    const cleanDigest = projectDigest(initialProject.scenes, initialScene.id);
+    return cleanDigest === binding.syncedDigest
+      ? { ...binding, sceneDigests: sceneDigestMap(initialProject.scenes) }
+      : binding;
+  });
   const [assetLibrary, setAssetLibrary] = useState<Record<string, ImageAsset>>(
     () =>
       initialProject === null
@@ -267,12 +301,17 @@ export const App = () => {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
-  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<readonly string[]>([]);
+  const selectedEdgeId = selectedEdgeIds.length === 1 ? selectedEdgeIds[0]! : null;
+  const setSelectedEdgeId = useCallback((edgeId: string | null) => {
+    setSelectedEdgeIds(edgeId === null ? [] : [edgeId]);
+  }, []);
   const [selectedActivation, setSelectedActivation] = useState<{
     readonly nodeId: string;
     readonly activationId: ActivationId;
   } | null>(null);
   const [previewFrames, setPreviewFrames] = useState<Readonly<Record<string, Rect>>>({});
+  const [rotationPreview, setRotationPreview] = useState<Readonly<Record<string, number>>>({});
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [viewport, setViewport] = useState<ViewportSize>({ width: 0, height: 0 });
@@ -289,6 +328,8 @@ export const App = () => {
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
   const manualSaveRef = useRef<() => void>(() => {});
   const autoSaveRef = useRef<() => void>(() => {});
+  const startupCheckRef = useRef<() => void>(() => {});
+  const startupCheckedRef = useRef(false);
 
   const measurer = useMemo(() => new CanvasTextMeasurer(), [fontTick]);
 
@@ -370,7 +411,10 @@ export const App = () => {
     };
   }, [assetLibrary, baselineDigest, currentScenes, githubBinding, scene.id]);
 
-  const effectiveScene = useMemo(() => withNodeFrames(scene, previewFrames), [scene, previewFrames]);
+  const effectiveScene = useMemo(
+    () => withNodeRotations(withNodeFrames(scene, previewFrames), rotationPreview),
+    [scene, previewFrames, rotationPreview],
+  );
   const layout = useMemo(
     () => buildLayoutSnapshot(effectiveScene, measurer),
     [effectiveScene, measurer, fontTick],
@@ -390,6 +434,7 @@ export const App = () => {
     setSelectedEdgeId(null);
     setSelectedActivation(null);
     setPreviewFrames({});
+    setRotationPreview({});
     setLayoutNote(null);
     setFocusRequest(null);
     setNodeFocus(null);
@@ -398,7 +443,10 @@ export const App = () => {
 
   const commitFrames = useCallback((frames: Readonly<Record<string, Rect>>) => {
     setScene((current) => {
-      const next = withNodeFrames(current, frames);
+      let next = withNodeFrames(current, frames);
+      if (current.meta.diagramKind === "circuit") {
+        next = mergeCoincidentCircuitConnections(next);
+      }
       return {
         ...next,
         revision: current.revision + 1,
@@ -406,7 +454,50 @@ export const App = () => {
       };
     });
     setPreviewFrames({});
+    setRotationPreview({});
   }, []);
+
+  const commitWireTranslation = useCallback(
+    (frames: Readonly<Record<string, Rect>>, edgeId: string) => {
+      setScene((current) => {
+        let next = withNodeFrames(current, frames);
+        if (current.meta.diagramKind === "circuit") {
+          const movedJunctionIds = Object.keys(frames).filter(
+            (id) => current.nodes[id]?.kind === "circuitJunction",
+          );
+          next = mergeCoincidentCircuitConnections(next);
+          next = normalizeCircuitDuplicateConnections(next);
+          if (current.layout.visualRefinements !== false) {
+            // History will normalize pin junctions after this updater, so do
+            // it here first; otherwise a newly created filled junction can
+            // escape the degree-two refinement on the first drag.
+            next = normalizeCircuitPinConnections(next);
+            next = normalizeCircuitDuplicateConnections(next);
+            const edge = next.edges[edgeId];
+            const endpointIds: string[] = [...movedJunctionIds];
+            if (edge?.source.target === "node" && edge.source.port.kind === "center") {
+              endpointIds.push(String(edge.source.nodeId));
+            }
+            if (edge?.target.target === "node" && edge.target.port.kind === "center") {
+              endpointIds.push(String(edge.target.nodeId));
+            }
+            next = hideDegreeTwoJunctions(
+              next,
+              [...new Set(endpointIds)].map((id) => asNodeId(id)),
+            );
+          }
+        }
+        return {
+          ...next,
+          revision: current.revision + 1,
+          meta: { ...next.meta, updatedAt: new Date().toISOString() },
+        };
+      });
+      setPreviewFrames({});
+      setRotationPreview({});
+    },
+    [],
+  );
 
   const clearTransientSelection = useCallback(() => {
     setSelectedNodeId(null);
@@ -416,6 +507,7 @@ export const App = () => {
     setNodeFocus(null);
     setFocusRequest(null);
     setPreviewFrames({});
+    setRotationPreview({});
   }, []);
 
   const activateSceneDocument = useCallback(
@@ -642,12 +734,30 @@ export const App = () => {
         syncedDigest: digest,
         syncedAt: new Date().toISOString(),
         htmlUrl: remote.htmlUrl,
+        sceneDigests: sceneDigestMap(project.scenes),
       });
       setGithubDecision(null);
       setGithubDialogOpen(false);
       showToast(`Opened ${target.owner}/${target.repo} · ${target.path}`);
     },
     [activateSceneDocument, showToast],
+  );
+
+  const adoptProjectLocally = useCallback(
+    (
+      projectScenes: readonly SceneDocument[],
+      projectActiveSceneId: string,
+      projectAssets: Readonly<Record<string, ImageAsset>>,
+    ): void => {
+      const active =
+        projectScenes.find((item) => item.id === projectActiveSceneId) ??
+        projectScenes[0];
+      if (active === undefined) throw new Error("The merged project has no scenes.");
+      setScenes([...projectScenes]);
+      setAssetLibrary(pruneUnusedProjectAssets(projectScenes, projectAssets));
+      activateSceneDocument(active);
+    },
+    [activateSceneDocument],
   );
 
   const commitSnapshotToGitHub = useCallback(
@@ -658,25 +768,53 @@ export const App = () => {
       digest: string,
       message: string,
       mode: GitHubSaveMode = "manual",
+      retryConflict = false,
     ): Promise<void> => {
       if (githubSession === null) {
         throw new Error("Sign in to GitHub before saving.");
       }
       setGithubBusy("save");
       try {
-        const result = await uploadProjectSnapshot(
-          githubSession,
-          target,
-          snapshot,
-          sha,
-          message,
-        );
+        const writeWithRetry = async (): Promise<{ sha: string; htmlUrl: string }> => {
+          let candidateSha = sha;
+          const attempts = retryConflict ? 3 : 1;
+          for (let attempt = 0; attempt < attempts; attempt += 1) {
+            try {
+              return await uploadProjectSnapshot(
+                githubSession,
+                target,
+                snapshot,
+                candidateSha,
+                message,
+              );
+            } catch (error) {
+              // An explicit overwrite can still race with a just-landed
+              // commit. Refetch the current blob SHA and retry the chosen
+              // overwrite instead of making the user export and save manually.
+              if (
+                !retryConflict ||
+                !isGitHubConflict(error) ||
+                attempt === attempts - 1
+              ) {
+                throw error;
+              }
+              await new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 150 * (attempt + 1));
+              });
+              const latest = await getProjectFile(githubSession.token, target);
+              candidateSha = latest?.sha ?? null;
+            }
+          }
+          throw new Error("GitHub did not complete the save.");
+        };
+        const result = await writeWithRetry();
         setGithubBinding({
           ...target,
           sha: result.sha,
           syncedDigest: digest,
           syncedAt: new Date().toISOString(),
           htmlUrl: result.htmlUrl,
+          sceneDigests: sceneDigestMap(snapshot.scenes),
         });
         setBaselineDigest(digest);
         setGithubDecision(null);
@@ -691,6 +829,108 @@ export const App = () => {
       }
     },
     [githubSession, showToast],
+  );
+
+  const resolveSaveMerge = useCallback(
+    async (
+      target: GitHubTarget,
+      remote: GitHubRemoteFile,
+      remoteProject: ImportedProject,
+      localSnapshot: ProjectSnapshot,
+      remoteDigest: string,
+      choices: Readonly<Record<string, MergeChoice>>,
+      mode: GitHubSaveMode = "manual",
+    ): Promise<void> => {
+      const merged = mergeProjectScenes(
+        localSnapshot.scenes,
+        localSnapshot.activeSceneId,
+        remoteProject.scenes,
+        remoteProject.activeSceneId,
+        choices,
+      );
+      const mergedAssets = {
+        ...remoteProject.assets,
+        ...(localSnapshot.assets ?? {}),
+      };
+      const mergedDigest = projectDigest(merged.scenes, merged.activeSceneId);
+      if (mergedDigest === remoteDigest) {
+        applyRemoteProject(target, remote, remoteProject);
+        return;
+      }
+      try {
+        await commitSnapshotToGitHub(
+          target,
+          {
+            scenes: merged.scenes,
+            activeSceneId: merged.activeSceneId,
+            assets: mergedAssets,
+          },
+          remote.sha,
+          mergedDigest,
+          "Merge project from UMLer",
+          mode,
+          true,
+        );
+        adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+      } catch (error) {
+        const message = describeGitHubError(error);
+        if (mode === "auto") {
+          showToast(`Auto-merge failed: ${message}`, "warning", {
+            sticky: true,
+            action: { label: "Retry", run: () => manualSaveRef.current() },
+          });
+        } else {
+          showToast(message, "error");
+        }
+      }
+    },
+    [adoptProjectLocally, applyRemoteProject, commitSnapshotToGitHub, showToast],
+  );
+
+  const resolveOpenMerge = useCallback(
+    (
+      target: GitHubTarget,
+      remote: GitHubRemoteFile,
+      remoteProject: ImportedProject,
+      localSnapshot: ProjectSnapshot,
+      remoteDigest: string,
+      choices: Readonly<Record<string, MergeChoice>>,
+    ): void => {
+      const merged = mergeProjectScenes(
+        localSnapshot.scenes,
+        localSnapshot.activeSceneId,
+        remoteProject.scenes,
+        remoteProject.activeSceneId,
+        choices,
+      );
+      const mergedAssets = {
+        ...remoteProject.assets,
+        ...(localSnapshot.assets ?? {}),
+      };
+      const mergedDigest = projectDigest(merged.scenes, merged.activeSceneId);
+      setGithubDecision(null);
+      if (mergedDigest === remoteDigest) {
+        applyRemoteProject(target, remote, remoteProject);
+        return;
+      }
+      try {
+        adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+        setBaselineDigest(remoteDigest);
+        setGithubBinding({
+          ...target,
+          sha: remote.sha,
+          syncedDigest: remoteDigest,
+          syncedAt: new Date().toISOString(),
+          htmlUrl: remote.htmlUrl,
+          sceneDigests: sceneDigestMap(remoteProject.scenes),
+        });
+        setGithubDialogOpen(false);
+        showToast("Merged project locally. Save to GitHub to publish the merged copy.");
+      } catch (error) {
+        showToast(describeGitHubError(error), "error");
+      }
+    },
+    [adoptProjectLocally, applyRemoteProject, showToast],
   );
 
   const createBlankRemoteProject = useCallback(
@@ -727,6 +967,7 @@ export const App = () => {
           syncedDigest: digest,
           syncedAt: new Date().toISOString(),
           htmlUrl: result.htmlUrl,
+          sceneDigests: sceneDigestMap(snapshot.scenes),
         });
         setGithubDecision(null);
         setGithubDialogOpen(false);
@@ -739,13 +980,13 @@ export const App = () => {
   );
 
   const presentSaveConflict = useCallback(
-    (
+    async (
       target: GitHubTarget,
       remote: GitHubRemoteFile,
       snapshot: ProjectSnapshot,
       digest: string,
       mode: GitHubSaveMode = "manual",
-    ) => {
+    ): Promise<void> => {
       const warnAutoConflict = (message: string): void => {
         showToast(message, "warning", {
           sticky: true,
@@ -782,6 +1023,8 @@ export const App = () => {
                   remote.sha,
                   digest,
                   "Overwrite project from UMLer",
+                  "manual",
+                  true,
                 ),
             },
           ],
@@ -800,6 +1043,7 @@ export const App = () => {
           syncedDigest: digest,
           syncedAt: new Date().toISOString(),
           htmlUrl: remote.htmlUrl,
+          sceneDigests: sceneDigestMap(remoteProject.scenes),
         });
         setBaselineDigest(digest);
         setGithubDecision(null);
@@ -812,6 +1056,37 @@ export const App = () => {
         return;
       }
 
+      const baseline = githubBinding?.sceneDigests;
+      const conflicts = conflictingScenes(
+        snapshot.scenes,
+        remoteProject.scenes,
+        baseline,
+      );
+      const autoChoices = mergeAutoChoices(
+        snapshot.scenes,
+        remoteProject.scenes,
+        baseline,
+      );
+
+      // Disjoint scene edits merge themselves. This is the common two-user
+      // case: each side changed a different scene, so there is nothing to ask.
+      if (conflicts.length === 0) {
+        // Let the current save call clear its busy flag first; the merge commit
+        // then takes ownership of the busy state for its own request.
+        window.setTimeout(() => {
+          void resolveSaveMerge(
+            target,
+            remote,
+            remoteProject,
+            snapshot,
+            remoteDigest,
+            autoChoices,
+            mode,
+          );
+        }, 0);
+        return;
+      }
+
       if (mode === "auto") {
         warnAutoConflict(
           `GitHub conflict: ${target.path} changed remotely. Click to review.`,
@@ -819,32 +1094,52 @@ export const App = () => {
         return;
       }
 
+      let remoteCommit = remote.commit;
+      if (githubSession !== null) {
+        try {
+          remoteCommit =
+            (await getLatestFileCommit(githubSession.token, target)) ?? remoteCommit;
+        } catch {
+          // Attribution is optional; the conflict picker still works.
+        }
+      }
+
       askGitHub({
-        title: "Remote project changed",
-        message: `${target.path} has changes on GitHub. Choose which copy to keep.`,
+        title: "Scenes changed in both copies",
+        message: `${conflicts.length} ${conflicts.length === 1 ? "scene has" : "scenes have"} changes on both sides. Choose local, remote, or keep both for each scene.`,
         detail: githubTargetLabel(target),
-        options: [
-          {
-            label: "Replace local with remote",
-            tone: "danger",
-            run: () => applyRemoteProject(target, remote, remoteProject),
-          },
-          {
-            label: "Overwrite remote",
-            tone: "primary",
-            run: () =>
-              commitSnapshotToGitHub(
-                target,
-                snapshot,
-                remote.sha,
-                digest,
-                "Overwrite project from UMLer",
-              ),
-          },
-        ],
+        options: [],
+        merge: {
+          conflicts,
+          localAuthor:
+            githubSession?.user.name?.trim() ||
+            githubSession?.user.login ||
+            "Local editor",
+          localAssets: snapshot.assets ?? {},
+          remoteAssets: remoteProject.assets,
+          remoteCommit,
+          confirmLabel: "Merge and save",
+          onConfirm: (choices) =>
+            resolveSaveMerge(
+              target,
+              remote,
+              remoteProject,
+              snapshot,
+              remoteDigest,
+              { ...autoChoices, ...choices },
+            ),
+        },
       });
     },
-    [applyRemoteProject, askGitHub, commitSnapshotToGitHub, showToast],
+    [
+      applyRemoteProject,
+      askGitHub,
+      commitSnapshotToGitHub,
+      githubBinding,
+      githubSession,
+      resolveSaveMerge,
+      showToast,
+    ],
   );
 
   const openFromGitHub = useCallback(
@@ -906,6 +1201,7 @@ export const App = () => {
             syncedDigest: currentDigest,
             syncedAt: new Date().toISOString(),
             htmlUrl: remote.htmlUrl,
+            sceneDigests: sceneDigestMap(project.scenes),
           });
           setBaselineDigest(currentDigest);
           setGithubDecision(null);
@@ -915,29 +1211,66 @@ export const App = () => {
         }
 
         if (localDirty) {
+          const sameProject =
+            githubBinding !== null &&
+            githubBinding.owner === target.owner &&
+            githubBinding.repo === target.repo &&
+            githubBinding.branch === target.branch &&
+            githubBinding.path === target.path;
+          const baseline = sameProject ? githubBinding.sceneDigests : undefined;
+          const conflicts = conflictingScenes(
+            snapshot.scenes,
+            project.scenes,
+            baseline,
+          );
+          const autoChoices = mergeAutoChoices(
+            snapshot.scenes,
+            project.scenes,
+            baseline,
+          );
+          if (conflicts.length === 0) {
+            resolveOpenMerge(
+              target,
+              remote,
+              project,
+              snapshot,
+              remoteDigest,
+              autoChoices,
+            );
+            return;
+          }
+          let remoteCommit = remote.commit;
+          try {
+            remoteCommit =
+              (await getLatestFileCommit(githubSession.token, target)) ?? remoteCommit;
+          } catch {
+            // Attribution is optional; the conflict picker still works.
+          }
           askGitHub({
-            title: "Replace the local project?",
-            message: `The project at ${target.path} exists and your local project has unsaved changes. Choose which copy to keep.`,
+            title: "Scenes changed in both copies",
+            message: `The project at ${target.path} and your local project have changes on both sides in ${conflicts.length} ${conflicts.length === 1 ? "scene" : "scenes"}. Choose local, remote, or keep both for each scene.`,
             detail: githubTargetLabel(target),
-            options: [
-              {
-                label: "Replace local with remote",
-                tone: "danger",
-                run: () => applyRemoteProject(target, remote, project),
-              },
-              {
-                label: "Overwrite remote",
-                tone: "primary",
-                run: () =>
-                  commitSnapshotToGitHub(
-                    target,
-                    snapshot,
-                    remote.sha,
-                    currentDigest,
-                    "Overwrite project from UMLer",
-                  ),
-              },
-            ],
+            options: [],
+            merge: {
+              conflicts,
+              localAuthor:
+                githubSession?.user.name?.trim() ||
+                githubSession?.user.login ||
+                "Local editor",
+              localAssets: snapshot.assets ?? {},
+              remoteAssets: project.assets,
+              remoteCommit,
+              confirmLabel: "Open merged project",
+              onConfirm: (choices) =>
+                resolveOpenMerge(
+                  target,
+                  remote,
+                  project,
+                  snapshot,
+                  remoteDigest,
+                  { ...autoChoices, ...choices },
+                ),
+            },
           });
           return;
         }
@@ -955,9 +1288,11 @@ export const App = () => {
       createBlankRemoteProject,
       currentDigest,
       currentScenes,
+      githubBinding,
       githubBusy,
       githubSession,
       assetLibrary,
+      resolveOpenMerge,
       scene.id,
       showToast,
     ],
@@ -1027,6 +1362,8 @@ export const App = () => {
                         null,
                         digest,
                         "Recreate project from UMLer",
+                        "manual",
+                        true,
                       ),
                   },
                 ],
@@ -1046,7 +1383,7 @@ export const App = () => {
         }
 
         if (compareRemoteFile(githubBinding.sha, remote.sha) !== "unchanged") {
-          presentSaveConflict(target, remote, snapshot, digest, mode);
+          await presentSaveConflict(target, remote, snapshot, digest, mode);
           return;
         }
 
@@ -1063,7 +1400,7 @@ export const App = () => {
           try {
             const latest = await getProjectFile(githubSession.token, target);
             if (latest !== null) {
-              presentSaveConflict(target, latest, snapshot, digest, mode);
+              await presentSaveConflict(target, latest, snapshot, digest, mode);
               return;
             }
           } catch (refreshError) {
@@ -1120,6 +1457,124 @@ export const App = () => {
     if (currentDigest === githubBinding.syncedDigest) return;
     void saveToGitHub("auto");
   };
+
+  startupCheckRef.current = () => {
+    if (
+      githubBinding === null ||
+      githubSession === null ||
+      startupCheckedRef.current ||
+      githubBusy !== null ||
+      githubDecision !== null ||
+      githubDialogOpen ||
+      sceneDialog !== null ||
+      pendingProjectImport !== null
+    ) {
+      return;
+    }
+    startupCheckedRef.current = true;
+    const target = targetOf(githubBinding);
+    const binding = githubBinding;
+    const localSnapshot: ProjectSnapshot = {
+      scenes: currentScenes,
+      activeSceneId: scene.id,
+      assets: assetLibrary,
+    };
+    const localDigest = currentDigest;
+    void (async () => {
+      try {
+        const remote = await getProjectFile(githubSession.token, target);
+        if (remote === null) {
+          if (localDigest !== binding.syncedDigest) {
+            showToast(
+              `GitHub conflict: ${target.path} was deleted remotely. Click to review.`,
+              "warning",
+              {
+                sticky: true,
+                action: { label: "Review", run: () => manualSaveRef.current() },
+              },
+            );
+          }
+          return;
+        }
+        if (remote.sha === binding.sha) return;
+
+        let remoteProject: ImportedProject;
+        try {
+          remoteProject = deserializeProjectFile(remote.text);
+        } catch {
+          if (localDigest !== binding.syncedDigest) {
+            showToast(
+              "GitHub conflict: the remote project is invalid. Click to review.",
+              "warning",
+              {
+                sticky: true,
+                action: { label: "Review", run: () => manualSaveRef.current() },
+              },
+            );
+          }
+          return;
+        }
+        const remoteDigest = projectDigest(
+          remoteProject.scenes,
+          remoteProject.activeSceneId,
+        );
+        if (remoteDigest === localDigest) {
+          setGithubBinding({
+            ...target,
+            sha: remote.sha,
+            syncedDigest: localDigest,
+            syncedAt: new Date().toISOString(),
+            htmlUrl: remote.htmlUrl,
+            sceneDigests: sceneDigestMap(remoteProject.scenes),
+          });
+          setBaselineDigest(localDigest);
+          return;
+        }
+
+        const baseline = binding.sceneDigests;
+        const conflicts = conflictingScenes(
+          localSnapshot.scenes,
+          remoteProject.scenes,
+          baseline,
+        );
+        if (conflicts.length > 0) {
+          showToast(
+            `GitHub merge conflict: ${conflicts.length} ${conflicts.length === 1 ? "scene has" : "scenes have"} changes in both copies. Click to review.`,
+            "warning",
+            {
+              sticky: true,
+              action: { label: "Review", run: () => manualSaveRef.current() },
+            },
+          );
+          return;
+        }
+
+        // No overlapping scene edits: merge the remote update on load. A clean
+        // local copy is simply refreshed; disjoint local edits are retained and
+        // become unsaved changes to publish on the next save.
+        const autoChoices = mergeAutoChoices(
+          localSnapshot.scenes,
+          remoteProject.scenes,
+          baseline,
+        );
+        resolveOpenMerge(
+          target,
+          remote,
+          remoteProject,
+          localSnapshot,
+          remoteDigest,
+          autoChoices,
+        );
+      } catch {
+        // A failed background refresh must not block editing or show a toast.
+      }
+    })();
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => startupCheckRef.current(), 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (githubBinding === null || githubSession === null) return;
@@ -1221,8 +1676,35 @@ export const App = () => {
           });
         }
       }
-      return patchNode(current, asNodeId(nodeId), patch);
+      const patched = patch as {
+        readonly rotation?: number;
+        readonly mirrorX?: boolean;
+        readonly mirrorY?: boolean;
+        readonly swapPinsX?: boolean;
+        readonly swapPinsY?: boolean;
+      };
+      let next = patchNode(current, asNodeId(nodeId), patch);
+      if (current.meta.diagramKind === "circuit" && node?.kind === "circuitComponent") {
+        if (patched.swapPinsX !== undefined) {
+          next = rewireCircuitComponentPins(next, asNodeId(nodeId), "horizontal");
+        }
+        if (patched.swapPinsY !== undefined) {
+          next = rewireCircuitComponentPins(next, asNodeId(nodeId), "vertical");
+        }
+      }
+      const geometryChanged =
+        patched.rotation !== undefined ||
+        patched.mirrorX !== undefined ||
+        patched.mirrorY !== undefined;
+      return current.meta.diagramKind === "circuit" && geometryChanged
+        ? mergeCoincidentCircuitConnections(next)
+        : next;
     });
+  }, []);
+  const handleMoveNodeLabel = useCallback((nodeId: string, labelOffset: Point) => {
+    setScene((current) =>
+      patchNode(current, asNodeId(nodeId), { labelOffset } as Partial<SceneNode>),
+    );
   }, []);
 
   const handleRowUpdate = useCallback((nodeId: string, rowId: string, patch: Partial<TableRow>) => {
@@ -1255,6 +1737,14 @@ export const App = () => {
 
   const handleRowDelete = useCallback((nodeId: string, rowId: string) => {
     setScene((current) => deleteRow(current, asNodeId(nodeId), asRowId(rowId)));
+  }, []);
+
+  const handleRowMove = useCallback((
+    nodeId: string,
+    rowId: string,
+    direction: "up" | "down",
+  ) => {
+    setScene((current) => moveRow(current, asNodeId(nodeId), asRowId(rowId), direction));
   }, []);
 
   const handleSectionAdd = useCallback((nodeId: string) => {
@@ -1479,8 +1969,97 @@ export const App = () => {
     [],
   );
 
+  const circuitPinGeometry = useCallback(
+    (reference: PortAttachmentRef) =>
+      reference.port.kind === "pin"
+        ? layout.ports[portKey(reference.nodeId, reference.port)]
+        : undefined,
+    [layout],
+  );
+
   const handleCreateEdge = useCallback(
     (source: PortAttachmentRef, target: EdgeTargetRef) => {
+      if (scene.meta.diagramKind === "circuit") {
+        if ("nodeId" in target) {
+          if (source.nodeId === target.nodeId) {
+            setLayoutNote("Connect two different pins or nodes.");
+            return;
+          }
+          let prepared = scene;
+          let sourceRef: PortAttachmentRef = source;
+          let targetRef: PortAttachmentRef = {
+            nodeId: target.nodeId,
+            port: target.port,
+          };
+          const sourcePin = circuitPinGeometry(sourceRef);
+          if (sourcePin !== undefined) {
+            const result = prepareOccupiedPinJunction(
+              prepared,
+              sourceRef,
+              sourcePin.point,
+              sourcePin.normal,
+            );
+            prepared = result.scene;
+            sourceRef = result.attachment;
+          }
+          const targetPin = circuitPinGeometry(targetRef);
+          if (targetPin !== undefined) {
+            const result = prepareOccupiedPinJunction(
+              prepared,
+              targetRef,
+              targetPin.point,
+              targetPin.normal,
+            );
+            prepared = result.scene;
+            targetRef = result.attachment;
+          }
+          const edge = createCircuitWire(prepared, sourceRef, targetRef);
+          setScene(insertEdge(prepared, edge));
+          setSelectedEdgeId(edge.id);
+          setSelectedNodeId(null);
+          setSelectedNodeIds([]);
+          setNodeFocus(null);
+          setLayoutNote("Wire created.");
+          return;
+        }
+        const targetLayout = layout.edges[target.edgeId];
+        if (targetLayout === undefined) {
+          setLayoutNote("That wire is no longer available.");
+          return;
+        }
+        const point = pointOnPolyline(targetLayout.points, target.t).point;
+        let prepared = scene;
+        let sourceRef: PortAttachmentRef = source;
+        const sourcePin = circuitPinGeometry(sourceRef);
+        if (sourcePin !== undefined) {
+          const result = prepareOccupiedPinJunction(
+            prepared,
+            sourceRef,
+            sourcePin.point,
+            sourcePin.normal,
+          );
+          prepared = result.scene;
+          sourceRef = result.attachment;
+        }
+        const result = connectCircuitWireToWire(
+          prepared,
+          sourceRef,
+          asEdgeId(target.edgeId),
+          point,
+        );
+        if (result === null) {
+          setLayoutNote("Could not connect to that wire.");
+          return;
+        }
+        setScene(result.scene);
+        setSelectedEdgeId(result.newEdgeId);
+        setSelectedNodeId(null);
+        setSelectedNodeIds([]);
+        setNodeFocus(null);
+        setLayoutNote("Junction created and wires split.");
+        return;
+      }
+
       const edge = createEdgeForDiagram(scene, source, target);
       if (edge === null) {
         setLayoutNote("Connect two different objects.");
@@ -1493,8 +2072,92 @@ export const App = () => {
       setNodeFocus(null);
       setLayoutNote("Connector created. Click the line or a terminal to refine it.");
     },
+    [circuitPinGeometry, layout, scene],
+  );
+
+  const handleExtendWireToPoint = useCallback(
+    (source: PortAttachmentRef, point: Point) => {
+      let prepared = scene;
+      let sourceRef = source;
+      const sourcePin = circuitPinGeometry(sourceRef);
+      if (sourcePin !== undefined) {
+        const occupied = prepareOccupiedPinJunction(
+          prepared,
+          sourceRef,
+          sourcePin.point,
+          sourcePin.normal,
+        );
+        prepared = occupied.scene;
+        sourceRef = occupied.attachment;
+      }
+      const result = connectCircuitWireToPoint(prepared, sourceRef, point, "none");
+      if (result === null) {
+        setLayoutNote("Could not create the wire.");
+        return;
+      }
+      setScene(result.scene);
+      setSelectedEdgeId(result.newEdgeId);
+      setSelectedNodeId(null);
+      setSelectedNodeIds([]);
+      setNodeFocus(null);
+      setLayoutNote("Wire extended; a no-dot node was created.");
+    },
+    [circuitPinGeometry, scene],
+  );
+
+  const handleReattachEdgeToPoint = useCallback(
+    (edgeId: string, end: "source" | "target", point: Point) => {
+      const result = reattachCircuitEdgeToPoint(
+        scene,
+        asEdgeId(edgeId),
+        end,
+        point,
+      );
+      if (result === null) return;
+      setScene(result.scene);
+      setSelectedEdgeId(result.newEdgeId);
+      setLayoutNote("Wire endpoint reattached to a new no-dot node.");
+    },
     [scene],
   );
+
+  const handlePreviewRotation = useCallback(
+    (nodeId: string, rotation: number | null) => {
+      setRotationPreview((current) => {
+        if (rotation === null) {
+          const next = { ...current };
+          delete next[nodeId];
+          return next;
+        }
+        return { ...current, [nodeId]: rotation };
+      });
+    },
+    [],
+  );
+
+  const handleCommitRotation = useCallback(
+    (nodeId: string, rotation: number) => {
+      setRotationPreview((current) => {
+        const next = { ...current };
+        delete next[nodeId];
+        return next;
+      });
+      setScene((current) =>
+        mergeCoincidentCircuitConnections(
+          patchNode(current, asNodeId(nodeId), { rotation } as Partial<SceneNode>),
+        ),
+      );
+      setLayoutNote(`Component rotated to ${rotation}°.`);
+    },
+    [],
+  );
+
+  const handleCircuitStandard = useCallback((standard: CircuitStandard) => {
+    setScene((current) => setCircuitStandard(current, standard));
+    setLayoutNote(
+      standard === "iec" ? "Circuit standard: IEC / EU." : "Circuit standard: ANSI / US.",
+    );
+  }, []);
 
   const selectNodes = useCallback(
     (nodeIds: readonly string[], primary?: string | null) => {
@@ -1540,6 +2203,14 @@ export const App = () => {
     setNodeFocus((current) => (current?.nodeId === nodeId ? null : current));
     setLayoutNote("Object and its connectors deleted.");
   }, [selectedNodeIds]);
+
+  const handleMergeJunction = useCallback((nodeId: string) => {
+    setScene((current) => mergeCircuitJunction(current, asNodeId(nodeId)));
+    setSelectedNodeId(null);
+    setSelectedNodeIds([]);
+    setNodeFocus(null);
+    setLayoutNote("Junction removed; the two wires were merged.");
+  }, []);
 
   const handleCopySelection = useCallback(() => {
     const focusedNodeId = nodeFocus?.nodeId;
@@ -1709,6 +2380,49 @@ export const App = () => {
       if (target instanceof HTMLElement) {
         const tag = target.tagName.toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable) {
+          if (target instanceof HTMLInputElement && target.dataset.labelScope !== undefined) {
+            const value = target.value;
+            const atEnd = target.selectionStart === target.selectionEnd &&
+              target.selectionEnd === value.length;
+            const shouldDelete = value.length === 0 || (event.key === "Delete" && atEnd);
+            if (shouldDelete) {
+              event.preventDefault();
+              target.blur();
+              if (target.dataset.labelScope === "edge") {
+                const edgeId = target.dataset.labelEdgeId;
+                if (edgeId !== undefined) {
+                  setScene((current) => deleteEdge(current, asEdgeId(edgeId)));
+                  setSelectedEdgeId(null);
+                  setNodeFocus(null);
+                  setLayoutNote("Connector deleted from its label field.");
+                  return;
+                }
+              }
+              if (target.dataset.labelScope === "node") {
+                const nodeId = target.dataset.labelNodeId;
+                const node = nodeId === undefined ? undefined : scene.nodes[nodeId];
+                if (nodeId !== undefined && node?.kind === "circuitJunction") {
+                  const merge = mergeCircuitJunctionResult(scene, node.id);
+                  if (merge !== null) {
+                    setScene(merge.scene);
+                    selectNodes([], null);
+                    setSelectedEdgeId(merge.edgeId);
+                    setNodeFocus(null);
+                    setLayoutNote("Junction removed; wires merged and the new wire selected.");
+                    return;
+                  }
+                }
+                if (nodeId !== undefined) {
+                  setScene((current) => deleteNode(current, asNodeId(nodeId)));
+                  selectNodes([], null);
+                  setSelectedEdgeId(null);
+                  setNodeFocus(null);
+                  setLayoutNote("Object deleted from its label field.");
+                  return;
+                }
+              }
+            }
+          }
           return;
         }
       }
@@ -1773,12 +2487,20 @@ export const App = () => {
         return;
       }
 
-      if (selectedEdgeId !== null) {
+      if (selectedEdgeIds.length > 0) {
         event.preventDefault();
-        setScene((current) => deleteEdge(current, asEdgeId(selectedEdgeId)));
-        setSelectedEdgeId(null);
+        const edgeIds = selectedEdgeIds;
+        setScene((current) =>
+          edgeIds.reduce(
+            (next, edgeId) => deleteEdge(next, asEdgeId(edgeId)),
+            current,
+          ),
+        );
+        setSelectedEdgeIds([]);
         setNodeFocus(null);
-        setLayoutNote("Connector deleted.");
+        setLayoutNote(
+          edgeIds.length === 1 ? "Connector deleted." : `${edgeIds.length} connectors deleted.`,
+        );
         return;
       }
 
@@ -1789,6 +2511,19 @@ export const App = () => {
           : [selectedNodeId];
       if (nodeIds.length > 0) {
         event.preventDefault();
+        const singleNodeId = nodeIds.length === 1 ? nodeIds[0] : undefined;
+        const singleNode = singleNodeId === undefined ? undefined : scene.nodes[singleNodeId];
+        if (singleNode?.kind === "circuitJunction") {
+          const merge = mergeCircuitJunctionResult(scene, singleNode.id);
+          if (merge !== null) {
+            setScene(merge.scene);
+            selectNodes([], null);
+            setSelectedEdgeId(merge.edgeId);
+            setNodeFocus(null);
+            setLayoutNote("Junction removed; wires merged and the new wire selected.");
+            return;
+          }
+        }
         setScene((current) =>
           deleteNodes(current, nodeIds.map((nodeId) => asNodeId(nodeId))),
         );
@@ -1806,10 +2541,11 @@ export const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     nodeFocus,
+    scene,
     scene.nodes,
     selectNodes,
     selectedActivation,
-    selectedEdgeId,
+    selectedEdgeIds,
     selectedNodeId,
     selectedNodeIds,
   ]);
@@ -1842,9 +2578,148 @@ export const App = () => {
   }, []);
 
   const handleReroute = useCallback((edgeId: string) => {
+    if (scene.meta.diagramKind === "circuit") {
+      const candidate = rerouteEdge(scene, asEdgeId(edgeId));
+      const candidateLayout = buildLayoutSnapshot(candidate, measurer);
+      const points = candidateLayout.edges[edgeId]?.points ?? [];
+      const corners = points.slice(1, -1);
+      if (corners.length === 0) {
+        setScene(candidate);
+        setLayoutNote("Wire rerouted orthogonally.");
+      } else {
+        setScene(splitCircuitWireAtCorners(candidate, asEdgeId(edgeId), corners));
+        setSelectedEdgeId(edgeId);
+        setLayoutNote(
+          `Wire rerouted and split at ${corners.length} bend${corners.length === 1 ? "" : "s"}.`,
+        );
+      }
+      return;
+    }
     setScene((current) => rerouteEdge(current, asEdgeId(edgeId)));
     setLayoutNote("A* reroute requested.");
+  }, [measurer, scene, setSelectedEdgeId]);
+
+  const handleAddJunctionAtWire = useCallback((edgeId: string, at: Point) => {
+    const result = addCircuitJunctionToWire(scene, asEdgeId(edgeId), at);
+    if (result === null) {
+      setLayoutNote("Could not add a junction to that wire.");
+      return;
+    }
+    setScene(result.scene);
+    setSelectedNodeId(result.junction.id);
+    setSelectedNodeIds([result.junction.id]);
+    setSelectedEdgeId(null);
+    setNodeFocus({ kind: "object", nodeId: result.junction.id });
+    setLayoutNote("Junction added at the nearest grid point.");
+  }, [scene]);
+
+  const commitShiftDrag = useCallback(
+    (frames: Readonly<Record<string, Rect>>, groups: readonly ShiftBranchGroup[]) => {
+      setScene(
+        (current) =>
+          cleanupShiftBranches(
+            mergeCoincidentCircuitConnections(withNodeFrames(current, frames)),
+            groups,
+          ),
+        { coalesce: true },
+      );
+      setPreviewFrames({});
+      setRotationPreview({});
+    },
+    [],
+  );
+
+  const beginShiftDrag = useCallback((branchScene: SceneDocument) => {
+    setScene(branchScene, { newStep: true });
+    setPreviewFrames({});
   }, []);
+
+  const beginDuplicateDrag = useCallback(
+    (duplicateScene: SceneDocument, nodeIds: readonly string[]) => {
+      setScene(duplicateScene, { newStep: true, skipNormalize: true });
+      selectNodes([...nodeIds], nodeIds[nodeIds.length - 1] ?? null);
+      setSelectedEdgeId(null);
+      setNodeFocus(null);
+      setPreviewFrames({});
+    },
+    [selectNodes],
+  );
+
+  const commitDuplicateDrag = useCallback(
+    (frames: Readonly<Record<string, Rect>>) => {
+      setScene(
+        (current) => {
+          let next = withNodeFrames(current, frames);
+          if (current.meta.diagramKind === "circuit") {
+            next = mergeCoincidentCircuitConnections(next);
+            next = normalizeCircuitPinConnections(next);
+            next = normalizeCircuitDuplicateConnections(next);
+            if (current.layout.visualRefinements !== false) {
+              next = refineAutoMergedJunctionStyles(next);
+            }
+          }
+          return {
+            ...next,
+            revision: current.revision + 1,
+            meta: { ...next.meta, updatedAt: new Date().toISOString() },
+          };
+        },
+        { coalesce: true, skipNormalize: true },
+      );
+      setPreviewFrames({});
+    },
+    [],
+  );
+
+  const beginDetachDrag = useCallback((detachedScene: SceneDocument) => {
+    setScene(detachedScene, { newStep: true });
+    setPreviewFrames({});
+  }, []);
+
+  const commitDetachDrag = useCallback(
+    (frames: Readonly<Record<string, Rect>>) => {
+      setScene(
+        (current) => {
+          const next = withNodeFrames(current, frames);
+          return {
+            ...next,
+            revision: current.revision + 1,
+            meta: { ...next.meta, updatedAt: new Date().toISOString() },
+          };
+        },
+        { coalesce: true },
+      );
+      setPreviewFrames({});
+    },
+    [],
+  );
+
+  const handleInsertComponentOnWire = useCallback(
+    (
+      nodeId: string,
+      edgeId: string,
+      at: Point,
+      orientation: WireOrientation,
+    ) => {
+      const result = insertCircuitComponentOnWire(
+        scene,
+        asNodeId(nodeId),
+        asEdgeId(edgeId),
+        at,
+        orientation,
+      );
+      if (result === null) {
+        setLayoutNote("That component could not be inserted on the wire.");
+        return;
+      }
+      setScene(result);
+      selectNodes([nodeId], nodeId);
+      setSelectedEdgeId(null);
+      setNodeFocus(null);
+      setLayoutNote("Component inserted into the selected wire.");
+    },
+    [scene, selectNodes],
+  );
 
   const handleReattachEdge = useCallback(
     (
@@ -1852,13 +2727,59 @@ export const App = () => {
       end: EdgeEnd,
       target: PortAttachmentRef | EdgeAttachmentRef,
     ) => {
+      if (scene.meta.diagramKind === "circuit") {
+        if ("nodeId" in target) {
+          let prepared = scene;
+          let attachment: PortAttachmentRef = {
+            nodeId: target.nodeId,
+            port: target.port,
+          };
+          const targetPin = circuitPinGeometry(attachment);
+          if (targetPin !== undefined) {
+            const occupied = prepareOccupiedPinJunction(
+              prepared,
+              attachment,
+              targetPin.point,
+              targetPin.normal,
+            );
+            prepared = occupied.scene;
+            attachment = occupied.attachment;
+          }
+          const edgeAttachment: EdgeAttachment = {
+            target: "node",
+            nodeId: attachment.nodeId,
+            port: attachment.port,
+          };
+          setScene(setEdgeAttachment(prepared, asEdgeId(edgeId), end, edgeAttachment));
+          setLayoutNote("Wire endpoint reattached.");
+          return;
+        }
+        const targetLayout = layout.edges[target.edgeId];
+        if (targetLayout === undefined) return;
+        const point = pointOnPolyline(targetLayout.points, target.t).point;
+        const result = reattachCircuitEdgeToWire(
+          scene,
+          asEdgeId(edgeId),
+          end,
+          asEdgeId(target.edgeId),
+          point,
+        );
+        if (result === null) {
+          setLayoutNote("Could not reattach to that wire.");
+          return;
+        }
+        setScene(result.scene);
+        setSelectedEdgeId(result.newEdgeId);
+        setLayoutNote("Wire endpoint reattached; junction created.");
+        return;
+      }
       const attachment: EdgeAttachment = "nodeId" in target
         ? { target: "node", nodeId: target.nodeId, port: target.port }
         : { target: "edge", edgeId: target.edgeId, t: target.t };
       setScene((current) => setEdgeAttachment(current, asEdgeId(edgeId), end, attachment));
       setLayoutNote("Connector endpoint reattached.");
     },
-    [],
+    [circuitPinGeometry, layout, scene],
   );
 
   const handleMoveSequenceEdge = useCallback((edgeId: string, deltaY: number) => {
@@ -1888,6 +2809,13 @@ export const App = () => {
     setLayoutNote(`Layout spacing: ${spacing}.`);
   }, []);
 
+  const handleVisualRefinements = useCallback((enabled: boolean) => {
+    setScene((current) => patchLayout(current, { visualRefinements: enabled }));
+    setLayoutNote(
+      enabled ? "Visual layout refinements on." : "Visual layout refinements off.",
+    );
+  }, []);
+
   const handleThemeChange = useCallback((theme: Theme) => {
     setScene((current) => setSceneTheme(current, theme));
   }, []);
@@ -1911,6 +2839,7 @@ export const App = () => {
       }),
     );
     setPreviewFrames({});
+    setRotationPreview({});
     setLayoutNote(
       `${result.moved} nodes · ${result.layers} layers · crossings ${result.crossingsBefore} → ${result.crossingsAfter}`,
     );
@@ -1920,6 +2849,16 @@ export const App = () => {
   const selectEdge = useCallback((edgeId: string | null) => {
     setSelectedEdgeId(edgeId);
     if (edgeId !== null) {
+      setSelectedActivation(null);
+      setNodeFocus(null);
+      setSelectedNodeId(null);
+      setSelectedNodeIds([]);
+    }
+  }, [setSelectedEdgeId]);
+
+  const selectEdges = useCallback((edgeIds: readonly string[]) => {
+    setSelectedEdgeIds([...new Set(edgeIds)]);
+    if (edgeIds.length > 0) {
       setSelectedActivation(null);
       setNodeFocus(null);
       setSelectedNodeId(null);
@@ -1961,30 +2900,10 @@ export const App = () => {
     requestFocus(nodeId, target);
   }, [requestFocus, scene.nodes, selectNodes]);
 
-  const nodeTargetForFocus = useCallback((focus: NodeFocus): CanvasTextTarget => {
-    const node = scene.nodes[focus.nodeId];
-    if (focus.kind === "table") return { kind: "nodeName" };
-    if (focus.kind === "section") return { kind: "sectionTitle", sectionId: focus.sectionId };
-    if (focus.kind === "row") return { kind: "rowName", rowId: focus.rowId };
-    if (focus.kind === "lifelineSpine") return { kind: "lifelineLabel" };
-    if (node?.kind === "image") return { kind: "caption" };
-    if (node?.kind === "comment") return { kind: "commentBody" };
-    if (node?.kind === "lifeline") return { kind: "lifelineLabel" };
-    return { kind: "nodeName" };
-  }, [scene.nodes]);
-
   const handleNodePartClick = useCallback((focus: NodeFocus) => {
     selectNodes([focus.nodeId], focus.nodeId);
-    const same = nodeFocus !== null &&
-      nodeFocus.kind === focus.kind &&
-      nodeFocus.nodeId === focus.nodeId &&
-      (focus.kind !== "section" || (nodeFocus.kind === "section" && nodeFocus.sectionId === focus.sectionId)) &&
-      (focus.kind !== "row" || (nodeFocus.kind === "row" && nodeFocus.rowId === focus.rowId)) &&
-      (focus.kind !== "lifelineSpine" ||
-        (nodeFocus.kind === "lifelineSpine" && Math.abs(nodeFocus.y - focus.y) < 1));
-    if (same) requestFocus(focus.nodeId, nodeTargetForFocus(focus));
     setNodeFocus(focus);
-  }, [nodeFocus, nodeTargetForFocus, requestFocus, selectNodes]);
+  }, [selectNodes]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -2076,16 +2995,41 @@ export const App = () => {
               </svg>
               Add object
             </button>
-            <ThemePanel theme={scene.theme} onChange={handleThemeChange} />
-            <LayoutPanel
-              direction={scene.layout.direction}
-              spacing={scene.layout.spacing ?? "normal"}
-              engine={scene.layout.engine}
-              note={layoutNote}
-              onDirectionChange={handleLayoutDirection}
-              onSpacingChange={handleLayoutSpacing}
-              onRun={runAutoLayout}
-            />
+            {scene.meta.diagramKind === "circuit" ? (
+              <>
+                <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="circuit" />
+                <CircuitPanel
+                  standard={resolveCircuitSettings(scene).standard}
+                  onChange={handleCircuitStandard}
+                />
+                <LayoutPanel
+                  direction={scene.layout.direction}
+                  spacing={scene.layout.spacing ?? "normal"}
+                  engine={scene.layout.engine}
+                  note={layoutNote}
+                  variant="circuit"
+                  visualRefinements={scene.layout.visualRefinements !== false}
+                  onDirectionChange={handleLayoutDirection}
+                  onSpacingChange={handleLayoutSpacing}
+                  onVisualRefinementsChange={handleVisualRefinements}
+                  onRun={runAutoLayout}
+                />
+              </>
+            ) : (
+              <>
+              
+              <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="full" />
+              <LayoutPanel
+                direction={scene.layout.direction}
+                spacing={scene.layout.spacing ?? "normal"}
+                engine={scene.layout.engine}
+                note={layoutNote}
+                onDirectionChange={handleLayoutDirection}
+                onSpacingChange={handleLayoutSpacing}
+                onRun={runAutoLayout}
+                />
+                </>
+            )}
           </section>
         ) : null}
 
@@ -2110,12 +3054,14 @@ export const App = () => {
           selectedNodeId={selectedNodeId}
           selectedNodeIds={selectedNodeIds}
           selectedEdgeId={selectedEdgeId}
+          selectedEdgeIds={selectedEdgeIds}
           selectedActivation={selectedActivation}
           fitNonce={fitNonce}
           onSelectNode={selectNode}
           onSelectNodes={selectNodes}
           onToggleNodeSelection={toggleNodeSelection}
           onSelectEdge={selectEdge}
+          onSelectEdges={selectEdges}
           onSelectActivation={selectActivation}
           onSetMarker={handleSetMarker}
           onSetEdgeLabel={handleSetEdgeLabel}
@@ -2125,6 +3071,14 @@ export const App = () => {
           onSetStrokeWidth={handleSetStrokeWidth}
           onSetRoutingMode={handleSetRoutingMode}
           onRerouteEdge={handleReroute}
+          onAddJunctionAtWire={handleAddJunctionAtWire}
+          onBeginShiftDrag={beginShiftDrag}
+          onCommitShiftDrag={commitShiftDrag}
+          onBeginDuplicateDrag={beginDuplicateDrag}
+          onCommitDuplicateDrag={commitDuplicateDrag}
+          onBeginDetachDrag={beginDetachDrag}
+          onCommitDetachDrag={commitDetachDrag}
+          onInsertComponentOnWire={handleInsertComponentOnWire}
           onReattachEdge={handleReattachEdge}
           onMoveSequenceEdge={handleMoveSequenceEdge}
           onMoveEdgeLabel={handleMoveEdgeLabel}
@@ -2137,6 +3091,9 @@ export const App = () => {
           onUpdateRow={handleRowUpdate}
           onAddRow={handleRowAdd}
           onDeleteRow={handleRowDelete}
+          onMoveRow={handleRowMove}
+          onFocusRow={(nodeId, rowId) =>
+            handleCanvasTextDoubleClick(nodeId, { kind: "rowName", rowId })}
           onAddSection={handleSectionAdd}
           onUpdateSection={handleSectionUpdate}
           onDeleteSection={handleSectionDelete}
@@ -2144,38 +3101,30 @@ export const App = () => {
           onAddActivation={handleAddActivation}
           onUpdateActivation={handleUpdateActivation}
           onCreateEdge={handleCreateEdge}
+          onExtendWireToPoint={handleExtendWireToPoint}
+          onReattachEdgeToPoint={handleReattachEdgeToPoint}
+          onPreviewRotation={handlePreviewRotation}
+          onCommitRotation={handleCommitRotation}
           onDeleteNode={handleDeleteNode}
+          onMergeJunction={handleMergeJunction}
+          onMoveNodeLabel={handleMoveNodeLabel}
           onViewChange={handleViewChange}
           onPreviewFrames={setPreviewFrames}
           onCommitFrames={commitFrames}
+          onCommitWireTranslation={commitWireTranslation}
           onViewport={setViewport}
         />
 
         {codePanelVisible ? (
-          <Suspense
-            fallback={
-              <aside className="code-panel code-panel-loading" aria-label="Loading export panel">
-                <div className="code-panel-head">
-                  <div>
-                    {/* <div className="code-panel-kicker">Export</div> */}
-                    <h2>Export to Typst</h2>
-                  </div>
-                </div>
-                <div className="code-panel-scroll">
-                  <p className="code-hint">Loading the Typst compiler…</p>
-                </div>
-              </aside>
-            }
-          >
-            <CodePanel
-              scene={scene}
-              layout={layout}
-              selectedNodeIds={selectedNodeIds}
-              selectedEdgeId={selectedEdgeId}
-              assets={exportAssets}
-              onClose={() => setCodePanelVisible(false)}
-            />
-          </Suspense>
+          <CodePanel
+            scene={scene}
+            layout={layout}
+            selectedNodeIds={selectedNodeIds}
+            selectedEdgeId={selectedEdgeId}
+            selectedEdgeIds={selectedEdgeIds}
+            assets={exportAssets}
+            onClose={() => setCodePanelVisible(false)}
+          />
         ) : null}
       </main>
 

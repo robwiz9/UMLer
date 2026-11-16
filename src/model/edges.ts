@@ -44,7 +44,24 @@ export interface SpinePortRef {
   readonly t: number;
 }
 
-export type NodePortRef = RowPortRef | PerimeterPortRef | AnglePortRef | SpinePortRef;
+/** A fixed electrical pin on a circuit component. */
+export interface PinPortRef {
+  readonly kind: "pin";
+  readonly pinId: string;
+}
+
+/** The single branch point of a circuit junction node. */
+export interface CenterPortRef {
+  readonly kind: "center";
+}
+
+export type NodePortRef =
+  | RowPortRef
+  | PerimeterPortRef
+  | AnglePortRef
+  | SpinePortRef
+  | PinPortRef
+  | CenterPortRef;
 
 export interface NodeAttachment {
   readonly target: "node";
@@ -80,6 +97,8 @@ export type EdgeRoutingMode = "straight" | "orthogonal" | "polyline" | "bezier";
 export interface EdgeRouting {
   readonly mode: EdgeRoutingMode;
   readonly avoidObstacles: boolean;
+  /** Also treat other routed wires as thin obstacles to avoid overlaps. */
+  readonly avoidWireOverlap?: boolean;
   /** Clearance from an object's frame, in scene units. */
   readonly obstaclePadding: number;
   /** Minimum length of the first/last orthogonal segment. */
@@ -142,6 +161,7 @@ export type EdgeSemantic =
       readonly guard?: string;
       readonly effect?: string;
     }
+  | { readonly family: "circuit"; readonly net?: string }
   | { readonly family: "generic" };
 
 export interface EdgeMarkerSet {
@@ -184,6 +204,8 @@ export const edgeDisplayName = (edge: SceneEdge): string => {
       return edge.semantic.signature ?? edge.semantic.sequence;
     case "state":
       return edge.semantic.trigger ?? edge.id;
+    case "circuit":
+      return edge.semantic.net ?? "wire";
     case "generic":
       return edge.id;
   }
@@ -200,5 +222,9 @@ export const portKey = (nodeId: NodeId, port: NodePortRef): string => {
       return `${nodeId}:angle:${port.angle}`;
     case "spine":
       return `${nodeId}:spine:${port.t}`;
+    case "pin":
+      return `${nodeId}:pin:${port.pinId}`;
+    case "center":
+      return `${nodeId}:center`;
   }
 };

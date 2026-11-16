@@ -35,6 +35,17 @@ import {
   newId,
   type NodeId,
 } from "./ids.ts";
+import {
+  circuitPrefixFor,
+  nextComponentLabel,
+  resolveCircuitSettings,
+  rotatedFrameBounds,
+  type CircuitComponentKind,
+} from "./circuit.ts";
+import { CIRCUIT_COMPONENTS, circuitComponent } from "./circuit-catalog.ts";
+import type { CircuitComponentNode, CircuitJunctionNode } from "./nodes.ts";
+
+export type CircuitTemplateId = `circuit:${CircuitComponentKind}`;
 
 export type ObjectTemplateId =
   | "entity-table"
@@ -53,7 +64,9 @@ export type ObjectTemplateId =
   | "system-boundary"
   | "interaction-frame"
   | "comment"
-  | "image";
+  | "image"
+  | "circuit-node"
+  | CircuitTemplateId;
 
 export type ObjectTemplateGroup = "diagram" | "annotation";
 
@@ -63,6 +76,8 @@ export interface ObjectTemplate {
   readonly hint: string;
   readonly icon: string;
   readonly group: ObjectTemplateGroup;
+  readonly componentKind?: CircuitComponentKind;
+  readonly keywords?: readonly string[];
 }
 
 const COMMON_TEMPLATES: readonly ObjectTemplate[] = [
@@ -209,6 +224,26 @@ const BY_DIAGRAM: Record<DiagramKind, readonly ObjectTemplate[]> = {
     },
     ...COMMON_TEMPLATES,
   ],
+  circuit: [
+    ...CIRCUIT_COMPONENTS.map((component): ObjectTemplate => ({
+      id: `circuit:${component.kind}`,
+      label: component.label,
+      hint: component.description,
+      icon: "⌁",
+      group: "diagram",
+      componentKind: component.kind,
+      keywords: component.keywords,
+    })),
+    {
+      id: "circuit-node",
+      label: "Node",
+      hint: "Branch point; choose a filled, hollow or hidden dot",
+      icon: "●",
+      group: "diagram",
+      keywords: ["junction", "dot", "branch", "node"],
+    },
+    ...COMMON_TEMPLATES,
+  ],
 };
 
 export const objectTemplatesFor = (diagramKind: DiagramKind): readonly ObjectTemplate[] =>
@@ -240,7 +275,20 @@ export const placeObjectFrame = (
   const grid = Math.max(1, scene.canvas.grid.size);
   const obstacles = Object.values(scene.nodes)
     .filter((node) => node.kind !== "frame" && node.visible)
-    .map((node) => node.frame);
+    .map((node) => {
+      if (node.kind === "circuitComponent") {
+        const definition = circuitComponent(node.component);
+        if (definition !== undefined) {
+          return rotatedFrameBounds(
+            node.frame,
+            definition.width,
+            definition.height,
+            node.rotation,
+          );
+        }
+      }
+      return node.frame;
+    });
   const startX = snap(center.x - width / 2, grid);
   const startY = snap(center.y - height / 2, grid);
   const stepX = width + grid;
@@ -315,8 +363,7 @@ const entityTable = (frame: Rect): TableNode => ({
   header: {},
   sections: [
     section("attributes", [
-      row("id", { type: "uuid", constraints: ["PK", "NN"] }),
-      row("name", { type: "text" }),
+      row("id", { type: "uuid", constraints: ["PK"] }),
     ]),
   ],
 });
@@ -438,6 +485,33 @@ const imageNode = (frame: Rect): ImageNode => ({
   showBorder: false,
 });
 
+const circuitJunctionAt = (
+  frame: Rect,
+  junctionStyle: CircuitJunctionNode["junctionStyle"] = "filled",
+): CircuitJunctionNode => ({
+  ...shapeBase(asNodeId(newId("junction")), "", frame),
+  kind: "circuitJunction",
+  z: 3,
+  junctionStyle,
+});
+
+const circuitComponentAt = (
+  scene: SceneDocument,
+  kind: CircuitComponentKind,
+  frame: Rect,
+): CircuitComponentNode | null => {
+  const definition = circuitComponent(kind);
+  if (definition === undefined) return null;
+  const prefix = circuitPrefixFor(kind, resolveCircuitSettings(scene).standard);
+  return {
+    ...shapeBase(asNodeId(newId(kind)), nextComponentLabel(scene, prefix), frame),
+    kind: "circuitComponent",
+    component: kind,
+    rotation: 0,
+    z: 2,
+  };
+};
+
 export interface CreatedObject {
   readonly node: SceneNode;
   readonly asset?: ImageAsset;
@@ -495,6 +569,20 @@ export const createObjectFromTemplate = (
       ? { node: withSceneTheme(node) }
       : { node: withSceneTheme(node), asset };
 
+  if (templateId === "circuit-node") {
+    return created(circuitJunctionAt(placeObjectFrame(scene, center, 18, 18)));
+  }
+  if (template.componentKind !== undefined) {
+    const definition = circuitComponent(template.componentKind);
+    if (definition === undefined) return null;
+    const node = circuitComponentAt(
+      scene,
+      template.componentKind,
+      placeObjectFrame(scene, center, definition.width, definition.height),
+    );
+    return node === null ? null : created(node);
+  }
+
   switch (templateId) {
     case "entity-table":
       return created(entityTable(placeObjectFrame(scene, center, 225, 90)));
@@ -542,4 +630,5 @@ export const createObjectFromTemplate = (
     case "image":
       return created(imageNode(placeObjectFrame(scene, center, 144, 90)));
   }
+  return null;
 };

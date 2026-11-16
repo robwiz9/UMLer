@@ -32,6 +32,7 @@ export interface CodePanelProps {
   readonly layout: LayoutSnapshot;
   readonly selectedNodeIds: readonly string[];
   readonly selectedEdgeId: string | null;
+  readonly selectedEdgeIds: readonly string[];
   readonly assets: Readonly<Record<string, ImageAsset>>;
   readonly onClose: () => void;
 }
@@ -190,6 +191,7 @@ export const CodePanel = ({
   layout,
   selectedNodeIds,
   selectedEdgeId,
+  selectedEdgeIds,
   assets,
   onClose,
 }: CodePanelProps) => {
@@ -218,14 +220,14 @@ export const CodePanel = ({
   const [borderCollapsed, setBorderCollapsed] = useState(false);
   const [referenceCollapsed, setReferenceCollapsed] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(true);
   const [previewZoom, setPreviewZoom] = useState(1);
   const copyTimer = useRef<number | null>(null);
   const importTimer = useRef<number | null>(null);
   const fileTimer = useRef<number | null>(null);
   const downloadTimer = useRef<number | null>(null);
 
-  const selectionCount = selectedNodeIds.length + (selectedEdgeId === null ? 0 : 1);
+  const selectionCount = selectedNodeIds.length + selectedEdgeIds.length;
 
   useEffect(() => {
     setDiagramId(defaultDiagramId(scene.meta.title));
@@ -531,18 +533,7 @@ export const CodePanel = ({
                     }}
                   />
                 </label>
-                <label className="code-inline-field code-unit-field">
-                  <span className="sr-only">Page unit</span>
-                  <select
-                    id="code-page-unit"
-                    name="code-page-unit"
-                    value={page.unit}
-                    onChange={(event) => changeUnit(event.target.value as PageUnit)}
-                  >
-                    <option value="mm">mm</option>
-                    <option value="pt">pt</option>
-                  </select>
-                </label>
+                
                 <span className="code-times">×</span>
                 <label className="code-inline-field">
                   <span>Height</span>
@@ -560,6 +551,18 @@ export const CodePanel = ({
                       }
                     }}
                   />
+                </label>
+                <label className="code-inline-field code-unit-field">
+                  <span className="sr-only">Page unit</span>
+                  <select
+                    id="code-page-unit"
+                    name="code-page-unit"
+                    value={page.unit}
+                    onChange={(event) => changeUnit(event.target.value as PageUnit)}
+                  >
+                    <option value="mm">mm</option>
+                    <option value="pt">pt</option>
+                  </select>
                 </label>
               </div>
             ) : null}

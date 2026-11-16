@@ -33,6 +33,7 @@ export interface PasteResult {
   readonly scene: SceneDocument;
   readonly nodeIds: readonly NodeId[];
   readonly edgeIds: readonly EdgeId[];
+  readonly nodeIdMap: ReadonlyMap<string, NodeId>;
 }
 
 const attachmentReady = (
@@ -170,5 +171,6 @@ export const pasteSceneClipboard = (
     scene: insertSubgraph(scene, nodes, edges, clipboard.assets),
     nodeIds: nodes.map((node) => node.id),
     edgeIds: edges.map((edge) => edge.id),
+    nodeIdMap: nodeIds,
   };
 };

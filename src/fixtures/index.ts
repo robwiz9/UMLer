@@ -23,6 +23,8 @@ import { rect, type Rect } from "../model/geometry.ts";
 import type {
   ActivationBar,
   ActorNode,
+  CircuitComponentNode,
+  CircuitJunctionNode,
   FrameNode,
   ImageAsset,
   ImageNode,
@@ -276,7 +278,11 @@ const edge = (
   id: asEdgeId(id),
   source,
   target,
-  routing: routing(semantic.family === "sequence" ? "straight" : "orthogonal"),
+  routing: routing(
+    semantic.family === "sequence" || semantic.family === "circuit"
+      ? "straight"
+      : "orthogonal",
+  ),
   markers: options.markers ?? { source: NO_MARKER, target: NO_MARKER },
   labels: options.labels ?? [],
   semantic,
@@ -346,6 +352,41 @@ const imageNode: ImageNode = {
   style: DEFAULT_THEME.shape,
 };
 
+const component = (
+  id: string,
+  name: string,
+  kind: CircuitComponentNode["component"],
+  frame: Rect,
+  rotation: CircuitComponentNode["rotation"] = 0,
+): CircuitComponentNode => ({
+  id: asNodeId(id),
+  kind: "circuitComponent",
+  name,
+  frame,
+  z: 2,
+  locked: false,
+  visible: true,
+  component: kind,
+  rotation,
+  style: DEFAULT_THEME.shape,
+});
+
+const junction = (
+  id: string,
+  frame: Rect,
+  style: CircuitJunctionNode["junctionStyle"] = "filled",
+): CircuitJunctionNode => ({
+  id: asNodeId(id),
+  kind: "circuitJunction",
+  name: "",
+  frame,
+  z: 3,
+  locked: false,
+  visible: true,
+  junctionStyle: style,
+  style: DEFAULT_THEME.shape,
+});
+
 export const ER_COMMERCE: SceneDocument = scene(
   "scene_er_commerce",
   "er",
@@ -360,11 +401,11 @@ export const ER_COMMERCE: SceneDocument = scene(
         section("customers_attrs", "attributes", [
           row("customers_id", "id", "attribute", {
             type: "uuid",
-            constraints: ["PK", "NN"],
+            constraints: ["PK"],
           }),
           row("customers_email", "email", "attribute", {
             type: "citext",
-            constraints: ["UQ", "NN"],
+            constraints: ["UQ"],
           }),
           row("customers_name", "name", "attribute", { type: "text" }),
         ]),
@@ -379,19 +420,19 @@ export const ER_COMMERCE: SceneDocument = scene(
         section("orders_attrs", "attributes", [
           row("orders_id", "id", "attribute", {
             type: "uuid",
-            constraints: ["PK", "NN"],
+            constraints: ["PK"],
           }),
           row("orders_customer_id", "customer_id", "attribute", {
             type: "uuid",
-            constraints: ["FK", "NN"],
+            constraints: ["FK"],
           }),
           row("orders_total", "total", "attribute", {
             type: "numeric(12,2)",
-            constraints: ["NN"],
+            constraints: [],
           }),
           row("orders_placed_at", "placed_at", "attribute", {
-            type: "timestamptz",
-            constraints: ["NN"],
+            type: "timestamp",
+            constraints: [],
           }),
         ]),
       ],
@@ -403,11 +444,11 @@ export const ER_COMMERCE: SceneDocument = scene(
       [
         row("order_line_quantity", "quantity", "attribute", {
           type: "int",
-          constraints: ["NN"],
+          constraints: [],
         }),
         row("order_line_unit_price", "unit_price", "attribute", {
           type: "numeric(12,2)",
-          constraints: ["NN"],
+          constraints: [],
         }),
       ],
     ),
@@ -793,6 +834,44 @@ export const UML_COMMUNICATION_CHECKOUT: SceneDocument = scene(
   ],
 );
 
+export const CIRCUIT_DIVIDER: SceneDocument = scene(
+  "scene_circuit_divider",
+  "circuit",
+  "Circuit — divider loop",
+  [
+    component("v1", "V_1", "voltage-source", FRAME(72, 36, 36, 54)),
+    component("r1", "R_1", "resistor", FRAME(144, 18, 54, 36)),
+    component("d1", "D_1", "led", FRAME(180, 54, 36, 36), 270),
+    junction("n1", FRAME(135, 81, 18, 18), "filled"),
+  ],
+  [
+    edge(
+      "wire_v_r",
+      nodeAttachment("v1", { kind: "pin", pinId: "+" }),
+      nodeAttachment("r1", { kind: "pin", pinId: "A" }),
+      { family: "circuit" },
+    ),
+    edge(
+      "wire_r_d",
+      nodeAttachment("r1", { kind: "pin", pinId: "B" }),
+      nodeAttachment("d1", { kind: "pin", pinId: "B" }),
+      { family: "circuit" },
+    ),
+    edge(
+      "wire_d_n",
+      nodeAttachment("d1", { kind: "pin", pinId: "A" }),
+      nodeAttachment("n1", { kind: "center" }),
+      { family: "circuit", net: "out" },
+    ),
+    edge(
+      "wire_n_v",
+      nodeAttachment("n1", { kind: "center" }),
+      nodeAttachment("v1", { kind: "pin", pinId: "−" }),
+      { family: "circuit" },
+    ),
+  ],
+);
+
 export const STEP1_FIXTURES: readonly { readonly name: string; readonly scene: SceneDocument }[] = [
   { name: "ER commerce", scene: ER_COMMERCE },
   { name: "UML class payments", scene: UML_CLASS_PAYMENTS },
@@ -800,5 +879,8 @@ export const STEP1_FIXTURES: readonly { readonly name: string; readonly scene: S
   { name: "UML use case shop", scene: UML_USE_CASE_SHOP },
   { name: "UML state order", scene: UML_STATE_ORDER },
   { name: "UML communication checkout", scene: UML_COMMUNICATION_CHECKOUT },
+  { name: "Circuit divider loop", scene: CIRCUIT_DIVIDER },
 ];
+
+
 

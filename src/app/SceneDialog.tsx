@@ -26,6 +26,7 @@ const KIND_ORDER: readonly DiagramKind[] = [
   "uml-sequence",
   "uml-communication",
   "uml-state-machine",
+  "circuit",
 ];
 
 const SHORT_LABELS: Record<DiagramKind, string> = {
@@ -36,6 +37,7 @@ const SHORT_LABELS: Record<DiagramKind, string> = {
   "uml-sequence": "Sequence",
   "uml-communication": "Comm.",
   "uml-state-machine": "State",
+  circuit: "Circuit",
 };
 
 const defaultSceneName = (kind: DiagramKind): string =>
@@ -83,7 +85,7 @@ const DiagramTypeIcon = ({ kind }: { readonly kind: DiagramKind }) => {
           <circle cx="8" cy="23" r="2.4" {...common} />
           <line x1="8" y1="25.5" x2="8" y2="30" {...common} />
           <line x1="5" y1="27" x2="11" y2="27" {...common} />
-          <line x1="14" y1="18" x2="10" y2="23" {...common} />
+          <line x1="12" y1="20" x2="10" y2="22" {...common} />
         </svg>
       );
     case "uml-sequence":
@@ -102,7 +104,7 @@ const DiagramTypeIcon = ({ kind }: { readonly kind: DiagramKind }) => {
         <svg viewBox="0 0 34 34" aria-hidden="true">
           <rect x="3" y="7" width="12" height="8" rx="1" {...common} />
           <rect x="19" y="21" width="12" height="8" rx="1" {...common} />
-          <line x1="15" y1="11" x2="21" y2="25" {...common} />
+          <line x1="15" y1="11" x2="21" y2="20.5" {...common} />
           <line x1="9" y1="15" x2="9" y2="23" {...common} />
         </svg>
       );
@@ -113,6 +115,17 @@ const DiagramTypeIcon = ({ kind }: { readonly kind: DiagramKind }) => {
           <circle cx="26" cy="24" r="4" {...common} />
           <circle cx="26" cy="24" r="1.6" fill="currentColor" />
           <line x1="20" y1="15" x2="24" y2="21" {...common} />
+        </svg>
+      );
+    case "circuit":
+      return (
+        <svg viewBox="0 0 34 34" aria-hidden="true">
+          <line x1="3" y1="22" x2="8" y2="22" {...common} />
+          {/* <polyline points="8,22 10,16 13,28 16,16 19,28 22,16 25,28 27," {...common} /> */}
+          <line x1="26" y1="22" x2="31" y2="22" {...common} />
+          <circle cx="17" cy="22" r="7.5" {...common} />
+          <line x1="13" y1="18" x2="21" y2="26" {...common} />
+          <line x1="21" y1="18" x2="13" y2="26" {...common} />
         </svg>
       );
   }
@@ -216,6 +229,20 @@ export const SceneDialog = ({
 
             {mode === "new" || mode === "new-project" ? (
               <>
+              <label className="field-label">
+              {mode === "new-project" ? "Starting scene name" : "Scene name"}
+              <input
+                ref={inputRef}
+                id="scene-dialog-name"
+                name="scene-dialog-name"
+                value={name}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNameEdited(true);
+                }}
+                placeholder="Untitled diagram"
+              />
+            </label>
                 <div className="dialog-section-label">Diagram type</div>
                 <div className="diagram-type-grid" role="group" aria-label="Diagram type">
                   {KIND_ORDER.map((kind) => (
@@ -255,20 +282,7 @@ export const SceneDialog = ({
               </>
             ) : null}
 
-            <label className="field-label">
-              {mode === "new-project" ? "Starting scene name" : "Scene name"}
-              <input
-                ref={inputRef}
-                id="scene-dialog-name"
-                name="scene-dialog-name"
-                value={name}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setNameEdited(true);
-                }}
-                placeholder="Untitled diagram"
-              />
-            </label>
+            
 
             <div className="dialog-actions">
               <button type="button" className="dialog-button" onClick={onClose}>

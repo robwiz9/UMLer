@@ -17,6 +17,8 @@ import {
   formatRow,
   isTableLikeNode,
   visibleSections,
+  type CircuitComponentNode,
+  type CircuitJunctionNode,
   type CommentNode,
   type ImageNode,
   type LifelineNode,
@@ -27,6 +29,7 @@ import {
   type TableSection,
 } from "../model/nodes.ts";
 import type { SceneDocument } from "../model/scene.ts";
+import { resolveCircuitSettings } from "../model/circuit.ts";
 import type {
   EdgeAttachment,
   EdgeLabel,
@@ -36,8 +39,12 @@ import type {
 import { portKey } from "../model/edges.ts";
 import { markerExtent } from "../model/markers.ts";
 import { resolveTextStyle } from "../model/styles.ts";
+import { measureRichText } from "../model/rich-text.ts";
 import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
 import type {
+  CircuitComponentLayout,
+  CircuitJunctionLayout,
+  CircuitPinGeometry,
   EdgeLabelLayout,
   EdgeLayout,
   CommentNodeLayout,
@@ -51,6 +58,12 @@ import type {
   TextMeasurement,
   TextMeasurer,
 } from "../model/layout.ts";
+import {
+  resolveCircuitComponent,
+  resolveCircuitJunction,
+  unionCircuitBounds,
+} from "./circuit.ts";
+import { computeWireBridges } from "./wire-bridges.ts";
 import type {
   Point,
   Rect,
@@ -211,17 +224,23 @@ const headerText = (
     : node.textStyle;
   const style = resolveTextStyle(node.style.headerText, override);
   const maxWidth = node.frame.width - node.style.paddingX * 2;
+  const stereotype =
+    node.kind === "table" && node.tableKind === "entity" && node.header.weak === true
+      ? "weak"
+      : node.kind === "table"
+        ? node.header.stereotype
+        : undefined;
   return {
     text: measurer.measure(node.name, style, maxWidth),
     stereotype:
-      node.kind === "table" && node.header.stereotype
-        ? measurer.measure(`«${node.header.stereotype}»`, resolveTextStyle({
+      stereotype === undefined
+        ? undefined
+        : measurer.measure(`«${stereotype}»`, resolveTextStyle({
             ...style,
             fontSize: Math.max(7, style.fontSize - 2),
             weight: 400,
             italic: true,
-          }, override), maxWidth)
-        : undefined,
+          }, override), maxWidth),
   };
 };
 
@@ -296,7 +315,15 @@ const measureTable = (
     const rows: RowBand[] = [];
     for (const row of section.rows) {
       const rowFrame = rect(frame.x, cursor, frame.width, rowHeight);
-      const badges = badgeLayout(row, style, frame, cursor, rowHeight, measurer);
+      const badges = badgeLayout(
+        row,
+        style,
+        frame,
+        cursor,
+        rowHeight,
+        measurer,
+        node.kind === "table" && node.tableKind === "entity" && node.header.weak === true,
+      );
       const badgeWidth = badges.reduce((sum, badge) => sum + badge.frame.width + 3, 0);
       const displayText = formatRow(row, false);
       const rowStyle = resolveTextStyle(style.text, row.textStyle);
@@ -403,6 +430,7 @@ const badgeLayout = (
   top: number,
   rowHeight: number,
   measurer: TextMeasurer,
+  weakEntity: boolean,
 ): RowBand["badgeFrames"] => {
   const constraints = row.constraints ?? [];
   if (constraints.length === 0) return [];
@@ -416,17 +444,29 @@ const badgeLayout = (
   const result: { label: string; frame: Rect }[] = [];
   let right = rectRight(frame) - style.paddingX;
   for (const constraint of reversed) {
-    const measurement = measurer.measure(constraint, badgeStyle);
+    // A weak entity has a partial key, not a primary key; the ER convention
+    // marks it as D while the stored constraint remains PK.
+    const label = weakEntity && constraint === "PK" ? "D" : constraint;
+    const measurement = measurer.measure(label, badgeStyle);
     const width = measurement.width + 5;
     const badgeFrame = rect(right - width, top + (rowHeight - badgeHeight) / 2, width, badgeHeight);
-    result.unshift({ label: constraint, frame: badgeFrame });
+    result.unshift({ label, frame: badgeFrame });
     right -= width + 3;
   }
   return result;
 };
 
 const measureShape = (
-  node: Exclude<SceneNode, TableNode | RelationAttributeNode | LifelineNode | ImageNode | CommentNode>,
+  node: Exclude<
+    SceneNode,
+    | TableNode
+    | RelationAttributeNode
+    | LifelineNode
+    | ImageNode
+    | CommentNode
+    | CircuitComponentNode
+    | CircuitJunctionNode
+  >,
   measurer: TextMeasurer,
   ports: Map<PortId, PortGeometry>,
 ): NodeLayout => {
@@ -652,8 +692,85 @@ const measureComment = (
   };
 };
 
+const measureCircuitComponent = (
+  node: CircuitComponentNode,
+  scene: SceneDocument,
+  measurer: TextMeasurer,
+  ports: Map<PortId, PortGeometry>,
+): CircuitComponentLayout => {
+  const resolved = resolveCircuitComponent(
+    node,
+    measurer,
+    resolveCircuitSettings(scene).standard,
+    scene.canvas.grid.size,
+  );
+  const pins: CircuitPinGeometry[] = resolved.pins.map((pin) => {
+    const port = addPort(
+      ports,
+      node.id,
+      { kind: "pin", pinId: pin.pinId },
+      pin.point,
+      pin.normal,
+      pin.label,
+    );
+    return {
+      ...port,
+      ref: { kind: "pin", pinId: pin.pinId },
+      pinId: pin.pinId,
+    };
+  });
+  return {
+    nodeId: node.id,
+    kind: "circuitComponent",
+    frame: resolved.frame,
+    bounds: unionCircuitBounds(resolved.frame, resolved.labelFrame),
+    ports: pins,
+    component: node.component,
+    rotation: node.rotation,
+    localFrame: node.frame,
+    center: resolved.center,
+    outline: resolved.outline,
+    focusOutline: resolved.focusOutline,
+    pins,
+    primitives: resolved.primitives,
+    labelFrame: resolved.labelFrame,
+    label: resolved.label,
+  };
+};
+
+const measureCircuitJunction = (
+  node: CircuitJunctionNode,
+  measurer: TextMeasurer,
+  ports: Map<PortId, PortGeometry>,
+  connected: boolean,
+): CircuitJunctionLayout => {
+  const resolved = resolveCircuitJunction(node, measurer);
+  const port = addPort(
+    ports,
+    node.id,
+    { kind: "center" },
+    resolved.center,
+    point(1, 0),
+    "center",
+  );
+  return {
+    nodeId: node.id,
+    kind: "circuitJunction",
+    frame: node.frame,
+    bounds: unionCircuitBounds(node.frame, resolved.labelFrame),
+    ports: [port],
+    junctionStyle: node.junctionStyle,
+    center: resolved.center,
+    radius: resolved.radius,
+    connected,
+    labelFrame: resolved.labelFrame,
+    label: resolved.label,
+  };
+};
+
 const measureNode = (
   node: SceneNode,
+  scene: SceneDocument,
   measurer: TextMeasurer,
   ports: Map<PortId, PortGeometry>,
 ): NodeLayout => {
@@ -669,10 +786,26 @@ const measureNode = (
   if (node.kind === "comment") {
     return measureComment(node, measurer, ports);
   }
+  if (node.kind === "circuitComponent") {
+    return measureCircuitComponent(node, scene, measurer, ports);
+  }
+  if (node.kind === "circuitJunction") {
+    const connected = Object.values(scene.edges).some(
+      (edge) =>
+        edge.semantic.family === "circuit" &&
+        ((edge.source.target === "node" &&
+          edge.source.nodeId === node.id &&
+          edge.source.port.kind === "center") ||
+          (edge.target.target === "node" &&
+            edge.target.nodeId === node.id &&
+            edge.target.port.kind === "center")),
+    );
+    return measureCircuitJunction(node, measurer, ports, connected);
+  }
   return measureShape(node, measurer, ports);
 };
 
-const pointOnPolyline = (
+export const pointOnPolyline = (
   points: readonly Point[],
   t: number,
 ): { point: Point; tangent: Point } => {
@@ -949,6 +1082,10 @@ const resolveAttachment = (
     return { point: found.point, normal: found.normal, portId: found.id };
   }
 
+  if (portRef.kind === "pin" || portRef.kind === "center") {
+    return null;
+  }
+
   if (portRef.kind === "row") {
     if (!isTableLikeNode(node)) return null;
     const row = findRow(node, portRef.rowId);
@@ -1180,8 +1317,7 @@ const routeEdge = (
         const previewBends = Math.max(0, preview.length - 2);
         if (
           previewValid &&
-          previewBends < astarBends &&
-          polylineLength(preview) <= polylineLength(astarPoints) + 0.5
+          previewBends < astarBends
         ) {
           return { points: preview, routedBy: "orthogonal" };
         }
@@ -1301,7 +1437,9 @@ const measureLabel = (
     : pointOnPolyline(edgePoints, label.anchor.t);
   const anchor = anchorHit.point;
   const style = resolveTextStyle(scene.theme.edge.labelText, label.textStyle);
-  const text = measurer.measure(label.text, style, label.maxWidth);
+  const text = scene.meta.diagramKind === "circuit"
+    ? measureRichText(label.text, style, measurer, label.maxWidth)
+    : measurer.measure(label.text, style, label.maxWidth);
   const padding = scene.theme.edge.labelPadding;
   const width = text.width + padding * 2;
   const height = text.height + padding * 2;
@@ -1431,9 +1569,54 @@ const computeEdge = (
     (frame): frame is Rect =>
       frame !== undefined && !ellipseFrames.some((ellipse) => ellipse === frame),
   );
-  const routingObstacles = labelObstacles.filter(
+  let routingObstacles = labelObstacles.filter(
     (obstacle) => !ellipseFrames.some((ellipse) => ellipse === obstacle),
   );
+  if (edge.routing.avoidWireOverlap === true) {
+    const wireObstacles: Rect[] = [];
+    const nearPoint = (point: Point, a: Point, b: Point): boolean => {
+      if (Math.abs(a.y - b.y) < 0.001) {
+        return Math.abs(point.y - a.y) <= 1 &&
+          point.x >= Math.min(a.x, b.x) - 1 &&
+          point.x <= Math.max(a.x, b.x) + 1;
+      }
+      if (Math.abs(a.x - b.x) < 0.001) {
+        return Math.abs(point.x - a.x) <= 1 &&
+          point.y >= Math.min(a.y, b.y) - 1 &&
+          point.y <= Math.max(a.y, b.y) + 1;
+      }
+      return false;
+    };
+    for (const other of computed.values()) {
+      if (other.edgeId === edge.id) continue;
+      for (let index = 1; index < other.points.length; index += 1) {
+        const a = other.points[index - 1];
+        const b = other.points[index];
+        if (a === undefined || b === undefined) continue;
+        if (nearPoint(source.point, a, b) || nearPoint(target.point, a, b)) continue;
+        if (Math.abs(a.y - b.y) < 0.001) {
+          wireObstacles.push(
+            rect(
+              Math.min(a.x, b.x) - 2,
+              a.y - 2,
+              Math.max(1, Math.abs(a.x - b.x) + 4),
+              4,
+            ),
+          );
+        } else if (Math.abs(a.x - b.x) < 0.001) {
+          wireObstacles.push(
+            rect(
+              a.x - 2,
+              Math.min(a.y, b.y) - 2,
+              4,
+              Math.max(1, Math.abs(a.y - b.y) + 4),
+            ),
+          );
+        }
+      }
+    }
+    routingObstacles = [...routingObstacles, ...wireObstacles];
+  }
   // A diagonal ellipse normal produced a diagonal final stub, which looked
   // like a spike when the orthogonal route met it. Use the dominant axis for
   // routing stubs; the visible endpoint stays exactly on the ellipse.
@@ -1558,14 +1741,23 @@ export const buildLayoutSnapshot = (
 ): LayoutSnapshot => {
   const ports = new Map<PortId, PortGeometry>();
   const nodeLayouts = Object.fromEntries(
-    Object.values(scene.nodes).map((node) => [node.id, measureNode(node, measurer, ports)]),
+    Object.values(scene.nodes).map((node) => [node.id, measureNode(node, scene, measurer, ports)]),
   ) as Readonly<Record<string, NodeLayout>>;
   const portRecord = Object.fromEntries(ports) as Readonly<Record<string, PortGeometry>>;
   const labelObstacles = Object.values(nodeLayouts)
     .filter((node) => node.kind !== "frame" && node.kind !== "lifeline")
-    .map((node) => node.frame);
+    .flatMap((node) => {
+      const frames = [node.frame];
+      if (
+        (node.kind === "circuitComponent" || node.kind === "circuitJunction") &&
+        node.labelFrame !== undefined
+      ) {
+        frames.push(node.labelFrame);
+      }
+      return frames;
+    });
   const placedLabelFrames: Rect[] = [];
-  const edgeLayouts = computeEdges(
+  const routedEdgeLayouts = computeEdges(
     scene,
     nodeLayouts,
     portRecord,
@@ -1573,6 +1765,37 @@ export const buildLayoutSnapshot = (
     labelObstacles,
     placedLabelFrames,
   );
+
+  const circuitEdges = Object.values(routedEdgeLayouts).filter((edge) => {
+    const sceneEdge = scene.edges[edge.edgeId];
+    return sceneEdge?.visible !== false && sceneEdge?.semantic.family === "circuit";
+  });
+  const bridgeMap = computeWireBridges(
+    circuitEdges.map((edge) => ({
+      edgeId: edge.edgeId,
+      points: edge.points,
+      z: scene.edges[edge.edgeId]?.z ?? 10,
+    })),
+    Object.values(nodeLayouts).flatMap((node) =>
+      node.kind === "circuitJunction" ? [node.center] : [],
+    ),
+    resolveCircuitSettings(scene),
+  );
+  const edgeLayouts = Object.fromEntries(
+    Object.entries(routedEdgeLayouts).map(([edgeId, edge]) => {
+      const bridges = bridgeMap.get(edgeId);
+      if (bridges === undefined || bridges.length === 0) return [edgeId, edge];
+      const radius = Math.max(...bridges.map((bridge) => bridge.radius));
+      return [
+        edgeId,
+        {
+          ...edge,
+          bridges,
+          bounds: expandRect(edge.bounds, radius),
+        },
+      ];
+    }),
+  ) as Readonly<Record<string, EdgeLayout>>;
 
   const nodeRects = Object.values(nodeLayouts).map((node) => node.bounds);
   const edgeRects = Object.values(edgeLayouts).map((edge) => edge.bounds);
@@ -1626,7 +1849,7 @@ export const buildLayoutSnapshot = (
     exportBounds,
     diagnostics: {
       routeCollisions: countRouteCollisions(nodeLayouts, edgeLayouts),
-      edgeCrossings: 0,
+      edgeCrossings: [...bridgeMap.values()].reduce((sum, bridges) => sum + bridges.length, 0),
       overlappingNodes,
       unplacedLabels: 0,
     },
@@ -1649,6 +1872,26 @@ export const withNodeFrames = (
       Object.entries(scene.nodes).map(([id, node]) => {
         const frame = frames[id];
         return [id, frame === undefined ? node : { ...node, frame }];
+      }),
+    ),
+  };
+};
+
+/** Applies transient 45° rotation previews without mutating the document. */
+export const withNodeRotations = (
+  scene: SceneDocument,
+  rotations: Readonly<Record<string, number>>,
+): SceneDocument => {
+  if (Object.keys(rotations).length === 0) return scene;
+  return {
+    ...scene,
+    nodes: Object.fromEntries(
+      Object.entries(scene.nodes).map(([id, node]) => {
+        const rotation = rotations[id];
+        if (rotation === undefined || node.kind !== "circuitComponent") {
+          return [id, node];
+        }
+        return [id, { ...node, rotation: rotation as CircuitComponentNode["rotation"] }];
       }),
     ),
   };

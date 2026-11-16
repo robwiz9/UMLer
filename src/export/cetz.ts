@@ -18,18 +18,25 @@
  */
 
 import type {
+  CircuitComponentLayout,
+  CircuitJunctionLayout,
   EdgeLabelLayout,
   EdgeLayout,
   LayoutSnapshot,
   NodeLayout,
+  RichTextSegment,
   ShapeNodeLayout,
   TableNodeLayout,
   TextMeasurement,
+  TextScript,
 } from "../model/layout.ts";
+import type { CircuitPrimitive } from "../model/circuit.ts";
 import type { FillStyle, ShapeNodeStyle, StrokeStyle, TextStyle, Theme } from "../model/styles.ts";
 import { MONO_FONT } from "../model/styles.ts";
 import type { EndpointMarker } from "../model/markers.ts";
 import type {
+  CircuitComponentNode,
+  CircuitJunctionNode,
   CommentNode,
   ImageAsset,
   ImageNode,
@@ -238,6 +245,43 @@ const strokeExpr = (stroke: StrokeStyle, scale: number): string => {
   return `(${parts.join(", ")})`;
 };
 
+const richTextBody = (
+  segments: readonly RichTextSegment[],
+  baseFontSize: number,
+): string => {
+  let body = "";
+  let openScript: TextScript | null = null;
+  const closeScript = (): void => {
+    if (openScript === null) return;
+    body += "])";
+    openScript = null;
+  };
+  for (const segment of segments) {
+    if (segment.script === "normal") {
+      closeScript();
+      body += `#(${quote(segment.text)})`;
+      continue;
+    }
+    if (segment.depth === 1) {
+      closeScript();
+      body += `#${segment.script}([`;
+      openScript = segment.script;
+      body += `#(${quote(segment.text)})`;
+      continue;
+    }
+    if (openScript === null) {
+      body += `#${segment.script}([`;
+      openScript = segment.script;
+    }
+    const baseline = (segment.depth - 1) *
+      (segment.script === "sub" ? 0.15 : -0.2) * baseFontSize;
+    body +=
+      `#text(size: ${segment.fontSize}pt, baseline: ${baseline}pt)[#(${quote(segment.text)})]`;
+  }
+  closeScript();
+  return body;
+};
+
 const textExpr = (measurement: TextMeasurement, scale: number): string => {
   const style = measurement.style;
   const parts = [`size: ${num(style.fontSize * scale)}pt`];
@@ -250,6 +294,12 @@ const textExpr = (measurement: TextMeasurement, scale: number): string => {
   if (style.weight !== 400) parts.push(`weight: "${weightName(style.weight)}"`);
   if (style.italic === true) parts.push(`style: "italic"`);
   parts.push(`fill: ${colorExpr(style.color)}`);
+  if (
+    measurement.segments !== undefined &&
+    measurement.segments.some((segment) => segment.script !== "normal")
+  ) {
+    return `text(${parts.join(", ")})[${richTextBody(measurement.segments, measurement.style.fontSize)}]`;
+  }
   return `text(${parts.join(", ")})[#(${quote(measurement.text)})]`;
 };
 
@@ -875,6 +925,214 @@ const drawComment = (
 };
 
 /* ------------------------------------------------------------------------- */
+/* Circuit                                                                   */
+/* ------------------------------------------------------------------------- */
+
+const circuitStroke = (
+  style: ShapeNodeStyle,
+  role: "body" | "thin" | "none" | undefined,
+): StrokeStyle | null => {
+  if (role === "none") return null;
+  return role === "thin"
+    ? { ...style.stroke, width: style.stroke.width * 0.65 }
+    : style.stroke;
+};
+
+const circuitFill = (
+  style: ShapeNodeStyle,
+  role: "none" | "paper" | "ink" | undefined,
+): FillStyle | null => {
+  if (role === "paper") return style.fill;
+  if (role === "ink") return { color: style.stroke.color };
+  return null;
+};
+
+const drawCircuitPrimitive = (
+  writer: Writer,
+  level: number,
+  p: Projector,
+  scale: number,
+  primitive: CircuitPrimitive,
+  style: ShapeNodeStyle,
+): void => {
+  switch (primitive.kind) {
+    case "polyline": {
+      const call = lineCall(
+        p,
+        primitive.points,
+        circuitStroke(style, primitive.stroke),
+        scale,
+        { close: primitive.closed, fill: circuitFill(style, primitive.fill) },
+      );
+      if (call !== null) writer.push(level, call);
+      return;
+    }
+    case "circle":
+      writer.push(
+        level,
+        circleCall(
+          p,
+          primitive.center,
+          primitive.radius,
+          circuitFill(style, primitive.fill),
+          circuitStroke(style, primitive.stroke),
+          scale,
+        ),
+      );
+      return;
+    case "rect":
+      writer.push(
+        level,
+        shapedRect(
+          p,
+          scale,
+          primitive.frame,
+          circuitFill(style, primitive.fill),
+          circuitStroke(style, primitive.stroke),
+          primitive.radius,
+        ),
+      );
+      return;
+    case "bezier": {
+      const stroke = circuitStroke(style, primitive.stroke);
+      const fill = circuitFill(style, primitive.fill);
+      const props: string[] = [];
+      if (fill !== null) props.push(`fill: ${fillExpr(fill)}`);
+      props.push(`stroke: ${stroke === null ? "none" : strokeExpr(stroke, scale)}`);
+      writer.push(
+        level,
+        `draw.bezier(${p.point(primitive.start)}, ${p.point(primitive.end)}, ${p.point(primitive.c1)}, ${p.point(primitive.c2)}, ${props.join(", ")})`,
+      );
+      return;
+    }
+    case "text": {
+      const anchor =
+        primitive.anchor === "start" ? "west" : primitive.anchor === "end" ? "east" : "center";
+      const call = textAt(p, scale, primitive.measurement, p.point(primitive.point), anchor);
+      if (call !== null) writer.push(level, call);
+      return;
+    }
+  }
+};
+
+const drawCircuitComponent = (
+  writer: Writer,
+  level: number,
+  p: Projector,
+  scale: number,
+  node: CircuitComponentNode,
+  layout: CircuitComponentLayout,
+): void => {
+  for (const primitive of layout.primitives) {
+    drawCircuitPrimitive(writer, level, p, scale, primitive, node.style);
+  }
+  if (layout.label !== undefined && layout.labelFrame !== undefined) {
+    const text = textAt(p, scale, layout.label, p.center(layout.labelFrame), "center");
+    if (text !== null) writer.push(level, text);
+  }
+};
+
+const drawCircuitJunction = (
+  writer: Writer,
+  level: number,
+  p: Projector,
+  scale: number,
+  node: CircuitJunctionNode,
+  layout: CircuitJunctionLayout,
+): void => {
+  if (!layout.connected) {
+    writer.push(
+      level,
+      circleCall(
+        p,
+        layout.center,
+        layout.radius,
+        null,
+        { color: "#94a3b8", width: 1, pattern: "dashed" },
+        scale,
+      ),
+    );
+  } else if (node.junctionStyle === "filled" || node.junctionStyle === "solid") {
+    writer.push(
+      level,
+      circleCall(
+        p,
+        layout.center,
+        layout.radius,
+        { color: node.style.stroke.color },
+        null,
+        scale,
+      ),
+    );
+  } else if (node.junctionStyle === "hollow") {
+    writer.push(
+      level,
+      circleCall(
+        p,
+        layout.center,
+        layout.radius,
+        node.style.fill,
+        node.style.stroke,
+        scale,
+      ),
+    );
+  }
+  if (layout.label !== undefined && layout.labelFrame !== undefined) {
+    const text = textAt(p, scale, layout.label, p.center(layout.labelFrame), "center");
+    if (text !== null) writer.push(level, text);
+  }
+};
+
+const projection = (a: Point, b: Point, value: Point): number => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const denominator = dx * dx + dy * dy;
+  if (denominator === 0) return 0;
+  return ((value.x - a.x) * dx + (value.y - a.y) * dy) / denominator;
+};
+
+const drawCircuitEdge = (
+  writer: Writer,
+  level: number,
+  p: Projector,
+  scale: number,
+  layout: EdgeLayout,
+  stroke: StrokeStyle,
+): void => {
+  if (layout.points.length < 2) return;
+  const bridges = layout.bridges ?? [];
+  for (let index = 1; index < layout.points.length; index += 1) {
+    const a = layout.points[index - 1];
+    const b = layout.points[index];
+    if (a === undefined || b === undefined) continue;
+    const onSegment = bridges
+      .map((bridge) => ({ bridge, t: projection(a, b, bridge.at) }))
+      .filter((entry) => entry.t > 1e-6 && entry.t < 1 - 1e-6)
+      .sort((left, right) => left.t - right.t);
+    if (onSegment.length === 0) {
+      writer.push(level, `draw.line(${p.point(a)}, ${p.point(b)}, stroke: ${strokeExpr(stroke, scale)})`);
+      continue;
+    }
+    let cursor = a;
+    for (const { bridge } of onSegment) {
+      writer.push(
+        level,
+        `draw.line(${p.point(cursor)}, ${p.point(bridge.from)}, stroke: ${strokeExpr(stroke, scale)})`,
+      );
+      writer.push(
+        level,
+        `draw.bezier(${p.point(bridge.from)}, ${p.point(bridge.to)}, ${p.point(bridge.c1)}, ${p.point(bridge.c2)}, stroke: ${strokeExpr(stroke, scale)})`,
+      );
+      cursor = bridge.to;
+    }
+    writer.push(
+      level,
+      `draw.line(${p.point(cursor)}, ${p.point(b)}, stroke: ${strokeExpr(stroke, scale)})`,
+    );
+  }
+};
+
+/* ------------------------------------------------------------------------- */
 /* Marks                                                                     */
 /* ------------------------------------------------------------------------- */
 
@@ -1082,8 +1340,13 @@ const drawEdge = (
   edge: SceneEdge,
   layout: EdgeLayout,
   usedMarks: Set<string>,
+  theme: Theme,
 ): void => {
   if (layout.points.length < 2) return;
+  if (edge.semantic.family === "circuit") {
+    drawCircuitEdge(writer, level, p, scale, layout, theme.shape.stroke);
+    return;
+  }
   const markers = effectiveMarkers(edge);
   const start = markerExpr(markers.source, scale);
   const end = markerExpr(markers.target, scale);
@@ -1279,6 +1542,26 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
           case "comment":
             drawComment(target, inner, p, fit.scale, node as CommentNode, nodeLayout);
             break;
+          case "circuitComponent":
+            drawCircuitComponent(
+              target,
+              inner,
+              p,
+              fit.scale,
+              node as CircuitComponentNode,
+              nodeLayout,
+            );
+            break;
+          case "circuitJunction":
+            drawCircuitJunction(
+              target,
+              inner,
+              p,
+              fit.scale,
+              node as CircuitJunctionNode,
+              nodeLayout,
+            );
+            break;
           default:
             drawShape(target, inner, p, fit.scale, node as ShapeSceneNode, nodeLayout);
             break;
@@ -1299,12 +1582,23 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
             );
           });
         }
-        const baseFrame = nodeLayout.kind === "lifeline" ? nodeLayout.headFrame : nodeLayout.frame;
-        const center = { x: baseFrame.x + baseFrame.width / 2, y: baseFrame.y + baseFrame.height / 2 };
-        target.push(inner, `draw.anchor("north", ${p.point({ x: center.x, y: baseFrame.y })})`);
-        target.push(inner, `draw.anchor("east", ${p.point({ x: baseFrame.x + baseFrame.width, y: center.y })})`);
-        target.push(inner, `draw.anchor("south", ${p.point({ x: center.x, y: baseFrame.y + baseFrame.height })})`);
-        target.push(inner, `draw.anchor("west", ${p.point({ x: baseFrame.x, y: center.y })})`);
+        if (nodeLayout.kind === "circuitComponent") {
+          for (const pin of nodeLayout.pins) {
+            target.push(
+              inner,
+              `draw.anchor("${toCetzAnchorName(`pin_${pin.pinId}`)}", ${p.point(pin.point)})`,
+            );
+          }
+        } else if (nodeLayout.kind === "circuitJunction") {
+          target.push(inner, `draw.anchor("center", ${p.point(nodeLayout.center)})`);
+        } else {
+          const baseFrame = nodeLayout.kind === "lifeline" ? nodeLayout.headFrame : nodeLayout.frame;
+          const center = { x: baseFrame.x + baseFrame.width / 2, y: baseFrame.y + baseFrame.height / 2 };
+          target.push(inner, `draw.anchor("north", ${p.point({ x: center.x, y: baseFrame.y })})`);
+          target.push(inner, `draw.anchor("east", ${p.point({ x: baseFrame.x + baseFrame.width, y: center.y })})`);
+          target.push(inner, `draw.anchor("south", ${p.point({ x: center.x, y: baseFrame.y + baseFrame.height })})`);
+          target.push(inner, `draw.anchor("west", ${p.point({ x: baseFrame.x, y: center.y })})`);
+        }
         target.push(level, "})");
         target.blank();
       }
@@ -1321,7 +1615,7 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
             drawEdgeLabel(target, level, p, fit.scale, labelLayout, scene.theme);
           }
         } else {
-          drawEdge(target, level, p, fit.scale, edge, edgeLayout, usedMarks);
+          drawEdge(target, level, p, fit.scale, edge, edgeLayout, usedMarks, scene.theme);
         }
       }
       target.blank();
@@ -1399,7 +1693,10 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
   const previewCode = [
     `#import "@preview/cetz:${CETZ_PREVIEW_VERSION}": canvas, draw`,
     `#set page(width: ${num(page.widthPt)}pt, height: ${num(page.heightPt)}pt, margin: (top: ${num(margins.top)}pt, right: ${num(margins.right)}pt, bottom: ${num(margins.bottom)}pt, left: ${num(margins.left)}pt))`,
-    `#set text(font: ${fontFamilyExpr("Latin Modern Roman")}, size: ${num(10.5 * fit.scale)}pt, fill: rgb("#111111"))`,
+    // Diagram text carries its own zoom-scaled size. This document-level size
+    // only styles surrounding content such as the figure caption, so it must
+    // stay fixed when the diagram zoom changes.
+    `#set text(font: ${fontFamilyExpr("Latin Modern Roman")}, size: 10.5pt, fill: rgb("#111111"))`,
     "",
     code,
   ].join("\n");

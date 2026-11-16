@@ -46,11 +46,22 @@ export interface GitHubDirectoryEntry {
   readonly type: "dir" | "file" | "symlink" | "submodule";
 }
 
+export interface GitHubCommitInfo {
+  readonly sha: string;
+  readonly message: string;
+  readonly authorName: string;
+  readonly authorEmail: string;
+  readonly date: string;
+  readonly htmlUrl: string;
+}
+
 export interface GitHubRemoteFile {
   readonly text: string;
   readonly sha: string;
   readonly htmlUrl: string;
   readonly size: number;
+  /** Last commit that touched the selected file, when GitHub reports it. */
+  readonly commit?: GitHubCommitInfo;
 }
 
 export interface GitHubOAuthConfig {
@@ -151,6 +162,10 @@ const apiRequest = async (
   try {
     response = await fetch(`${API_ROOT}${path}`, {
       ...init,
+      // Conflict resolution must observe the latest remote blob SHA. A cached
+      // Contents API response would make an explicit overwrite keep supplying
+      // the same stale SHA and fail repeatedly.
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
@@ -224,6 +239,51 @@ const readRepo = (value: unknown): GitHubRepo | null => {
     private: value.private === true,
     htmlUrl: typeof value.html_url === "string" ? value.html_url : "",
     canPush: permissions.push !== false,
+  };
+};
+
+const readCommitInfo = (value: unknown): GitHubCommitInfo | undefined => {
+  if (!isRecord(value)) return undefined;
+  const author = isRecord(value.author) ? value.author : {};
+  const committer = isRecord(value.committer) ? value.committer : {};
+  const date =
+    typeof author.date === "string"
+      ? author.date
+      : typeof committer.date === "string"
+        ? committer.date
+        : "";
+  return {
+    sha: typeof value.sha === "string" ? value.sha : "",
+    message: typeof value.message === "string" ? value.message : "",
+    authorName:
+      typeof author.name === "string" && author.name.length > 0
+        ? author.name
+        : "Unknown author",
+    authorEmail: typeof author.email === "string" ? author.email : "",
+    date,
+    htmlUrl: typeof value.html_url === "string" ? value.html_url : "",
+  };
+};
+
+/**
+ * Parses one entry from `GET /repos/{owner}/{repo}/commits?path=...`. The
+ * Contents API file response omits commit details, so this is the reliable
+ * source for the author name shown in the merge dialog.
+ */
+export const parseLatestFileCommit = (
+  value: unknown,
+): GitHubCommitInfo | undefined => {
+  if (!isRecord(value) || !isRecord(value.commit)) return undefined;
+  const info = readCommitInfo(value.commit);
+  if (info === undefined) return undefined;
+  const actor = isRecord(value.author) ? value.author : {};
+  if (info.authorName === "Unknown author" && typeof actor.login === "string") {
+    return { ...info, authorName: actor.login };
+  }
+  return {
+    ...info,
+    sha: typeof value.sha === "string" ? value.sha : info.sha,
+    htmlUrl: typeof value.html_url === "string" ? value.html_url : info.htmlUrl,
   };
 };
 
@@ -456,6 +516,41 @@ export const listBranches = async (
     .map((branch) => ({ name: branch.name }));
 };
 
+const branchRefPath = (branch: string): string =>
+  branch
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+/**
+ * Creates a branch from the current head of `target.branch`. The new branch
+ * keeps the same commits, so opening the selected project from it starts with
+ * the file that existed on the base branch; the next save targets the branch.
+ */
+export const createBranch = async (
+  token: string,
+  target: Pick<GitHubTarget, "owner" | "repo" | "branch">,
+  newBranch: string,
+): Promise<GitHubBranch> => {
+  const { data } = await apiRequest(
+    token,
+    `${repoPath(target)}/git/ref/heads/${branchRefPath(target.branch)}`,
+  );
+  const sha =
+    isRecord(data) && isRecord(data.object) && typeof data.object.sha === "string"
+      ? data.object.sha
+      : null;
+  if (sha === null) {
+    throw new GitHubApiError("GitHub did not return the base branch commit.", 200);
+  }
+  await apiRequest(token, `${repoPath(target)}/git/refs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/heads/${newBranch}`, sha }),
+  });
+  return { name: newBranch };
+};
+
 export const listDirectoryContents = async (
   token: string,
   target: GitHubTarget,
@@ -468,6 +563,7 @@ export const listDirectoryContents = async (
     response = await fetch(
       `${API_ROOT}${repoPath(target)}/contents${suffix}?ref=${encodeURIComponent(target.branch)}`,
       {
+        cache: "no-store",
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
@@ -510,6 +606,7 @@ export const getProjectFile = async (
   let response: Response;
   try {
     response = await fetch(fileUrl, {
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${token}`,
@@ -546,12 +643,14 @@ export const getProjectFile = async (
 
   const size = typeof data.size === "number" ? data.size : 0;
   const htmlUrl = typeof data.html_url === "string" ? data.html_url : "";
+  const commit = readCommitInfo(data.commit);
   if (typeof data.content === "string" && data.content.length > 0) {
     return {
       text: base64ToUtf8(data.content),
       sha: data.sha,
       htmlUrl,
       size,
+      ...(commit === undefined ? {} : { commit }),
     };
   }
 
@@ -560,6 +659,7 @@ export const getProjectFile = async (
   let rawResponse: Response;
   try {
     rawResponse = await fetch(fileUrl, {
+      cache: "no-store",
       headers: {
         Accept: "application/vnd.github.raw",
         Authorization: `Bearer ${token}`,
@@ -581,7 +681,29 @@ export const getProjectFile = async (
     sha: data.sha,
     htmlUrl,
     size,
+    ...(commit === undefined ? {} : { commit }),
   };
+};
+
+/**
+ * The last commit that touched the selected project file. Used only when a
+ * conflict dialog needs attribution, so normal saves do not pay for it.
+ */
+export const getLatestFileCommit = async (
+  token: string,
+  target: Pick<GitHubTarget, "owner" | "repo" | "branch" | "path">,
+): Promise<GitHubCommitInfo | undefined> => {
+  const query = new URLSearchParams({
+    path: target.path,
+    sha: target.branch,
+    per_page: "1",
+  });
+  const { data } = await apiRequest(
+    token,
+    `${repoPath(target)}/commits?${query.toString()}`,
+  );
+  if (!Array.isArray(data)) return undefined;
+  return parseLatestFileCommit(data[0]);
 };
 
 export interface WriteProjectFileInput {
@@ -627,7 +749,10 @@ export const writeProjectFile = async (
 export const isGitHubConflict = (error: unknown): boolean => {
   if (!(error instanceof GitHubApiError)) return false;
   if (error.status === 409) return true;
-  return error.status === 422 && /sha|conflict|already exists/i.test(error.message);
+  // The Contents API's stale-blob response is `"<path> does not match <sha>"`.
+  // It names neither "sha" nor "conflict", so the plain message must also be
+  // classified as a conflict or explicit overwrite retries never run.
+  return error.status === 422 && /sha|conflict|already exists|does not match/i.test(error.message);
 };
 
 export const describeGitHubError = (error: unknown): string => {
@@ -641,6 +766,9 @@ export const describeGitHubError = (error: unknown): string => {
     }
     if (error.status === 404) {
       return "GitHub could not find the repository, branch or file. Check the selection.";
+    }
+    if (error.status === 422 && /reference already exists|branch.*already exists/i.test(error.message)) {
+      return "A branch with that name already exists. Choose another name.";
     }
     if (error.status === 409 || error.status === 422) {
       return `${error.message} The remote file may have changed. Try saving again to resolve it.`;

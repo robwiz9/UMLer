@@ -66,26 +66,32 @@ endpoints do not send CORS headers. No client secret is needed or stored. Create
 the dialog’s **Set up GitHub OAuth** field (stored in this browser). A personal access token with `repo` scope
 is available as a fallback and is kept in memory only.
 
-The picker selects a repository, branch, folder and project file name. A debounced contents lookup reports
-whether the path contains an existing UMLer project. On open:
+The picker selects a repository, branch, folder and project file name. **New branch…** creates a branch from
+the selected base branch and switches the picker to it, so a project opened from there keeps its saves on that
+branch. A debounced contents lookup reports whether the path contains an existing UMLer project. On open:
 
 - an existing file is validated and loaded, restoring its active scene;
 - a missing file creates a blank ER project at that path;
 - if the local project has unsaved changes, the user chooses **Create blank project** / **Upload current
   project**, or for an existing remote, **Replace local with remote** / **Overwrite remote**.
 
-A bound project records the remote blob SHA and a project digest. The status bar shows the repository path and
-**Save** / **Synced** state; **Save to GitHub** and `Ctrl/Cmd+S` write all scenes plus the active scene. Save
-first checks the remote SHA. If the remote changed, was deleted, or the PUT returns a conflict, UMLer does not
-auto-merge: it offers **Replace local with remote**, **Overwrite remote** / **Recreate remote**, or **Cancel**.
-A remote file that fails `deserializeProjectFile` is rejected before it can touch the local canvas, and image
-bytes remain metadata-only like project-file exports.
+A bound project records the remote blob SHA, a project digest and per-scene baseline digests. The status bar
+shows the repository path and **Save** / **Synced** state; **Save to GitHub** and `Ctrl/Cmd+S` write all scenes
+plus the active scene. On page load, a bound project checks the remote SHA; overlapping edits raise a sticky warning
+toast whose **Review** action opens the merge picker. Save also first checks the remote SHA. If the remote changed,
+was deleted, or the PUT returns a conflict, UMLer does not silently pick a side: it offers **Replace local with
+remote**, **Overwrite remote** / **Recreate remote**, or **Cancel**. Edits to different scenes merge automatically
+and are written back without a warning. When individual scenes changed on both sides, the dialog lists those scenes
+in a three-column local/remote/keep-both picker with local edit times, the remote commit author/time, and optional
+canvas previews. Keeping both inserts the remote scene as a new project scene. A remote file that fails
+`deserializeProjectFile` is rejected before it can touch the local canvas, and image bytes remain metadata-only like
+project-file exports.
 
 The open project (all scenes, active scene, GitHub binding, sync baseline) is autosaved to browser storage and
 restored on refresh, so reopening the app does not reset to the demo. The GitHub session token is stored in
-`sessionStorage`: it survives a page refresh but is cleared when the tab closes. Signing out removes it. The
-path and SHA restore with the project, so **Open from GitHub** starts at the previously bound repository, branch,
-folder and file.
+`localStorage`, so a refresh and additional tabs stay signed in. Signing out removes it. A session from the older
+tab-scoped `sessionStorage` key is migrated on load. The path and SHA restore with the project, so **Open from
+GitHub** starts at the previously bound repository, branch, folder and file.
 
 A bound project auto-saves to GitHub every two minutes when its project digest differs from the last sync. The
 status bar shows **Saving…**, and a sticky progress toast stays visible until the request resolves. Manual
@@ -821,8 +827,8 @@ Browser checks:
   the project and repository path return instead of the demo; reopen the path and confirm a non-empty ER project
   loads with its nodes; exercise both **Replace local with remote** and **Overwrite remote** on load/save
   conflicts and **Recreate remote** after a deletion;
-- confirm the GitHub token survives a refresh but is removed on sign-out (tab-scoped session storage); confirm the
-  client-id setup can be reopened and forgotten without losing the current project;
+- confirm the GitHub token survives a refresh and opens in a new tab, then is removed on sign-out (shared local
+  storage); confirm the client-id setup can be reopened and forgotten without losing the current project;
 - accelerate the two-minute auto-save timer and confirm a dirty bound project saves; make the remote file differ
   and confirm auto-save shows a sticky **Review** warning toast without opening a dialog until the toast is
   clicked; confirm a delayed save shows the **Saving to GitHub…** progress toast and then the success toast;

@@ -66,6 +66,7 @@ const binding: GitHubBinding = {
   syncedDigest: "sync-digest",
   syncedAt: "2026-01-01T00:00:00.000Z",
   htmlUrl: "https://github.com/acme/diagrams",
+  sceneDigests: { [activeScene.id]: "scene-digest" },
 };
 
 assert(loadStoredProject() === null, "empty storage should not restore a project");
@@ -95,6 +96,10 @@ assert(restored?.activeSceneId === activeScene.id, "restored project lost the ac
 assert(restored?.githubBinding?.path === binding.path, "restored project lost the GitHub path");
 assert(restored?.githubBinding?.sha === binding.sha, "restored project lost the GitHub SHA");
 assert(
+  restored?.githubBinding?.sceneDigests?.[activeScene.id] === "scene-digest",
+  "restored project lost its per-scene GitHub baseline",
+);
+assert(
   restored?.baselineDigest === projectDigest(scenes, activeScene.id),
   "restored project lost its sync baseline",
 );
@@ -115,15 +120,47 @@ localStorage.setItem("umler.openProject", JSON.stringify({ version: 1, scenes: [
 assert(loadStoredProject() === null, "empty recovery project should be ignored");
 
 assert(loadStoredGitHubSession() === null, "empty storage should not restore a session");
+
+// A session written by the old per-tab storage should migrate on first load.
+sessionStorage.setItem(
+  "umler.github.session",
+  JSON.stringify({
+    token: "legacy-token",
+    user: { login: "legacy", name: null, avatarUrl: "", htmlUrl: "" },
+  }),
+);
+const migrated = loadStoredGitHubSession();
+assert(migrated?.token === "legacy-token", "legacy session token should migrate");
+assert(
+  localStorage.getItem("umler.github.session") !== null,
+  "legacy session should move to shared local storage",
+);
+assert(
+  sessionStorage.getItem("umler.github.session") === null,
+  "legacy tab session should be cleared after migration",
+);
+
 storeGitHubSession({
   token: "token",
   user: { login: "octocat", name: "Octo Cat", avatarUrl: "", htmlUrl: "" },
 });
 const session = loadStoredGitHubSession();
-assert(session?.token === "token", "session token should restore");
+assert(session?.token === "token", "session token should restore across tabs");
 assert(session?.user.login === "octocat", "session user should restore");
+assert(
+  localStorage.getItem("umler.github.session") !== null,
+  "the shared session should persist in local storage",
+);
+assert(
+  sessionStorage.getItem("umler.github.session") === null,
+  "the shared session should not remain tab-scoped",
+);
 storeGitHubSession(null);
 assert(loadStoredGitHubSession() === null, "signing out should clear the session");
+assert(
+  localStorage.getItem("umler.github.session") === null,
+  "signing out should remove the shared session",
+);
 
 assert(
   JSON.stringify(loadUiPreferences()) === JSON.stringify(DEFAULT_UI_PREFERENCES),

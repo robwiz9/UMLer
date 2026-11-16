@@ -12,6 +12,7 @@ import type { SceneEdge } from "./edges.ts";
 import type { LayoutSnapshot } from "./layout.ts";
 import { DEFAULT_THEME, type Theme } from "./styles.ts";
 import { rect, type Rect } from "./geometry.ts";
+import { DEFAULT_CIRCUIT, type CircuitSettings } from "./circuit.ts";
 
 export type DiagramKind =
   | "er"
@@ -20,7 +21,8 @@ export type DiagramKind =
   | "uml-object"
   | "uml-sequence"
   | "uml-communication"
-  | "uml-state-machine";
+  | "uml-state-machine"
+  | "circuit";
 
 export const DIAGRAM_KIND_LABELS: Record<DiagramKind, string> = {
   er: "Entity-Relation",
@@ -30,6 +32,7 @@ export const DIAGRAM_KIND_LABELS: Record<DiagramKind, string> = {
   "uml-sequence": "Sequence",
   "uml-communication": "Communication",
   "uml-state-machine": "State Machine",
+  circuit: "Circuit",
 };
 
 export interface SceneMeta {
@@ -83,6 +86,8 @@ export interface LayoutSettings {
   readonly respectLocks: boolean;
   /** Run a crossing-reduction pass after layering. */
   readonly reduceCrossings: boolean;
+  /** Hide degree-two junctions left by wire-only translation. */
+  readonly visualRefinements?: boolean;
   readonly maxIterations: number;
 }
 
@@ -106,6 +111,8 @@ export interface SceneDocument {
   readonly nodes: Readonly<Record<string, SceneNode>>;
   readonly edges: Readonly<Record<string, SceneEdge>>;
   readonly assets: Readonly<Record<string, ImageAsset>>;
+  /** Present on circuit scenes; absent means the IEC/default settings apply. */
+  readonly circuit?: CircuitSettings;
 }
 
 export interface EditorSession {
@@ -178,6 +185,7 @@ export const createEmptyScene = (
     nodes: {},
     edges: {},
     assets: {},
+    ...(diagramKind === "circuit" ? { circuit: DEFAULT_CIRCUIT } : {}),
   };
 };
 

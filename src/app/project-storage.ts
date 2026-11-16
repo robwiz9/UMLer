@@ -33,6 +33,17 @@ type UnknownRecord = Record<string, unknown>;
 const isRecord = (value: unknown): value is UnknownRecord =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+const readSceneDigests = (
+  value: unknown,
+): Readonly<Record<string, string>> | undefined => {
+  if (!isRecord(value)) return undefined;
+  const digests: Record<string, string> = {};
+  for (const [sceneId, digest] of Object.entries(value)) {
+    if (typeof digest === "string" && digest.length > 0) digests[sceneId] = digest;
+  }
+  return Object.keys(digests).length === 0 ? undefined : digests;
+};
+
 const readBinding = (value: unknown): GitHubBinding | null => {
   if (!isRecord(value)) return null;
   const { owner, repo, branch, path, syncedDigest, syncedAt } = value;
@@ -60,6 +71,9 @@ const readBinding = (value: unknown): GitHubBinding | null => {
     syncedDigest,
     syncedAt,
     ...(typeof value.htmlUrl === "string" ? { htmlUrl: value.htmlUrl } : {}),
+    ...(readSceneDigests(value.sceneDigests) === undefined
+      ? {}
+      : { sceneDigests: readSceneDigests(value.sceneDigests) }),
   };
 };
 

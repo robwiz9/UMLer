@@ -9,6 +9,7 @@ import { DeferredColorInput } from "./DeferredColorInput.tsx";
 interface ThemePanelProps {
   readonly theme: Theme;
   readonly onChange: (theme: Theme) => void;
+  readonly variant: string;
 }
 
 const withTint = (theme: Theme, color: string | null): Theme => ({
@@ -58,7 +59,7 @@ const withLabelBackground = (theme: Theme, color: string | null): Theme => ({
   },
 });
 
-export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
+export const ThemePanel = ({ theme, onChange, variant = "full" }: ThemePanelProps) => {
   const id = useId();
   const transparent =
     theme.table.fill.color === null || theme.shape.fill.color === null;
@@ -149,7 +150,7 @@ export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
         </label>
       </div>
 
-      <label className="theme-transparent">
+      {variant === "full" ? <label className="theme-transparent">
         <input
           id={`${id}-transparent-tint`}
           name={`${id}-transparent-tint`}
@@ -160,7 +161,7 @@ export const ThemePanel = ({ theme, onChange }: ThemePanelProps) => {
           }}
         />
         Transparent tint
-      </label>
+      </label> : null}
 
       <label className="theme-transparent">
         <input

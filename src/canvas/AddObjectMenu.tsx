@@ -1,10 +1,13 @@
 import type { DiagramKind } from "../model/scene.ts";
 import { DIAGRAM_KIND_LABELS } from "../model/scene.ts";
+import type { CircuitStandard } from "../model/circuit.ts";
 import type { ObjectTemplate, ObjectTemplateId } from "../model/object-catalog.ts";
 import { objectTemplatesFor } from "../model/object-catalog.ts";
+import { CircuitAddObjectMenu } from "./CircuitAddObjectMenu.tsx";
 
 interface AddObjectMenuProps {
   readonly diagramKind: DiagramKind;
+  readonly standard?: CircuitStandard;
   readonly onPick: (templateId: ObjectTemplateId) => void;
   readonly onClose: () => void;
 }
@@ -17,7 +20,10 @@ const GROUPS: readonly {
   { key: "annotation", title: "Annotations" },
 ];
 
-export const AddObjectMenu = ({ diagramKind, onPick, onClose }: AddObjectMenuProps) => {
+export const AddObjectMenu = ({ diagramKind, standard = "iec", onPick, onClose }: AddObjectMenuProps) => {
+  if (diagramKind === "circuit") {
+    return <CircuitAddObjectMenu standard={standard} onPick={onPick} onClose={onClose} />;
+  }
   const templates = objectTemplatesFor(diagramKind);
   return (
     <div className="add-object-menu" role="menu" aria-label="Add object">

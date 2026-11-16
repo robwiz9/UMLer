@@ -27,6 +27,8 @@ const kindLabel: Record<SceneNode["kind"], string> = {
   frame: "Frame / boundary",
   image: "Foreign image",
   comment: "Comment / note",
+  circuitComponent: "Circuit component",
+  circuitJunction: "Circuit junction",
 };
 
 const rowCount = (node: SceneNode): number | null => {

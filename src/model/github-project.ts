@@ -8,6 +8,7 @@
 
 import type { ImageAsset } from "./nodes.ts";
 import type { SceneDocument } from "./scene.ts";
+import { newId, type SceneId } from "./ids.ts";
 
 export const DEFAULT_GITHUB_PROJECT_FILE = "umler-project.umler";
 export const GITHUB_PROJECT_EXTENSION = ".umler";
@@ -26,6 +27,8 @@ export interface GitHubBinding extends GitHubTarget {
   readonly syncedDigest: string;
   readonly syncedAt: string;
   readonly htmlUrl?: string;
+  /** Per-scene baseline used for three-way conflict detection. */
+  readonly sceneDigests?: Readonly<Record<string, string>>;
 }
 
 export interface ProjectSnapshot {
@@ -34,6 +37,155 @@ export interface ProjectSnapshot {
   /** Project asset library, including uploaded images not currently placed. */
   readonly assets?: Readonly<Record<string, ImageAsset>>;
 }
+
+export type MergeChoice = "local" | "remote" | "both" | null;
+
+export interface SceneMergeConflict {
+  readonly sceneId: string;
+  readonly local: SceneDocument;
+  readonly remote: SceneDocument;
+}
+
+/** Fingerprint of one scene, independent of embedded image bytes. */
+export const sceneDigest = (scene: SceneDocument): string =>
+  projectDigest([scene], scene.id);
+
+export const sceneDigestMap = (
+  scenes: readonly SceneDocument[],
+): Readonly<Record<string, string>> =>
+  Object.fromEntries(scenes.map((scene) => [scene.id, sceneDigest(scene)]));
+
+/**
+ * Scenes present on both sides with different content. When a per-scene
+ * baseline from the last sync is available, only scenes changed on both sides
+ * are conflicts; one-sided changes can be merged automatically.
+ */
+export const conflictingScenes = (
+  localScenes: readonly SceneDocument[],
+  remoteScenes: readonly SceneDocument[],
+  baseline?: Readonly<Record<string, string>>,
+): readonly SceneMergeConflict[] => {
+  const remoteById = new Map(remoteScenes.map((scene) => [scene.id, scene]));
+  return localScenes.flatMap((local) => {
+    const remote = remoteById.get(local.id);
+    if (remote === undefined) return [];
+    const localDigest = sceneDigest(local);
+    const remoteDigest = sceneDigest(remote);
+    if (localDigest === remoteDigest) return [];
+    if (baseline !== undefined) {
+      const base = baseline[local.id];
+      if (base !== undefined && (localDigest === base || remoteDigest === base)) {
+        return [];
+      }
+    }
+    return [{ sceneId: local.id, local, remote }];
+  });
+};
+
+/**
+ * Choices for differing scenes that changed on only one side. Returning these
+ * alongside the explicit conflict choices lets the merge retain one-sided
+ * remote edits without asking the user about them.
+ */
+export const mergeAutoChoices = (
+  localScenes: readonly SceneDocument[],
+  remoteScenes: readonly SceneDocument[],
+  baseline?: Readonly<Record<string, string>>,
+): Readonly<Record<string, MergeChoice>> => {
+  if (baseline === undefined) return {};
+  const remoteById = new Map(remoteScenes.map((scene) => [scene.id, scene]));
+  const choices: Record<string, MergeChoice> = {};
+  for (const local of localScenes) {
+    const remote = remoteById.get(local.id);
+    if (remote === undefined) continue;
+    const base = baseline[local.id];
+    if (base === undefined) continue;
+    const localChanged = sceneDigest(local) !== base;
+    const remoteChanged = sceneDigest(remote) !== base;
+    if (localChanged && !remoteChanged) choices[local.id] = "local";
+    if (!localChanged && remoteChanged) choices[local.id] = "remote";
+  }
+  return choices;
+};
+
+export interface MergedProjectScenes {
+  readonly scenes: readonly SceneDocument[];
+  readonly activeSceneId: string;
+}
+
+const uniqueSceneTitle = (
+  base: string,
+  usedTitles: ReadonlySet<string>,
+): string => {
+  const stem = base.trim().length > 0 ? base.trim() : "Remote scene";
+  const first = `${stem} (remote)`;
+  if (!usedTitles.has(first)) return first;
+  let suffix = 2;
+  while (usedTitles.has(`${stem} (remote ${suffix})`)) suffix += 1;
+  return `${stem} (remote ${suffix})`;
+};
+
+/**
+ * Combines the two project copies. For each conflicting scene the chosen side
+ * replaces both copies, or "both" keeps the local scene and inserts a renamed
+ * copy of the remote scene as a separate project scene.
+ */
+export const mergeProjectScenes = (
+  localScenes: readonly SceneDocument[],
+  localActiveSceneId: string,
+  remoteScenes: readonly SceneDocument[],
+  remoteActiveSceneId: string,
+  choices: Readonly<Record<string, MergeChoice>>,
+): MergedProjectScenes => {
+  const remoteById = new Map(remoteScenes.map((scene) => [scene.id, scene]));
+  const scenes: SceneDocument[] = [];
+  const usedIds = new Set<string>();
+  const usedTitles = new Set<string>();
+  for (const scene of [...localScenes, ...remoteScenes]) usedTitles.add(scene.meta.title);
+
+  for (const local of localScenes) {
+    const remote = remoteById.get(local.id);
+    const differs =
+      remote !== undefined && sceneDigest(local) !== sceneDigest(remote);
+    const choice: MergeChoice = differs ? choices[local.id] ?? null : null;
+    if (choice === "remote" && remote !== undefined) {
+      scenes.push(remote);
+      usedIds.add(local.id);
+      continue;
+    }
+    scenes.push(local);
+    usedIds.add(local.id);
+    if (choice === "both" && remote !== undefined) {
+      const title = uniqueSceneTitle(remote.meta.title, usedTitles);
+      usedTitles.add(title);
+      const now = new Date().toISOString();
+      const inserted: SceneDocument = {
+        ...remote,
+        id: newId<SceneId>("scene"),
+        meta: {
+          ...remote.meta,
+          title,
+          createdAt: now,
+          updatedAt: now,
+        },
+      };
+      scenes.push(inserted);
+      usedIds.add(inserted.id);
+    }
+  }
+  for (const remote of remoteScenes) {
+    if (usedIds.has(remote.id)) continue;
+    scenes.push(remote);
+    usedIds.add(remote.id);
+  }
+  const activeSceneId =
+    scenes.some((scene) => scene.id === localActiveSceneId)
+      ? localActiveSceneId
+      : scenes.some((scene) => scene.id === remoteActiveSceneId)
+        ? remoteActiveSceneId
+        : scenes[0]?.id ?? localActiveSceneId;
+  return { scenes, activeSceneId };
+};
 
 export type RemoteFileRelation = "unchanged" | "changed" | "deleted" | "appeared";
 
@@ -120,6 +272,43 @@ export const normalizeGitHubFolderName = (raw: string): string => {
     throw new Error("A folder name cannot contain other folders.");
   }
   return normalized;
+};
+
+/** Characters Git forbids anywhere in a ref name (`git-check-ref-format`). */
+const INVALID_BRANCH_CHARACTERS = /[\u0000-\u0020\u007f~^:?*[\\]/;
+
+/**
+ * Validates a branch name before it reaches GitHub. Slashes are allowed for
+ * namespaced branches such as `feature/er-export`, but every path component
+ * still has to be a valid Git ref component.
+ */
+export const normalizeGitHubBranchName = (raw: string): string => {
+  const value = raw.trim();
+  if (value.length === 0) throw new Error("Enter a branch name.");
+  if (value.length > 255) throw new Error("The branch name is too long.");
+  if (value === "HEAD" || value.startsWith("-")) {
+    throw new Error("That branch name is reserved.");
+  }
+  if (
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("//") ||
+    value.includes("..") ||
+    value.includes("@{") ||
+    value.endsWith(".") ||
+    value.endsWith(".lock")
+  ) {
+    throw new Error("That branch name is not valid.");
+  }
+  if (INVALID_BRANCH_CHARACTERS.test(value)) {
+    throw new Error("A branch name cannot contain spaces or Git special characters.");
+  }
+  for (const component of value.split("/")) {
+    if (component.length === 0 || component.startsWith(".") || component.endsWith(".lock")) {
+      throw new Error("That branch name is not valid.");
+    }
+  }
+  return value;
 };
 
 export const joinGitHubFolder = (folder: string, name: string): string => {

@@ -1,15 +1,18 @@
 import type React from "react";
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SceneDocument } from "../model/scene.ts";
 import type { EdgeLabelLayout, EdgeLayout, LayoutSnapshot, NodeLayout, PortGeometry } from "../model/layout.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
-import type { ActivationId, RowId, SectionId } from "../model/ids.ts";
+import { asNodeId, type ActivationId, type NodeId, type RowId, type SectionId } from "../model/ids.ts";
 import { NodeFocusMenu } from "./NodeFocusMenu.tsx";
 import { DraggablePanel } from "./DraggablePanel.tsx";
 import type { Point, Rect } from "../model/geometry.ts";
-import { rectContainsPoint, rectFromPoints, snap, sub } from "../model/geometry.ts";
+import { add, expandRect, point, rectCenter, rectContainsPoint, rectFromPoints, scale, snap, sub } from "../model/geometry.ts";
+import { rotatePoint } from "../layout/circuit.ts";
+import { normalizeRotation, resolveCircuitSettings } from "../model/circuit.ts";
+import { canExtendToEmpty, MIN_EXTEND_SCREEN_PX, minExtendWorld } from "./circuit-draw.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import type { EdgeAttachmentRef, PortAttachmentRef } from "../model/edge-create.ts";
 import { childrenOfBoundary } from "../model/containment.ts";
@@ -18,13 +21,17 @@ import type { Camera } from "./camera.ts";
 import { fitBounds, zoomAtScreenPoint, type ViewportSize } from "./camera.ts";
 import { Grid } from "./Grid.tsx";
 import { NodeSkeleton } from "./NodeSkeleton.tsx";
-import { EdgeLabelView, EdgeLayer, edgeLayerItem, edgeLinePoints } from "./Edges.tsx";
+import { EdgeLabelView, EdgeLayer, edgeLayerItem, edgeLinePoints, edgePathData } from "./Edges.tsx";
 import { EdgeEndpointPopover } from "./EdgeEndpointPopover.tsx";
 import { EdgeInspector } from "../app/EdgeInspector.tsx";
 import { isSupportedImageFile } from "../app/image-assets.ts";
 import { PortHandles } from "./PortHandles.tsx";
 import type { EdgeEnd } from "../model/markers.ts";
 import type { EdgeLabelZone, EdgeRoutingMode } from "../model/edges.ts";
+import type { ShiftBranchDrag, ShiftBranchGroup, WireOrientation } from "../model/circuit-wires.ts";
+import { createShiftDragBranchesResult, createDuplicateParallelBranches, detachCircuitComponentEndings } from "../model/circuit-wires.ts";
+import { circuitComponent } from "../model/circuit-catalog.ts";
+import { copySceneNodes, pasteSceneClipboard } from "../model/clipboard.ts";
 import type { EndpointMarker } from "../model/markers.ts";
 import type { StrokePattern, TextStyleOverride } from "../model/styles.ts";
 import {
@@ -82,6 +89,7 @@ interface CanvasStageProps {
   readonly selectedNodeId: string | null;
   readonly selectedNodeIds: readonly string[];
   readonly selectedEdgeId: string | null;
+  readonly selectedEdgeIds: readonly string[];
   readonly selectedActivation: {
     readonly nodeId: string;
     readonly activationId: ActivationId;
@@ -91,6 +99,7 @@ interface CanvasStageProps {
   readonly onSelectNodes: (nodeIds: readonly string[], primary?: string | null) => void;
   readonly onToggleNodeSelection: (nodeId: string) => void;
   readonly onSelectEdge: (edgeId: string | null) => void;
+  readonly onSelectEdges: (edgeIds: readonly string[]) => void;
   readonly onSelectActivation: (
     activation: { readonly nodeId: string; readonly activationId: ActivationId } | null,
   ) => void;
@@ -110,6 +119,25 @@ interface CanvasStageProps {
   readonly onSetStrokeWidth: (edgeId: string, width: number) => void;
   readonly onSetRoutingMode: (edgeId: string, mode: EdgeRoutingMode) => void;
   readonly onRerouteEdge: (edgeId: string) => void;
+  readonly onAddJunctionAtWire: (edgeId: string, point: Point) => void;
+  readonly onBeginShiftDrag: (scene: SceneDocument) => void;
+  readonly onCommitShiftDrag: (
+    frames: Readonly<Record<string, Rect>>,
+    groups: readonly ShiftBranchGroup[],
+  ) => void;
+  readonly onBeginDuplicateDrag: (
+    scene: SceneDocument,
+    nodeIds: readonly string[],
+  ) => void;
+  readonly onCommitDuplicateDrag: (frames: Readonly<Record<string, Rect>>) => void;
+  readonly onBeginDetachDrag: (scene: SceneDocument) => void;
+  readonly onCommitDetachDrag: (frames: Readonly<Record<string, Rect>>) => void;
+  readonly onInsertComponentOnWire: (
+    nodeId: string,
+    edgeId: string,
+    point: Point,
+    orientation: WireOrientation,
+  ) => void;
   readonly onReattachEdge: (
     edgeId: string,
     end: EdgeEnd,
@@ -130,6 +158,8 @@ interface CanvasStageProps {
   readonly onUpdateRow: (nodeId: string, rowId: RowId, patch: Partial<TableRow>) => void;
   readonly onAddRow: (nodeId: string, sectionId?: SectionId, afterRowId?: RowId) => void;
   readonly onDeleteRow: (nodeId: string, rowId: RowId) => void;
+  readonly onMoveRow: (nodeId: string, rowId: RowId, direction: "up" | "down") => void;
+  readonly onFocusRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
@@ -145,10 +175,20 @@ interface CanvasStageProps {
     source: PortAttachmentRef,
     target: PortAttachmentRef | EdgeAttachmentRef,
   ) => void;
+  readonly onExtendWireToPoint: (source: PortAttachmentRef, point: Point) => void;
+  readonly onReattachEdgeToPoint: (edgeId: string, end: EdgeEnd, point: Point) => void;
+  readonly onPreviewRotation: (nodeId: string, rotation: number | null) => void;
+  readonly onCommitRotation: (nodeId: string, rotation: number) => void;
   readonly onDeleteNode: (nodeId: string) => void;
+  readonly onMergeJunction: (nodeId: string) => void;
+  readonly onMoveNodeLabel: (nodeId: string, offset: Point) => void;
   readonly onViewChange: (camera: Camera, zoom: number) => void;
   readonly onPreviewFrames: (frames: Readonly<Record<string, Rect>>) => void;
   readonly onCommitFrames: (frames: Readonly<Record<string, Rect>>) => void;
+  readonly onCommitWireTranslation: (
+    frames: Readonly<Record<string, Rect>>,
+    edgeId: string,
+  ) => void;
   readonly onViewport: (viewport: ViewportSize) => void;
 }
 
@@ -180,8 +220,8 @@ type Interaction =
       readonly nodeId: string;
       readonly startWorld: Point;
       readonly startFrame: Rect;
-      readonly childIds: readonly string[];
-      readonly childStartFrames: Readonly<Record<string, Rect>>;
+      childIds: string[];
+      childStartFrames: Readonly<Record<string, Rect>>;
       captured: boolean;
       lastFrame: Rect;
       lastChildFrames: Record<string, Rect>;
@@ -200,6 +240,30 @@ type Interaction =
       readonly kind: "draw";
       readonly pointerId: number;
       readonly source: PortGeometry;
+      readonly startScreen: Point;
+      lastWorld: Point;
+      pointerTravel: number;
+    }
+  | {
+      readonly kind: "edge-translate";
+      readonly pointerId: number;
+      readonly edgeId: string;
+      readonly axis: "x" | "y";
+      readonly startWorld: Point;
+      readonly startScreen: Point;
+      readonly startFrames: Readonly<Record<string, Rect>>;
+      lastFrames: Record<string, Rect>;
+      moved: boolean;
+    }
+  | {
+      readonly kind: "rotate";
+      readonly pointerId: number;
+      readonly nodeId: string;
+      readonly center: Point;
+      readonly radius: number;
+      readonly startPointerAngle: number;
+      readonly startRotation: number;
+      lastRotation: number;
     }
   | {
       readonly kind: "activation-move" | "activation-resize";
@@ -220,6 +284,9 @@ type Interaction =
       readonly edgeId: string;
       readonly end: EdgeEnd;
       readonly startWorld: Point;
+      readonly startScreen: Point;
+      lastWorld: Point;
+      pointerTravel: number;
       moved: boolean;
     }
   | {
@@ -239,6 +306,16 @@ type Interaction =
       readonly end?: EdgeEnd;
       readonly startWorld: Point;
       readonly startOffset: Point;
+      moved: boolean;
+      lastDelta: Point;
+    }
+  | {
+      readonly kind: "node-label-drag";
+      readonly pointerId: number;
+      readonly nodeId: string;
+      readonly startWorld: Point;
+      readonly startOffset: Point;
+      readonly rotation: number;
       moved: boolean;
       lastDelta: Point;
     };
@@ -269,11 +346,123 @@ const clampValue = (value: number, min: number, max: number): number =>
 const selectionFrameFor = (node: NodeLayout): Rect =>
   node.kind === "lifeline" ? node.headFrame : node.frame;
 
+const pointInPolygon = (value: Point, polygon: readonly Point[]): boolean => {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
+    const a = polygon[index];
+    const b = polygon[previous];
+    if (a === undefined || b === undefined) continue;
+    const crosses =
+      (a.y > value.y) !== (b.y > value.y) &&
+      value.x < ((b.x - a.x) * (value.y - a.y)) / (b.y - a.y) + a.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+};
+
+const distanceToSegment = (value: Point, a: Point, b: Point): number => {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const squared = dx * dx + dy * dy;
+  if (squared <= 1e-9) return Math.hypot(value.x - a.x, value.y - a.y);
+  const t = Math.max(
+    0,
+    Math.min(1, ((value.x - a.x) * dx + (value.y - a.y) * dy) / squared),
+  );
+  return Math.hypot(value.x - (a.x + t * dx), value.y - (a.y + t * dy));
+};
+
+const circuitOutlineContains = (
+  value: Point,
+  outline: readonly Point[],
+  margin: number,
+): boolean => {
+  if (pointInPolygon(value, outline)) return true;
+  for (let index = 0; index < outline.length; index += 1) {
+    const a = outline[index];
+    const b = outline[(index + 1) % outline.length];
+    if (a !== undefined && b !== undefined && distanceToSegment(value, a, b) <= margin) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** True when a circuit wire would be dropped on a component body, not a pin. */
+const overCircuitComponentBody = (
+  nodes: Readonly<Record<string, NodeLayout>>,
+  world: Point,
+  excludeNodeId: string,
+): boolean =>
+  Object.values(nodes).some(
+    (node) =>
+      node.kind === "circuitComponent" &&
+      node.nodeId !== excludeNodeId &&
+      rectContainsPoint(node.bounds, world),
+  );
+
 const frameFullyInside = (inner: Rect, outer: Rect): boolean =>
   inner.x >= outer.x - 0.001 &&
   inner.y >= outer.y - 0.001 &&
   inner.x + inner.width <= outer.x + outer.width + 0.001 &&
   inner.y + inner.height <= outer.y + outer.height + 0.001;
+
+const orientation = (a: Point, b: Point, c: Point): number =>
+  (b.y - a.y) * (c.x - b.x) - (b.x - a.x) * (c.y - b.y);
+
+const segmentsIntersect = (
+  a: Point,
+  b: Point,
+  c: Point,
+  d: Point,
+): boolean => {
+  const o1 = orientation(a, b, c);
+  const o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a);
+  const o4 = orientation(c, d, b);
+  if ((o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)) return true;
+  const onSegment = (p: Point, q: Point, r: Point): boolean =>
+    Math.min(p.x, r.x) - 0.001 <= q.x &&
+    q.x <= Math.max(p.x, r.x) + 0.001 &&
+    Math.min(p.y, r.y) - 0.001 <= q.y &&
+    q.y <= Math.max(p.y, r.y) + 0.001;
+  return (
+    (Math.abs(o1) <= 0.001 && onSegment(a, c, b)) ||
+    (Math.abs(o2) <= 0.001 && onSegment(a, d, b)) ||
+    (Math.abs(o3) <= 0.001 && onSegment(c, a, d)) ||
+    (Math.abs(o4) <= 0.001 && onSegment(c, b, d))
+  );
+};
+
+const segmentCrossesRect = (a: Point, b: Point, rect: Rect): boolean => {
+  if (rectContainsPoint(rect, a) || rectContainsPoint(rect, b)) return true;
+  const corners = [
+    point(rect.x, rect.y),
+    point(rect.x + rect.width, rect.y),
+    point(rect.x + rect.width, rect.y + rect.height),
+    point(rect.x, rect.y + rect.height),
+  ];
+  for (let index = 0; index < corners.length; index += 1) {
+    const c = corners[index];
+    const d = corners[(index + 1) % corners.length];
+    if (c !== undefined && d !== undefined && segmentsIntersect(a, b, c, d)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const polylineCrossesRect = (points: readonly Point[], rect: Rect): boolean => {
+  if (points.some((entry) => rectContainsPoint(rect, entry))) return true;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1];
+    const b = points[index];
+    if (a !== undefined && b !== undefined && segmentCrossesRect(a, b, rect)) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /** Port reference in the form the document stores. */
 const attachmentFor = (port: PortGeometry): PortAttachmentRef => ({
@@ -331,10 +520,14 @@ const EdgeHitLayer = ({
   edges,
   onSelect,
   onReroute,
+  onAddJunction,
+  allowContextReroute,
 }: {
   readonly edges: readonly { readonly id: string; readonly points: readonly Point[] }[];
   readonly onSelect: (edgeId: string, event: React.PointerEvent<SVGPolylineElement>) => void;
   readonly onReroute: (edgeId: string) => void;
+  readonly onAddJunction?: (edgeId: string, event: React.MouseEvent<SVGPolylineElement>) => void;
+  readonly allowContextReroute?: boolean;
 }) => (
   <g>
     {edges.map((edge) => {
@@ -371,10 +564,20 @@ const EdgeHitLayer = ({
               event.stopPropagation();
               onSelect(edge.id, event);
             }}
-            onDoubleClick={(event) => {
+            onContextMenu={(event) => {
+              if (allowContextReroute !== true) return;
               event.preventDefault();
               event.stopPropagation();
               onReroute(edge.id);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (onAddJunction !== undefined) {
+                onAddJunction(edge.id, event);
+              } else {
+                onReroute(edge.id);
+              }
             }}
           />
         </g>
@@ -383,8 +586,133 @@ const EdgeHitLayer = ({
   </g>
 );
 
-const EndpointHandle = ({
-  point,
+interface InsertionTarget {
+  readonly edgeId: string;
+  readonly point: Point;
+  readonly orientation: WireOrientation;
+}
+
+const nearestInsertionTarget = (
+  edges: readonly EdgeLayout[],
+  world: Point,
+  tolerance: number,
+): InsertionTarget | null => {
+  let best: InsertionTarget | null = null;
+  let bestDistance = tolerance;
+  for (const edge of edges) {
+    for (let index = 1; index < edge.points.length; index += 1) {
+      const a = edge.points[index - 1];
+      const b = edge.points[index];
+      if (a === undefined || b === undefined) continue;
+      const horizontal = Math.abs(a.y - b.y) < 0.001;
+      const vertical = Math.abs(a.x - b.x) < 0.001;
+      if (!horizontal && !vertical) continue;
+      const point = horizontal
+        ? {
+            x: Math.max(Math.min(a.x, b.x), Math.min(Math.max(a.x, b.x), world.x)),
+            y: a.y,
+          }
+        : {
+            x: a.x,
+            y: Math.max(Math.min(a.y, b.y), Math.min(Math.max(a.y, b.y), world.y)),
+          };
+      const distance = Math.hypot(point.x - world.x, point.y - world.y);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = {
+          edgeId: edge.edgeId,
+          point,
+          orientation: horizontal ? "horizontal" : "vertical",
+        };
+      }
+    }
+  }
+  return best;
+};
+
+const coincidentDragHighlights = (
+  scene: SceneDocument,
+  layout: LayoutSnapshot,
+  interaction: {
+    readonly nodeId: string;
+    readonly frame: Rect;
+    readonly childIds: readonly string[];
+    readonly childFrames: Readonly<Record<string, Rect>>;
+  },
+): readonly Point[] => {
+  const grid = scene.canvas.grid.size;
+  const tolerance = Math.max(0.5, grid * 0.25);
+  const movingIds = new Set([interaction.nodeId, ...interaction.childIds]);
+  const frames: Record<string, Rect> = {
+    [interaction.nodeId]: interaction.frame,
+    ...interaction.childFrames,
+  };
+  const movingPoints: Point[] = [];
+  for (const id of movingIds) {
+    const node = scene.nodes[id];
+    const frame = frames[id] ?? node?.frame;
+    if (node === undefined || frame === undefined) continue;
+    if (node.kind === "circuitJunction") {
+      movingPoints.push(rectCenter(frame));
+    } else if (node.kind === "circuitComponent") {
+      const definition = circuitComponent(node.component);
+      if (definition === undefined) continue;
+      const center = rectCenter(frame);
+      for (const pin of definition.pins) {
+        movingPoints.push(
+          add(center, rotatePoint(point(pin.x, pin.y), node.rotation)),
+        );
+      }
+    }
+  }
+  const staticPoints: Point[] = [];
+  for (const nodeLayout of Object.values(layout.nodes)) {
+    if (movingIds.has(nodeLayout.nodeId)) continue;
+    if (nodeLayout.kind === "circuitJunction") {
+      staticPoints.push(nodeLayout.center);
+    } else if (nodeLayout.kind === "circuitComponent") {
+      for (const pin of nodeLayout.pins) staticPoints.push(pin.point);
+    }
+  }
+  const result: Point[] = [];
+  const seen = new Set<string>();
+  const addPoint = (entry: Point): void => {
+    const key = `${Math.round(entry.x * 100) / 100}:${Math.round(entry.y * 100) / 100}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(entry);
+  };
+  for (const moving of movingPoints) {
+    for (const stationary of staticPoints) {
+      if (Math.hypot(moving.x - stationary.x, moving.y - stationary.y) <= tolerance) {
+        addPoint(moving);
+        addPoint(stationary);
+      }
+    }
+  }
+  return result;
+};
+
+const circuitRotateHandleGeometry = (
+  frame: Rect,
+  rotation: number,
+  zoom: number,
+): { readonly center: Point; readonly radius: number; readonly point: Point } => {
+  const center = rectCenter(frame);
+  const baseAngle = Math.atan2(-frame.height / 2, frame.width / 2);
+  const radius = Math.hypot(frame.width / 2, frame.height / 2) + 18 / zoom;
+  const angle = baseAngle + (rotation * Math.PI) / 180;
+  return {
+    center,
+    radius,
+    point: {
+      x: center.x + radius * Math.cos(angle),
+      y: center.y + radius * Math.sin(angle),
+    },
+  };
+};
+
+const EndpointHandle = ({  point,
   label,
   zoom,
   color,
@@ -469,6 +797,52 @@ const CenterLabelHitLayer = ({
         />
       );
     })}
+  </g>
+);
+
+const NodeLabelHitLayer = ({
+  nodes,
+  zoom,
+  onDragStart,
+  onDoublePress,
+}: {
+  readonly nodes: readonly {
+    readonly id: string;
+    readonly frame: Rect;
+  }[];
+  readonly zoom: number;
+  readonly onDragStart: (
+    nodeId: string,
+    event: React.PointerEvent<SVGRectElement>,
+  ) => void;
+  readonly onDoublePress: (nodeId: string) => void;
+}) => (
+  <g>
+    {nodes.map(({ id, frame }) => (
+      <rect
+        key={`node-label-hit-${id}`}
+        data-node-label-hit={id}
+        className="edge-label-hover"
+        x={frame.x}
+        y={frame.y}
+        width={frame.width}
+        height={frame.height}
+        rx={2 / zoom}
+        fill="transparent"
+        pointerEvents="all"
+        style={{ cursor: "grab" }}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.stopPropagation();
+          onDragStart(id, event);
+        }}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onDoublePress(id);
+        }}
+      />
+    ))}
   </g>
 );
 
@@ -624,12 +998,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   selectedNodeId,
   selectedNodeIds,
   selectedEdgeId,
+  selectedEdgeIds,
   selectedActivation,
   fitNonce,
   onSelectNode,
   onSelectNodes,
   onToggleNodeSelection,
   onSelectEdge,
+  onSelectEdges,
   onSelectActivation,
   onSetMarker,
   onSetEdgeLabel,
@@ -639,6 +1015,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onSetStrokeWidth,
   onSetRoutingMode,
   onRerouteEdge,
+  onAddJunctionAtWire,
+  onBeginShiftDrag,
+  onCommitShiftDrag,
+  onBeginDuplicateDrag,
+  onCommitDuplicateDrag,
+  onBeginDetachDrag,
+  onCommitDetachDrag,
+  onInsertComponentOnWire,
   onReattachEdge,
   onMoveSequenceEdge,
   onMoveEdgeLabel,
@@ -651,6 +1035,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onUpdateRow,
   onAddRow,
   onDeleteRow,
+  onMoveRow,
+  onFocusRow,
   onAddSection,
   onUpdateSection,
   onDeleteSection,
@@ -658,10 +1044,17 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onAddActivation,
   onUpdateActivation,
   onCreateEdge,
+  onExtendWireToPoint,
+  onReattachEdgeToPoint,
+  onPreviewRotation,
+  onCommitRotation,
   onDeleteNode,
+  onMergeJunction,
+  onMoveNodeLabel,
   onViewChange,
   onPreviewFrames,
   onCommitFrames,
+  onCommitWireTranslation,
   onViewport,
 }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -670,6 +1063,37 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const interactionRef = useRef<Interaction | null>(null);
   const suppressNodePartClickRef = useRef(false);
   const layoutRef = useRef(layout);
+  const sceneRef = useRef(scene);
+  const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const hoveredObjectNodeIdRef = useRef<string | null>(null);
+  const branchIntentRef = useRef<ShiftBranchDrag | null>(null);
+  const branchDragRef = useRef<{ readonly groups: readonly ShiftBranchGroup[] } | null>(null);
+  const duplicateIntentRef = useRef<{
+    readonly nodeIds: readonly string[];
+    readonly primaryId: string;
+    readonly parallelBranch: boolean;
+  } | null>(null);
+  const ctrlClickToggleRef = useRef<string | null>(null);
+  const duplicateDragRef = useRef(false);
+  const detachIntentRef = useRef<readonly NodeId[] | null>(null);
+  const detachDragRef = useRef(false);
+  const portClickFocusRef = useRef<{ readonly nodeId: NodeId } | null>(null);
+  const lastFittedSceneIdRef = useRef<string | null>(null);
+  const wireInsertNodeIdRef = useRef<string | null>(null);
+  const insertTargetRef = useRef<InsertionTarget | null>(null);
+  const [insertTarget, setInsertTarget] = useState<InsertionTarget | null>(null);
+  const [coincidentHighlights, setCoincidentHighlights] = useState<readonly Point[]>([]);
+  const [rotationHandleOverride, setRotationHandleOverride] = useState<
+    { readonly nodeId: string; readonly point: Point } | null
+  >(null);
+  useEffect(() => {
+    if (wireInsertNodeIdRef.current === null && insertTarget !== null) {
+      insertTargetRef.current = null;
+      setInsertTarget(null);
+    }
+  }, [insertTarget]);
+  const [branchDistance, setBranchDistance] = useState(0);
+  const [branchTargetIds, setBranchTargetIds] = useState<readonly string[]>([]);
   const cameraRef = useRef(camera);
   const zoomRef = useRef(zoom);
   const onViewChangeRef = useRef(onViewChange);
@@ -687,6 +1111,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   }), []);
 
   layoutRef.current = layout;
+  sceneRef.current = scene;
+  selectedNodeIdsRef.current = selectedNodeIds;
   cameraRef.current = camera;
   zoomRef.current = zoom;
   onViewChangeRef.current = onViewChange;
@@ -697,6 +1123,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const [guides, setGuides] = useState<readonly SnapGuide[]>([]);
   const [marquee, setMarquee] = useState<Rect | null>(null);
   const [hoveredPort, setHoveredPort] = useState<PortGeometry | null>(null);
+  const [hoveredObjectNodeId, setHoveredObjectNodeId] = useState<string | null>(null);
+  hoveredObjectNodeIdRef.current = hoveredObjectNodeId;
   const [hoveredNodePart, setHoveredNodePart] = useState<NodeFocus | null>(null);
   const [hoveredTerminal, setHoveredTerminal] = useState<{
     readonly edgeId: string;
@@ -730,6 +1158,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     readonly labelId: string;
     readonly delta: Point;
   } | null>(null);
+  const [nodeLabelDraft, setNodeLabelDraft] = useState<{
+    readonly nodeId: string;
+    readonly delta: Point;
+  } | null>(null);
   /**
    * Label drags capture the pointer on the SVG, so the browser retargets the
    * following pointerup/click/dblclick to the SVG rather than the label hit
@@ -739,6 +1171,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const labelPressRef = useRef<{
     readonly edgeId: string;
     readonly labelId: string;
+    readonly time: number;
+  } | null>(null);
+  const nodeLabelPressRef = useRef<{
+    readonly nodeId: string;
     readonly time: number;
   } | null>(null);
   const panMovedRef = useRef(false);
@@ -831,19 +1267,95 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
 
   useEffect(() => {
     if (viewport.width < 1 || viewport.height < 1) return;
-    const fitted = fitBounds(layoutRef.current.fitBounds, viewport, 64);
+    const sceneChanged = lastFittedSceneIdRef.current !== scene.id;
+    lastFittedSceneIdRef.current = scene.id;
+    const defaultZoom =
+      sceneChanged && scene.meta.diagramKind === "circuit" ? 2 : undefined;
+    const fitted = fitBounds(layoutRef.current.fitBounds, viewport, 64, defaultZoom);
     onViewChangeRef.current(fitted.camera, fitted.zoom);
     // Fit only when requested or the viewport changes; never on every drag.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitNonce, viewport.width, viewport.height]);
+  }, [fitNonce, viewport.width, viewport.height, scene.id, scene.meta.diagramKind]);
 
   useEffect(() => {
     const element = containerRef.current;
     if (element === null) return;
     const handleWheel = (event: WheelEvent): void => {
+      const wheelTarget = event.target;
+      if (
+        wheelTarget instanceof Element &&
+        wheelTarget.closest(".add-object-menu") !== null
+      ) {
+        return;
+      }
       event.preventDefault();
       const svg = svgRef.current;
       if (svg === null) return;
+      if (event.shiftKey && sceneRef.current.meta.diagramKind === "circuit") {
+        const selected = selectedNodeIdsRef.current;
+        const targetIds = selected.length > 0
+          ? selected
+          : hoveredObjectNodeIdRef.current === null
+            ? []
+            : [hoveredObjectNodeIdRef.current];
+        const selectedSet = new Set(targetIds);
+        const selectedComponentIds = targetIds.filter(
+          (id) => sceneRef.current.nodes[id]?.kind === "circuitComponent",
+        );
+        const indicatorIds = selectedComponentIds.filter((id) => {
+          const node = sceneRef.current.nodes[id];
+          if (node?.kind !== "circuitComponent") return false;
+          const definition = circuitComponent(node.component);
+          if (definition === undefined) return false;
+          return Object.values(sceneRef.current.edges).some((edge) => {
+            if (edge.semantic.family !== "circuit") return false;
+            const atPin = definition.pins.some(
+              (pin) =>
+                (edge.source.target === "node" &&
+                  edge.source.nodeId === node.id &&
+                  edge.source.port.kind === "pin" &&
+                  edge.source.port.pinId === pin.id) ||
+                (edge.target.target === "node" &&
+                  edge.target.nodeId === node.id &&
+                  edge.target.port.kind === "pin" &&
+                  edge.target.port.pinId === pin.id),
+            );
+            if (!atPin) return false;
+            const other = edge.source.target === "node" &&
+              edge.source.nodeId === node.id
+              ? edge.target
+              : edge.source;
+            return other.target !== "node" || !selectedSet.has(other.nodeId);
+          });
+        });
+        const junctionIndicatorIds = targetIds.filter((id) => {
+          const node = sceneRef.current.nodes[id];
+          if (node?.kind !== "circuitJunction") return false;
+          return Object.values(sceneRef.current.edges).some((edge) => {
+            if (edge.semantic.family !== "circuit") return false;
+            const atJunction =
+              edge.source.target === "node" &&
+              edge.source.nodeId === node.id &&
+              edge.source.port.kind === "center"
+                ? true
+                : edge.target.target === "node" &&
+                  edge.target.nodeId === node.id &&
+                  edge.target.port.kind === "center";
+            if (!atJunction) return false;
+            const other =
+              edge.source.target === "node" && edge.source.nodeId === node.id
+                ? edge.target
+                : edge.source;
+            return other.target !== "node" || !selectedSet.has(other.nodeId);
+          });
+        });
+        if (selectedComponentIds.length > 0) {
+          const direction = event.deltaY < 0 ? 1 : -1;
+          setBranchDistance((current) => Math.max(0, current + direction));
+          setBranchTargetIds([...indicatorIds, ...junctionIndicatorIds]);
+          return;
+        }
+      }
       const cursor = pointFromEvent(event, svg);
       const factor = Math.exp(-event.deltaY * 0.0015);
       const next = zoomAtScreenPoint(cursor, cameraRef.current, zoomRef.current, factor);
@@ -851,6 +1363,37 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     };
     element.addEventListener("wheel", handleWheel, { passive: false });
     return () => element.removeEventListener("wheel", handleWheel);
+  }, []);
+
+  useEffect(() => {
+    const clearPreview = (): void => {
+      setBranchDistance(0);
+      setBranchTargetIds([]);
+      setGuides([]);
+      setCoincidentHighlights([]);
+      setRotationHandleOverride(null);
+      wireInsertNodeIdRef.current = null;
+      portClickFocusRef.current = null;
+      insertTargetRef.current = null;
+      setInsertTarget(null);
+    };
+    const handleKeyUp = (event: KeyboardEvent): void => {
+      if (event.key !== "Shift" || branchDragRef.current !== null || branchIntentRef.current !== null) {
+        return;
+      }
+      clearPreview();
+    };
+    const handleVisibility = (): void => {
+      if (document.visibilityState === "hidden") clearPreview();
+    };
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", clearPreview);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", clearPreview);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   const beginInteraction = (
@@ -954,6 +1497,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
 
       if (node.kind === "useCase") {
         return useCaseTarget(node, preferredPoint ?? world);
+      }
+
+      if (node.kind === "circuitJunction") {
+        return {
+          point: node.center,
+          attachment: { nodeId: node.nodeId, port: { kind: "center" } },
+        };
       }
 
       const perimeter = node.ports.filter((port) => port.ref.kind === "perimeter");
@@ -1079,6 +1629,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       edgeId,
       end,
       startWorld: world,
+      startScreen: screen,
+      lastWorld: world,
+      pointerTravel: 0,
       moved: false,
     };
     try {
@@ -1163,6 +1716,79 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     event.stopPropagation();
   };
 
+  const beginNodeLabelDrag = (
+    nodeId: string,
+    event: React.PointerEvent<SVGRectElement>,
+  ): void => {
+    if (event.button !== 0) return;
+    const svg = svgRef.current;
+    const node = scene.nodes[nodeId];
+    const nodeLayout = layout.nodes[nodeId];
+    if (
+      svg === null ||
+      node === undefined ||
+      (node.kind !== "circuitComponent" && node.kind !== "circuitJunction") ||
+      nodeLayout?.kind !== node.kind ||
+      nodeLayout.labelFrame === undefined
+    ) {
+      return;
+    }
+    const now = performance.now();
+    const previousPress = nodeLabelPressRef.current;
+    if (
+      previousPress !== null &&
+      previousPress.nodeId === nodeId &&
+      now - previousPress.time <= LABEL_DOUBLE_PRESS_MS
+    ) {
+      nodeLabelPressRef.current = null;
+      interactionRef.current = null;
+      setNodeLabelDraft(null);
+      event.preventDefault();
+      event.stopPropagation();
+      onSelectNode(nodeId);
+      onTextDoubleClick(nodeId, { kind: "nodeName" });
+      return;
+    }
+    nodeLabelPressRef.current = { nodeId, time: now };
+    const screen = pointFromEvent(event, svg);
+    const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    const frame = nodeLayout.labelFrame;
+    const labelCenter = {
+      x: frame.x + frame.width / 2,
+      y: frame.y + frame.height / 2,
+    };
+    const rawOffset = sub(labelCenter, nodeLayout.center);
+    const rotation = node.kind === "circuitComponent" ? node.rotation : 0;
+    const startOffset = rotation === 0
+      ? rawOffset
+      : rotatePoint(rawOffset, -rotation);
+
+    setActiveEndpoint(null);
+    setLinePopover(null);
+    onSelectActivation(null);
+    onSelectEdge(null);
+    onSelectNode(nodeId);
+    onClearNodeFocus();
+    setNodeLabelDraft({ nodeId, delta: { x: 0, y: 0 } });
+    interactionRef.current = {
+      kind: "node-label-drag",
+      pointerId: event.pointerId,
+      nodeId,
+      startWorld: world,
+      startOffset,
+      rotation,
+      moved: false,
+      lastDelta: { x: 0, y: 0 },
+    };
+    try {
+      svg.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events cannot own capture.
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   const beginEdgeDraw = (
     port: PortGeometry,
     event: React.PointerEvent<SVGCircleElement>,
@@ -1174,10 +1800,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     setActiveEndpoint(null);
     setLinePopover(null);
     onClearNodeFocus();
+    const owner = sceneRef.current.nodes[port.nodeId];
+    portClickFocusRef.current =
+      owner?.kind === "circuitJunction" && port.ref.kind === "center"
+        ? { nodeId: port.nodeId }
+        : null;
+    const svg = svgRef.current;
+    const screen = svg === null ? { x: 0, y: 0 } : pointFromEvent(event, svg);
     interactionRef.current = {
       kind: "draw",
       pointerId: event.pointerId,
       source: port,
+      startScreen: screen,
+      lastWorld: port.point,
+      pointerTravel: 0,
     };
     draftTargetRef.current = null;
     setDraftEdge({ from: port.point, to: port.point, snapped: false });
@@ -1211,9 +1847,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
 
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    const menuWidth = scene.meta.diagramKind === "circuit" ? 450 : 318;
+    const menuHeight = scene.meta.diagramKind === "circuit" ? 620 : 474;
     setAddMenu({
-      left: clampValue(screen.x + 8, 10, Math.max(10, viewport.width - 318)),
-      top: clampValue(screen.y + 8, 10, Math.max(10, viewport.height - 474)),
+      left: clampValue(screen.x + 8, 10, Math.max(10, viewport.width - menuWidth)),
+      top: clampValue(screen.y + 8, 10, Math.max(10, viewport.height - menuHeight)),
       world,
       source: "context",
     });
@@ -1263,22 +1901,106 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (svg === null || nodeLayout === undefined) return;
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
-    const additive = event.ctrlKey || event.metaKey;
-    if (additive) {
+    const duplicate = event.ctrlKey || event.metaKey;
+    const alreadySelected = selectedNodeIds.includes(nodeId);
+    const duplicateIds = [
+      nodeId,
+      ...(alreadySelected ? selectedNodeIds.filter((id) => id !== nodeId) : []),
+    ];
+    const movingIds = duplicate
+      ? duplicateIds
+      : alreadySelected && selectedNodeIds.length > 0
+        ? selectedNodeIds
+        : [nodeId];
+    if (duplicate) {
+      duplicateIntentRef.current = {
+        nodeIds: duplicateIds,
+        primaryId: nodeId,
+        parallelBranch: event.shiftKey,
+      };
+      // Ctrl/Cmd alone is duplicate-only; a shift branch must never leak in
+      // from an earlier gesture.
+      branchIntentRef.current = null;
+      branchDragRef.current = null;
+      ctrlClickToggleRef.current = nodeId;
+      onClearNodeFocus();
       event.preventDefault();
       event.stopPropagation();
-      suppressNextNodePartClick();
-      onClearNodeFocus();
-      onToggleNodeSelection(nodeId);
-      return;
+    } else if (!alreadySelected) {
+      onSelectNodes([nodeId], nodeId);
+    } else if (selectedNodeId !== nodeId) {
+      onSelectNodes(movingIds, nodeId);
     }
 
-    const alreadySelected = selectedNodeIds.includes(nodeId);
-    const movingIds = alreadySelected && selectedNodeIds.length > 0
-      ? selectedNodeIds
-      : [nodeId];
-    if (!alreadySelected) onSelectNodes([nodeId], nodeId);
-    else if (selectedNodeId !== nodeId) onSelectNodes(movingIds, nodeId);
+    const primaryNode = scene.nodes[nodeId];
+    const primaryDef = primaryNode?.kind === "circuitComponent"
+      ? circuitComponent(primaryNode.component)
+      : undefined;
+    const detach = !duplicate &&
+      event.altKey &&
+      primaryNode?.kind === "circuitComponent";
+    const insertable =
+      !duplicate &&
+      !event.altKey &&
+      event.shiftKey &&
+      scene.meta.diagramKind === "circuit" &&
+      primaryNode?.kind === "circuitComponent" &&
+      primaryDef?.pins.length === 2 &&
+      movingIds.length === 1 &&
+      !Object.values(scene.edges).some(
+        (edge) =>
+          edge.semantic.family === "circuit" &&
+          primaryDef.pins.some(
+            (pin) =>
+              (edge.source.target === "node" &&
+                edge.source.nodeId === primaryNode.id &&
+                edge.source.port.kind === "pin" &&
+                edge.source.port.pinId === pin.id) ||
+              (edge.target.target === "node" &&
+                edge.target.nodeId === primaryNode.id &&
+                edge.target.port.kind === "pin" &&
+                edge.target.port.pinId === pin.id),
+          ),
+      );
+    wireInsertNodeIdRef.current = insertable ? primaryNode.id : null;
+    if (detach) {
+      detachIntentRef.current = movingIds
+        .filter((id) => scene.nodes[id]?.kind === "circuitComponent")
+        .map((id) => id as NodeId);
+    } else {
+      detachIntentRef.current = null;
+    }
+    if (
+      !duplicate &&
+      !insertable &&
+      !detach &&
+      event.shiftKey &&
+      scene.meta.diagramKind === "circuit" &&
+      primaryNode?.kind === "circuitComponent"
+    ) {
+      const branchIds: NodeId[] = movingIds
+        .filter((id) => scene.nodes[id]?.kind === "circuitComponent")
+        .map((id) => id as NodeId);
+      const originalFrames: Record<string, Rect> = {};
+      for (const id of branchIds) {
+        const frame = layout.nodes[id]?.frame ?? scene.nodes[id]?.frame;
+        if (frame !== undefined) originalFrames[id] = frame;
+      }
+      if (branchIds.length > 0) {
+        branchIntentRef.current = {
+          nodeIds: branchIds,
+          junctionIds: movingIds
+            .filter((id) => scene.nodes[id]?.kind === "circuitJunction")
+            .map((id) => id as NodeId),
+          selectedNodeIds: movingIds.map((id) => id as NodeId),
+          originalFrames,
+          distance: branchDistance * scene.canvas.grid.size,
+        };
+        branchDragRef.current = null;
+        setBranchDistance(0);
+        setBranchTargetIds([]);
+      }
+    }
 
     onSelectActivation(null);
     setActivationDraft(null);
@@ -1291,12 +2013,75 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       movingSet.add(id);
       for (const child of childrenOfBoundary(scene, id)) movingSet.add(String(child.id));
     }
+    // Auto-merged junction nodes at shared endings of the moved group must
+    // travel with it, or the next merge creates a second, off-grid junction.
+    if (
+      scene.meta.diagramKind === "circuit" &&
+      !duplicate &&
+      !detach
+    ) {
+      const componentPins: { readonly nodeId: string; readonly point: Point }[] = [];
+      const junctionTolerance = Math.max(0.5, scene.canvas.grid.size * 0.25);
+      for (const id of movingSet) {
+        const nodeLayout = layout.nodes[id];
+        if (nodeLayout?.kind !== "circuitComponent") continue;
+        for (const pin of nodeLayout.pins) {
+          componentPins.push({ nodeId: id, point: pin.point });
+        }
+      }
+      for (const nodeLayout of Object.values(layout.nodes)) {
+        if (nodeLayout.kind !== "circuitJunction" || movingSet.has(nodeLayout.nodeId)) {
+          continue;
+        }
+        const owners = componentPins
+          .filter(
+            (pin) =>
+              Math.hypot(
+                pin.point.x - nodeLayout.center.x,
+                pin.point.y - nodeLayout.center.y,
+              ) <= junctionTolerance,
+          )
+          .map((pin) => pin.nodeId);
+        if (owners.length >= 2 && owners.every((owner) => movingSet.has(owner))) {
+          movingSet.add(nodeLayout.nodeId);
+        }
+      }
+    }
     movingSet.delete(nodeId);
+    if (branchIntentRef.current !== null) {
+      const branchAllNodeIds = [nodeId, ...movingSet];
+      const branchNodeIds = branchAllNodeIds
+        .filter((id) => scene.nodes[id]?.kind === "circuitComponent")
+        .map((id) => asNodeId(id));
+      branchIntentRef.current = {
+        ...branchIntentRef.current,
+        nodeIds: branchNodeIds,
+        junctionIds: branchAllNodeIds
+          .filter((id) => scene.nodes[id]?.kind === "circuitJunction")
+          .map((id) => asNodeId(id)),
+        selectedNodeIds: branchAllNodeIds.map((id) => asNodeId(id)),
+      };
+    }
     const childIds = [...movingSet];
     const childStartFrames: Record<string, Rect> = Object.fromEntries(
       childIds.flatMap((childId) => {
         const frame = layout.nodes[childId]?.frame ?? scene.nodes[childId]?.frame;
-        return frame === undefined ? [] : [[childId, frame] as const];
+        if (frame === undefined) return [];
+        if (scene.nodes[childId]?.kind === "circuitJunction") {
+          // Auto-merged junctions can carry sub-pixel drift; start the group
+          // move from a grid-aligned junction frame.
+          const center = rectCenter(frame);
+          const snapped = {
+            x: snap(center.x, scene.canvas.grid.size),
+            y: snap(center.y, scene.canvas.grid.size),
+          };
+          return [[childId, {
+            ...frame,
+            x: snapped.x - frame.width / 2,
+            y: snapped.y - frame.height / 2,
+          }] as const];
+        }
+        return [[childId, frame] as const];
       }),
     );
     beginInteraction(event, {
@@ -1311,6 +2096,77 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       lastFrame: nodeLayout.frame,
       lastChildFrames: { ...childStartFrames },
     }, false);
+  };
+
+  const edgeTranslateSetup = (
+    edgeId: string,
+  ): {
+    readonly axis: "x" | "y";
+    readonly nodeIds: readonly NodeId[];
+    readonly frames: Readonly<Record<string, Rect>>;
+  } | null => {
+    const edge = scene.edges[edgeId];
+    const edgeLayout = layout.edges[edgeId];
+    if (
+      edge === undefined ||
+      edgeLayout === undefined ||
+      edgeLayout.points.length < 2 ||
+      edge.semantic.family !== "circuit" ||
+      edge.source.target !== "node" ||
+      edge.target.target !== "node" ||
+      edge.source.port.kind !== "center" ||
+      edge.target.port.kind !== "center"
+    ) {
+      return null;
+    }
+    const sourceNode = scene.nodes[edge.source.nodeId];
+    const targetNode = scene.nodes[edge.target.nodeId];
+    if (sourceNode?.kind !== "circuitJunction" || targetNode?.kind !== "circuitJunction") {
+      return null;
+    }
+    const first = edgeLayout.points[0];
+    const last = edgeLayout.points[edgeLayout.points.length - 1];
+    if (first === undefined || last === undefined) return null;
+    const wireAxis = Math.abs(last.x - first.x) >= Math.abs(last.y - first.y) ? "x" : "y";
+    const moveAxis = wireAxis === "x" ? "y" : "x";
+    const junctionIds = [sourceNode.id, targetNode.id];
+    for (const junctionId of junctionIds) {
+      for (const other of Object.values(scene.edges)) {
+        if (other.id === edge.id || other.semantic.family !== "circuit") continue;
+        const atSource =
+          other.source.target === "node" &&
+          other.source.nodeId === junctionId &&
+          other.source.port.kind === "center";
+        const atTarget =
+          other.target.target === "node" &&
+          other.target.nodeId === junctionId &&
+          other.target.port.kind === "center";
+        if (!atSource && !atTarget) continue;
+        const otherLayout = layout.edges[other.id];
+        if (otherLayout === undefined || otherLayout.points.length < 2) continue;
+        const from = atSource
+          ? otherLayout.points[0]
+          : otherLayout.points[otherLayout.points.length - 1];
+        const neighbor = atSource
+          ? otherLayout.points[1]
+          : otherLayout.points[otherLayout.points.length - 2];
+        if (from === undefined || neighbor === undefined) continue;
+        // Other branches must be perpendicular to this wire so shifting the
+        // wire changes their length without skewing them.
+        const otherAxis =
+          Math.abs(neighbor.x - from.x) >= Math.abs(neighbor.y - from.y)
+            ? "x"
+            : "y";
+        if (otherAxis !== moveAxis) return null;
+      }
+    }
+    return {
+      axis: moveAxis,
+      nodeIds: junctionIds,
+      frames: Object.fromEntries(
+        junctionIds.map((id) => [id, scene.nodes[id]?.frame ?? sourceNode.frame]),
+      ),
+    };
   };
 
   const handleEdgePointerDown = (
@@ -1337,7 +2193,33 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     setLinePopover(null);
     onSelectNode(null);
     onSelectEdge(edgeId);
-    if (Math.min(sourceDistance, targetDistance) <= 16) {
+    const translate = scene.meta.diagramKind === "circuit"
+      ? edgeTranslateSetup(edgeId)
+      : null;
+    if (translate !== null) {
+      const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      interactionRef.current = {
+        kind: "edge-translate",
+        pointerId: event.pointerId,
+        edgeId,
+        axis: translate.axis,
+        startWorld: world,
+        startScreen: screen,
+        startFrames: translate.frames,
+        lastFrames: translate.frames,
+        moved: false,
+      };
+      try {
+        svg.setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic pointer events cannot own capture.
+      }
+      event.preventDefault();
+      return;
+    }
+    if (scene.meta.diagramKind !== "circuit" && Math.min(sourceDistance, targetDistance) <= 16) {
       setActiveEndpoint(sourceDistance <= targetDistance ? "source" : "target");
     } else if (scene.edges[edgeId]?.semantic.family === "sequence") {
       const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
@@ -1363,6 +2245,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   };
 
   const openTerminalMenu = (edgeId: string, end: EdgeEnd, focusField: boolean): void => {
+    if (scene.meta.diagramKind === "circuit") return;
     setLinePopover(null);
     onSelectNode(null);
     onSelectEdge(edgeId);
@@ -1646,9 +2529,58 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     event.stopPropagation();
   };
 
+  const handleRotatePointerDown = (
+    nodeId: string,
+    event: React.PointerEvent<SVGCircleElement>,
+  ): void => {
+    if (event.button !== 0) return;
+    const nodeLayout = layout.nodes[nodeId];
+    const svg = svgRef.current;
+    if (nodeLayout === undefined || nodeLayout.kind !== "circuitComponent" || svg === null) {
+      return;
+    }
+    const screen = pointFromEvent(event, svg);
+    const centerScreen = {
+      x: nodeLayout.center.x * zoomRef.current + cameraRef.current.x,
+      y: nodeLayout.center.y * zoomRef.current + cameraRef.current.y,
+    };
+    const radius = Math.hypot(
+      nodeLayout.frame.width / 2,
+      nodeLayout.frame.height / 2,
+    ) + 18 / zoomRef.current;
+    const pointerAngle = (Math.atan2(
+      screen.y - centerScreen.y,
+      screen.x - centerScreen.x,
+    ) * 180) / Math.PI;
+    setAddMenu(null);
+    setActiveEndpoint(null);
+    setLinePopover(null);
+    onClearNodeFocus();
+    onSelectNode(nodeId);
+    interactionRef.current = {
+      kind: "rotate",
+      pointerId: event.pointerId,
+      nodeId,
+      center: nodeLayout.center,
+      radius,
+      startPointerAngle: pointerAngle,
+      startRotation: nodeLayout.rotation,
+      lastRotation: nodeLayout.rotation,
+    };
+    try {
+      svg.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events cannot own capture.
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   const finish = (commit: boolean): void => {
     const interaction = interactionRef.current;
     if (interaction === null) return;
+    setGuides([]);
+    setCoincidentHighlights([]);
 
     if (interaction.kind === "marquee") {
       if (commit && interaction.moved) {
@@ -1663,11 +2595,68 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         const next = interaction.additive
           ? [...new Set([...interaction.baseIds, ...contained])]
           : contained;
-        onSelectNodes(next, next[next.length - 1] ?? null);
+        if (next.length > 0) {
+          onSelectNodes(next, next[next.length - 1] ?? null);
+        } else if (!interaction.additive) {
+          const marqueeEdges = Object.values(scene.edges)
+            .sort((a, b) => b.z - a.z)
+            .filter((edge) => {
+              const edgeLayout = layout.edges[edge.id];
+              return edgeLayout !== undefined &&
+                polylineCrossesRect(edgeLayout.points, region);
+            });
+          if (marqueeEdges.length > 0) {
+            onSelectNodes([], null);
+            onSelectEdges(marqueeEdges.map((edge) => edge.id));
+          } else {
+            onSelectNode(null);
+            onSelectEdge(null);
+          }
+        }
       } else if (commit && !interaction.additive) {
         onSelectNode(null);
+        onSelectEdge(null);
       }
       setMarquee(null);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
+    if (interaction.kind === "edge-translate") {
+      if (commit && interaction.moved) {
+        onCommitWireTranslation(interaction.lastFrames, interaction.edgeId);
+      } else {
+        onPreviewFrames({});
+        if (commit) {
+          setLinePopover({
+            edgeId: interaction.edgeId,
+            x: interaction.startScreen.x + 12,
+            y: interaction.startScreen.y + 12,
+          });
+        }
+      }
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
+    if (interaction.kind === "rotate") {
+      const rotatedNodeId = interaction.nodeId;
+      if (commit) {
+        onCommitRotation(rotatedNodeId, interaction.lastRotation);
+        onNodePartClick({ kind: "object", nodeId: asNodeId(rotatedNodeId) });
+      }
+      onPreviewRotation(rotatedNodeId, null);
+      setRotationHandleOverride(null);
       interactionRef.current = null;
       setPanning(false);
       const pointerId = interaction.pointerId;
@@ -1700,9 +2689,61 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     }
 
     if (interaction.kind === "draw") {
+      const clickFocus = portClickFocusRef.current;
+      portClickFocusRef.current = null;
       const target = draftTargetRef.current;
-      if (commit && target !== null) {
-        onCreateEdge(attachmentFor(interaction.source), target.attachment);
+      if (
+        commit &&
+        clickFocus !== null &&
+        interaction.pointerTravel <= 3 &&
+        target === null
+      ) {
+        onNodePartClick({ kind: "object", nodeId: clickFocus.nodeId });
+        draftTargetRef.current = null;
+        setDraftEdge(null);
+        interactionRef.current = null;
+        setPanning(false);
+        const pointerId = interaction.pointerId;
+        if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+          svgRef.current.releasePointerCapture(pointerId);
+        }
+        return;
+      }
+      if (commit) {
+        if (target !== null) {
+          const edgeTarget = "edgeId" in target.attachment;
+          const tooClose =
+            scene.meta.diagramKind === "circuit" &&
+            edgeTarget &&
+            (interaction.pointerTravel < MIN_EXTEND_SCREEN_PX ||
+              Math.hypot(
+                target.point.x - interaction.source.point.x,
+                target.point.y - interaction.source.point.y,
+              ) < minExtendWorld(gridSize));
+          if (!tooClose) {
+            onCreateEdge(attachmentFor(interaction.source), target.attachment);
+          }
+        } else if (
+          scene.meta.diagramKind === "circuit" &&
+          !overCircuitComponentBody(layout.nodes, interaction.lastWorld, interaction.source.nodeId)
+        ) {
+          const candidate = snapEnabled
+            ? {
+                x: snap(interaction.lastWorld.x, Math.max(1, gridSize)),
+                y: snap(interaction.lastWorld.y, Math.max(1, gridSize)),
+              }
+            : interaction.lastWorld;
+          if (
+            canExtendToEmpty({
+              pointerTravelPx: interaction.pointerTravel,
+              source: interaction.source.point,
+              candidate,
+              gridSize,
+            })
+          ) {
+            onExtendWireToPoint(attachmentFor(interaction.source), candidate);
+          }
+        }
       }
       draftTargetRef.current = null;
       setDraftEdge(null);
@@ -1729,11 +2770,46 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (interaction.kind === "reattach") {
       if (commit) {
         if (interaction.moved && reattachTargetRef.current !== null) {
-          onReattachEdge(
-            interaction.edgeId,
-            interaction.end,
-            reattachTargetRef.current.attachment,
-          );
+          const edgeTarget = "edgeId" in reattachTargetRef.current.attachment;
+          const tooClose =
+            scene.meta.diagramKind === "circuit" &&
+            edgeTarget &&
+            interaction.pointerTravel < MIN_EXTEND_SCREEN_PX;
+          if (!tooClose) {
+            onReattachEdge(
+              interaction.edgeId,
+              interaction.end,
+              reattachTargetRef.current.attachment,
+            );
+          }
+        } else if (
+          interaction.moved &&
+          scene.meta.diagramKind === "circuit" &&
+          !overCircuitComponentBody(layout.nodes, interaction.lastWorld, "")
+        ) {
+          const candidate = snapEnabled
+            ? {
+                x: snap(interaction.lastWorld.x, Math.max(1, gridSize)),
+                y: snap(interaction.lastWorld.y, Math.max(1, gridSize)),
+              }
+            : interaction.lastWorld;
+          const points = layout.edges[interaction.edgeId]?.points;
+          const movingPoint = points === undefined
+            ? undefined
+            : interaction.end === "source"
+              ? points[0]
+              : points[points.length - 1];
+          if (
+            movingPoint !== undefined &&
+            canExtendToEmpty({
+              pointerTravelPx: interaction.pointerTravel,
+              source: movingPoint,
+              candidate,
+              gridSize,
+            })
+          ) {
+            onReattachEdgeToPoint(interaction.edgeId, interaction.end, candidate);
+          }
         } else if (!interaction.moved) {
           openTerminalMenu(interaction.edgeId, interaction.end, false);
         }
@@ -1767,6 +2843,26 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       return;
     }
 
+    if (interaction.kind === "node-label-drag") {
+      if (commit && interaction.moved) {
+        const localDelta = interaction.rotation === 0
+          ? interaction.lastDelta
+          : rotatePoint(interaction.lastDelta, -interaction.rotation);
+        onMoveNodeLabel(
+          interaction.nodeId,
+          add(interaction.startOffset, localDelta),
+        );
+      }
+      setNodeLabelDraft(null);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
     if (interaction.kind === "label-drag") {
       if (commit) {
         if (interaction.moved) {
@@ -1781,6 +2877,42 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         }
       }
       setLabelDraft(null);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
+    if (
+      interaction.kind === "drag" &&
+      commit &&
+      duplicateIntentRef.current !== null &&
+      !duplicateDragRef.current
+    ) {
+      const nodeId = ctrlClickToggleRef.current;
+      duplicateIntentRef.current = null;
+      ctrlClickToggleRef.current = null;
+      suppressNextNodePartClick();
+      if (nodeId !== null) onToggleNodeSelection(nodeId);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
+    if (
+      interaction.kind === "drag" &&
+      commit &&
+      detachIntentRef.current !== null &&
+      !detachDragRef.current
+    ) {
+      detachIntentRef.current = null;
       interactionRef.current = null;
       setPanning(false);
       const pointerId = interaction.pointerId;
@@ -1807,14 +2939,77 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const movedDrag = interaction.kind === "drag" && interaction.captured;
     const shouldCommit =
       changed && (interaction.kind === "resize" || movedDrag);
+    const committedFrames = {
+      [interaction.nodeId]: interaction.lastFrame,
+      ...(interaction.kind === "drag" ? interaction.lastChildFrames : {}),
+    };
+    const insertNodeId = wireInsertNodeIdRef.current;
+    let insertTargetCurrent = insertTargetRef.current;
+    if (
+      insertNodeId !== null &&
+      insertTargetCurrent === null &&
+      interaction.kind === "drag"
+    ) {
+      insertTargetCurrent = nearestInsertionTarget(
+        Object.values(layout.edges),
+        {
+          x: interaction.lastFrame.x + interaction.lastFrame.width / 2,
+          y: interaction.lastFrame.y + interaction.lastFrame.height / 2,
+        },
+        Math.max(18, scene.canvas.grid.size * 2),
+      );
+    }
+    if (
+      commit &&
+      interaction.kind === "drag" &&
+      insertNodeId !== null &&
+      insertTargetCurrent !== null
+    ) {
+      const target = insertTargetCurrent;
+      onInsertComponentOnWire(
+        insertNodeId,
+        target.edgeId,
+        target.point,
+        target.orientation,
+      );
+      wireInsertNodeIdRef.current = null;
+      insertTargetRef.current = null;
+      setInsertTarget(null);
+      onPreviewFrames({});
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+    wireInsertNodeIdRef.current = null;
+    insertTargetRef.current = null;
+    setInsertTarget(null);
     if (commit && shouldCommit) {
-      onCommitFrames({
-        [interaction.nodeId]: interaction.lastFrame,
-        ...(interaction.kind === "drag" ? interaction.lastChildFrames : {}),
-      });
+      if (interaction.kind === "drag" && detachDragRef.current) {
+        onCommitDetachDrag(committedFrames);
+      } else if (interaction.kind === "drag" && duplicateDragRef.current) {
+        onCommitDuplicateDrag(committedFrames);
+      } else {
+        const branch = branchDragRef.current;
+        if (interaction.kind === "drag" && branch !== null) {
+          onCommitShiftDrag(committedFrames, branch.groups);
+        } else {
+          onCommitFrames(committedFrames);
+        }
+      }
     } else {
       onPreviewFrames({});
     }
+    branchDragRef.current = null;
+    branchIntentRef.current = null;
+    duplicateDragRef.current = false;
+    duplicateIntentRef.current = null;
+    ctrlClickToggleRef.current = null;
+    detachDragRef.current = false;
+    detachIntentRef.current = null;
     if (movedDrag && changed) suppressNextNodePartClick();
     interactionRef.current = null;
     setGuides([]);
@@ -1832,12 +3027,67 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     lastPointerScreenRef.current = screen;
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setCursorWorld(world);
+    if (wireInsertNodeIdRef.current === null && insertTargetRef.current !== null) {
+      insertTargetRef.current = null;
+      setInsertTarget(null);
+    }
+
+    // Hovering a diagram object reveals its connection handles. Tracking this
+    // from the SVG pointer position (rather than the node's own pointerleave)
+    // keeps the handles mounted while the pointer travels to a perimeter port.
+    const hoverMargin = 10 / zoomRef.current;
+    const hoveredObject = Object.values(layout.nodes)
+      .filter((nodeLayout) => scene.nodes[nodeLayout.nodeId]?.visible !== false)
+      .sort((a, b) =>
+        (scene.nodes[b.nodeId]?.z ?? 0) - (scene.nodes[a.nodeId]?.z ?? 0))
+      .find((nodeLayout) =>
+        nodeLayout.kind === "circuitComponent"
+          ? circuitOutlineContains(world, nodeLayout.focusOutline, hoverMargin)
+          : rectContainsPoint(
+              expandRect(selectionFrameFor(nodeLayout), hoverMargin),
+              world,
+            ),
+      );
+    setHoveredObjectNodeId(hoveredObject?.nodeId ?? null);
 
     const nearby = nearestPort(layout.ports, world, 9 / zoomRef.current);
     setHoveredPort(nearby);
 
-    const interaction = interactionRef.current;
+    let interaction = interactionRef.current;
     if (interaction === null) return;
+    if (
+      interaction.kind === "drag" &&
+      event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      wireInsertNodeIdRef.current === null &&
+      branchDragRef.current === null &&
+      selectedNodeIds.length <= 1
+    ) {
+      const dragged = scene.nodes[interaction.nodeId];
+      if (dragged?.kind === "circuitComponent") {
+        const definition = circuitComponent(dragged.component);
+        const unconnected = definition !== undefined &&
+          definition.pins.length === 2 &&
+          !Object.values(scene.edges).some(
+            (edge) =>
+              edge.semantic.family === "circuit" &&
+              definition.pins.some(
+                (pin) =>
+                  (edge.source.target === "node" &&
+                    edge.source.nodeId === dragged.id &&
+                    edge.source.port.kind === "pin" &&
+                    edge.source.port.pinId === pin.id) ||
+                  (edge.target.target === "node" &&
+                    edge.target.nodeId === dragged.id &&
+                    edge.target.port.kind === "pin" &&
+                    edge.target.port.pinId === pin.id),
+              ),
+          );
+        if (unconnected) wireInsertNodeIdRef.current = dragged.id;
+      }
+    }
 
     if (interaction.kind === "marquee") {
       const moved = interaction.moved ||
@@ -1850,6 +3100,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     }
 
     if (interaction.kind === "draw") {
+      interaction.lastWorld = world;
+      interaction.pointerTravel = Math.hypot(
+        screen.x - interaction.startScreen.x,
+        screen.y - interaction.startScreen.y,
+      );
+      if (interaction.pointerTravel > 3) portClickFocusRef.current = null;
       const rawTarget = findDrawTarget(
         world,
         interaction.source.nodeId,
@@ -1869,8 +3125,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     }
 
     if (interaction.kind === "reattach") {
+      interaction.lastWorld = world;
+      interaction.pointerTravel = Math.hypot(
+        screen.x - interaction.startScreen.x,
+        screen.y - interaction.startScreen.y,
+      );
       const moved = interaction.moved ||
-        Math.hypot(world.x - interaction.startWorld.x, world.y - interaction.startWorld.y) * zoomRef.current > 3;
+        interaction.pointerTravel > 3;
       interaction.moved = moved;
       if (!moved) return;
       const edgeLayout = layout.edges[interaction.edgeId];
@@ -1921,6 +3182,61 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           delta,
         });
       }
+      return;
+    }
+
+    if (interaction.kind === "node-label-drag") {
+      const delta = {
+        x: world.x - interaction.startWorld.x,
+        y: world.y - interaction.startWorld.y,
+      };
+      const moved = interaction.moved ||
+        Math.hypot(delta.x, delta.y) * zoomRef.current > 3;
+      interaction.moved = moved;
+      interaction.lastDelta = delta;
+      if (moved) {
+        setNodeLabelDraft({ nodeId: interaction.nodeId, delta });
+      }
+      return;
+    }
+
+    if (interaction.kind === "edge-translate") {
+      const rawDelta = interaction.axis === "x"
+        ? world.x - interaction.startWorld.x
+        : world.y - interaction.startWorld.y;
+      const delta = snap(rawDelta, Math.max(1, gridSize));
+      interaction.moved = interaction.moved || Math.abs(delta) > 1e-6;
+      const frames: Record<string, Rect> = {};
+      for (const [id, frame] of Object.entries(interaction.startFrames)) {
+        frames[id] = {
+          ...frame,
+          x: frame.x + (interaction.axis === "x" ? delta : 0),
+          y: frame.y + (interaction.axis === "y" ? delta : 0),
+        };
+      }
+      interaction.lastFrames = frames;
+      if (interaction.moved) onPreviewFrames(frames);
+      return;
+    }
+
+    if (interaction.kind === "rotate") {
+      const centerScreen = {
+        x: interaction.center.x * zoomRef.current + cameraRef.current.x,
+        y: interaction.center.y * zoomRef.current + cameraRef.current.y,
+      };
+      const angle = (Math.atan2(screen.y - centerScreen.y, screen.x - centerScreen.x) * 180) / Math.PI;
+      interaction.lastRotation = normalizeRotation(
+        interaction.startRotation + (angle - interaction.startPointerAngle),
+      );
+      const radians = (angle * Math.PI) / 180;
+      setRotationHandleOverride({
+        nodeId: interaction.nodeId,
+        point: {
+          x: interaction.center.x + interaction.radius * Math.cos(radians),
+          y: interaction.center.y + interaction.radius * Math.sin(radians),
+        },
+      });
+      onPreviewRotation(interaction.nodeId, interaction.lastRotation);
       return;
     }
 
@@ -1976,6 +3292,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     }
 
     if (interaction.kind !== "drag" && interaction.kind !== "resize") return;
+    const activeNodeId = interaction.nodeId;
     const delta = sub(world, interaction.startWorld);
     if (
       interaction.kind === "drag" &&
@@ -1992,7 +3309,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const childIds = interaction.kind === "drag" ? interaction.childIds : [];
     const others = Object.values(layout.nodes).filter(
       (node) =>
-        node.nodeId !== interaction.nodeId &&
+        node.nodeId !== activeNodeId &&
         !childIds.includes(node.nodeId),
     );
 
@@ -2010,6 +3327,172 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         others,
       });
       interaction.lastFrame = snapped.frame;
+      if (interaction.captured && detachIntentRef.current !== null) {
+        const detached = detachCircuitComponentEndings(
+          sceneRef.current,
+          detachIntentRef.current,
+        );
+        detachIntentRef.current = null;
+        if (detached !== sceneRef.current) {
+          onBeginDetachDrag(detached);
+          detachDragRef.current = true;
+        }
+      }
+      if (wireInsertNodeIdRef.current !== null) {
+        const target = nearestInsertionTarget(
+          Object.values(layout.edges),
+          {
+            x: snapped.frame.x + snapped.frame.width / 2,
+            y: snapped.frame.y + snapped.frame.height / 2,
+          },
+          Math.max(12, scene.canvas.grid.size),
+        );
+        insertTargetRef.current = target;
+        setInsertTarget(target);
+      }
+      if (
+        duplicateIntentRef.current !== null &&
+        (snapped.frame.x !== interaction.startFrame.x ||
+          snapped.frame.y !== interaction.startFrame.y)
+      ) {
+        const intent = duplicateIntentRef.current;
+        const payload = copySceneNodes(sceneRef.current, intent.nodeIds);
+        const duplicated = payload === null
+          ? null
+          : pasteSceneClipboard(sceneRef.current, payload, { x: 0, y: 0 });
+        duplicateIntentRef.current = null;
+        ctrlClickToggleRef.current = null;
+        if (duplicated !== null && duplicated.nodeIds[0] !== undefined) {
+          const duplicateIds = duplicated.nodeIds.map(String);
+          const primaryDuplicateId = duplicateIds[0]!;
+          let duplicateScene = duplicated.scene;
+          let parallelGroup2Ids: string[] = [];
+          if (
+            intent.parallelBranch &&
+            event.shiftKey &&
+            sceneRef.current.meta.diagramKind === "circuit"
+          ) {
+            const pairs = intent.nodeIds.flatMap((sourceId) => {
+              const duplicateId = duplicated.nodeIdMap.get(asNodeId(sourceId));
+              if (duplicateId === undefined) return [];
+              const source = sceneRef.current.nodes[sourceId];
+              const duplicate = duplicated.scene.nodes[duplicateId];
+              if (
+                source?.kind !== "circuitComponent" ||
+                duplicate?.kind !== "circuitComponent"
+              ) {
+                return [];
+              }
+              return [{ sourceId: asNodeId(sourceId), duplicateId }];
+            });
+            const junctionPairs = intent.nodeIds.flatMap((sourceId) => {
+              const duplicateId = duplicated.nodeIdMap.get(asNodeId(sourceId));
+              if (duplicateId === undefined) return [];
+              const source = sceneRef.current.nodes[sourceId];
+              const duplicate = duplicated.scene.nodes[duplicateId];
+              if (
+                source?.kind !== "circuitJunction" ||
+                duplicate?.kind !== "circuitJunction"
+              ) {
+                return [];
+              }
+              return [{ sourceId: asNodeId(sourceId), duplicateId }];
+            });
+            if (pairs.length > 0 || junctionPairs.length > 0) {
+              const parallel = createDuplicateParallelBranches(
+                duplicateScene,
+                pairs,
+                Math.max(0, branchDistance) * sceneRef.current.canvas.grid.size,
+                intent.nodeIds.map((id) => asNodeId(id)),
+                junctionPairs,
+              );
+              duplicateScene = parallel.scene;
+              parallelGroup2Ids = parallel.group2Ids.map(String);
+              setBranchDistance(0);
+              setBranchTargetIds([]);
+            }
+          }
+          const originalPrimary = duplicateScene.nodes[primaryDuplicateId];
+          const childIds = [...duplicateIds.slice(1), ...parallelGroup2Ids];
+          const childStartFrames: Record<string, Rect> = {};
+          const lastChildFrames: Record<string, Rect> = {};
+          const delta = {
+            x: snapped.frame.x - interaction.startFrame.x,
+            y: snapped.frame.y - interaction.startFrame.y,
+          };
+          for (const id of childIds) {
+            const frame = duplicateScene.nodes[id]?.frame;
+            if (frame === undefined) continue;
+            childStartFrames[id] = frame;
+            lastChildFrames[id] = {
+              ...frame,
+              x: frame.x + delta.x,
+              y: frame.y + delta.y,
+            };
+          }
+          onBeginDuplicateDrag(duplicateScene, duplicateIds);
+          interaction = {
+            kind: "drag",
+            pointerId: interaction.pointerId,
+            nodeId: primaryDuplicateId,
+            startWorld: interaction.startWorld,
+            startFrame: originalPrimary?.frame ?? interaction.startFrame,
+            childIds,
+            childStartFrames,
+            captured: true,
+            lastFrame: snapped.frame,
+            lastChildFrames,
+          };
+          interactionRef.current = interaction;
+          duplicateDragRef.current = true;
+        }
+      }
+      if (
+        branchIntentRef.current !== null &&
+        (Math.abs(snapped.frame.x - interaction.startFrame.x) >= gridSize - 1e-6 ||
+          Math.abs(snapped.frame.y - interaction.startFrame.y) >= gridSize - 1e-6)
+      ) {
+        const result = createShiftDragBranchesResult(
+          sceneRef.current,
+          branchIntentRef.current,
+          false,
+        );
+        branchIntentRef.current = null;
+        if (result.groups.length > 0) {
+          onBeginShiftDrag(result.scene);
+          const branchFrames: Record<string, Rect> = {};
+          for (const group2Id of result.group2Ids) {
+            const frame = result.scene.nodes[group2Id]?.frame;
+            if (frame !== undefined) branchFrames[group2Id] = frame;
+          }
+          interaction.childIds = [...interaction.childIds, ...result.group2Ids];
+          interaction.childStartFrames = {
+            ...interaction.childStartFrames,
+            ...branchFrames,
+          };
+          interaction.lastChildFrames = {
+            ...interaction.lastChildFrames,
+            ...branchFrames,
+          };
+          branchDragRef.current = { groups: result.groups };
+        }
+      }
+      if (scene.meta.diagramKind === "circuit" && wireInsertNodeIdRef.current === null) {
+        setCoincidentHighlights(
+          coincidentDragHighlights(
+            scene,
+            layout,
+            {
+              nodeId: interaction.nodeId,
+              frame: snapped.frame,
+              childIds: interaction.childIds,
+              childFrames: interaction.lastChildFrames,
+            },
+          ),
+        );
+      } else {
+        setCoincidentHighlights([]);
+      }
       const childDelta = {
         x: snapped.frame.x - interaction.startFrame.x,
         y: snapped.frame.y - interaction.startFrame.y,
@@ -2084,8 +3567,49 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     : null;
   const selectedLayout =
     singleSelectedNodeId === null ? undefined : layout.nodes[singleSelectedNodeId];
-  const selectedPorts =
-    singleSelectedNodeId === null ? [] : snapHandlesForNode(layout.ports, singleSelectedNodeId);
+  const rotateHandle = selectedLayout !== undefined && selectedLayout.kind === "circuitComponent"
+    ? (() => {
+        const geometry = circuitRotateHandleGeometry(
+          selectedLayout.frame,
+          selectedLayout.rotation,
+          zoom,
+        );
+        const override = rotationHandleOverride?.nodeId === selectedLayout.nodeId
+          ? rotationHandleOverride.point
+          : null;
+        return {
+          nodeId: selectedLayout.nodeId,
+          x: override?.x ?? geometry.point.x,
+          y: override?.y ?? geometry.point.y,
+          center: geometry.center,
+          rotation: selectedLayout.rotation,
+        };
+      })()
+    : null;
+  const selectedPorts = singleSelectedNodeId === null
+    ? []
+    : (() => {
+        const selectedNodeLayout = layout.nodes[singleSelectedNodeId];
+        if (
+          selectedNodeLayout?.kind === "circuitComponent" &&
+          hoveredObjectNodeId !== singleSelectedNodeId &&
+          hoveredPort?.nodeId !== singleSelectedNodeId
+        ) {
+          return [];
+        }
+        return snapHandlesForNode(layout.ports, singleSelectedNodeId);
+      })();
+  const hoveredPorts = hoveredObjectNodeId === null || selectedEdgeIds.length > 0
+    ? []
+    : snapHandlesForNode(layout.ports, hoveredObjectNodeId);
+  const visiblePorts = (() => {
+    const seen = new Set<string>();
+    return [...selectedPorts, ...hoveredPorts].filter((port) => {
+      if (seen.has(port.id)) return false;
+      seen.add(port.id);
+      return true;
+    });
+  })();
   const selectedActivationFrame = (() => {
     if (selectedActivation === null) return null;
     const nodeLayout = layout.nodes[selectedActivation.nodeId];
@@ -2122,7 +3646,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                   : { family: "generic" as const, kind: "filledArrow" as const },
             }
           : edge.markers;
-      return [edgeLayerItem(edgeLayout, markers, edge.style.stroke)];
+      return [
+        edgeLayerItem(
+          edgeLayout,
+          markers,
+          scene.meta.diagramKind === "circuit" ? scene.theme.shape.stroke : edge.style.stroke,
+          scene.meta.diagramKind !== "circuit",
+        ),
+      ];
     });
 
   const sortedNodes = Object.values(layout.nodes).sort((a, b) => {
@@ -2136,9 +3667,72 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     return edgeLayout === undefined ? [] : [{ id: edge.id, points: edgeLayout.points }];
   });
   const terminalHitItems = Object.values(scene.edges).flatMap((edge) => {
+    if (scene.meta.diagramKind === "circuit") return [];
     const edgeLayout = layout.edges[edge.id];
     return edgeLayout === undefined ? [] : [{ id: edge.id, layout: edgeLayout }];
   });
+  const centerLabelHitItems = scene.meta.diagramKind === "circuit"
+    ? Object.values(scene.edges).flatMap((edge) => {
+        const edgeLayout = layout.edges[edge.id];
+        return edgeLayout === undefined ? [] : [{ id: edge.id, layout: edgeLayout }];
+      })
+    : terminalHitItems;
+  const nodeLabelHitItems = scene.meta.diagramKind === "circuit"
+    ? Object.values(layout.nodes).flatMap((nodeLayout) => {
+        const node = scene.nodes[nodeLayout.nodeId];
+        if (
+          node === undefined ||
+          (node.kind !== "circuitComponent" && node.kind !== "circuitJunction") ||
+          nodeLayout.kind !== node.kind ||
+          node.visible === false ||
+          nodeLayout.labelFrame === undefined
+        ) {
+          return [];
+        }
+        return [{ id: node.id, frame: nodeLayout.labelFrame }];
+      })
+    : [];
+  const branchIndicators = branchDistance > 0 && branchTargetIds.length > 0
+    ? (() => {
+        const selected = new Set(branchTargetIds);
+        const distance = branchDistance * scene.canvas.grid.size;
+        return branchTargetIds.flatMap((nodeId) => {
+          const nodeLayout = layout.nodes[nodeId];
+          if (nodeLayout?.kind === "circuitJunction") {
+            return [
+              point(
+                nodeLayout.center.x + distance,
+                nodeLayout.center.y,
+              ),
+            ];
+          }
+          if (nodeLayout?.kind !== "circuitComponent") return [];
+          return nodeLayout.pins.flatMap((pin) => {
+            const external = Object.values(scene.edges).some((edge) => {
+              const atPin =
+                (edge.source.target === "node" &&
+                  edge.source.nodeId === nodeId &&
+                  edge.source.port.kind === "pin" &&
+                  edge.source.port.pinId === pin.pinId) ||
+                (edge.target.target === "node" &&
+                  edge.target.nodeId === nodeId &&
+                  edge.target.port.kind === "pin" &&
+                  edge.target.port.pinId === pin.pinId);
+              if (!atPin) return false;
+              const other = edge.source.target === "node" &&
+                edge.source.nodeId === nodeId &&
+                edge.source.port.kind === "pin" &&
+                edge.source.port.pinId === pin.pinId
+                ? edge.target
+                : edge.source;
+              return other.target !== "node" || !selected.has(other.nodeId);
+            });
+            if (!external) return [];
+            return [add(pin.point, scale(pin.normal, distance))];
+          });
+        });
+      })()
+    : [];
   const selectedEdge = selectedEdgeId === null ? undefined : scene.edges[selectedEdgeId];
   const selectedEdgeLayout = selectedEdgeId === null ? undefined : layout.edges[selectedEdgeId];
   const centerLabel = selectedEdgeLayout?.labels.find((label) => label.zone === "center");
@@ -2165,6 +3759,18 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     setLinePopover(null);
   };
   const focusNode = nodeFocus === null ? undefined : scene.nodes[nodeFocus.nodeId];
+  const focusJunctionWireCount = focusNode?.kind === "circuitJunction"
+    ? Object.values(scene.edges).filter(
+        (edge) =>
+          edge.semantic.family === "circuit" &&
+          ((edge.source.target === "node" &&
+            edge.source.nodeId === focusNode.id &&
+            edge.source.port.kind === "center") ||
+            (edge.target.target === "node" &&
+              edge.target.nodeId === focusNode.id &&
+              edge.target.port.kind === "center")),
+      ).length
+    : 0;
   const focusLayout = nodeFocus === null ? undefined : layout.nodes[nodeFocus.nodeId];
   const focusFrame = (() => {
     if (nodeFocus === null || focusLayout === undefined) return null;
@@ -2194,10 +3800,23 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       }
       return focusLayout.headFrame;
     }
+    if (focusLayout.kind === "circuitJunction") {
+      const size = Math.max(1, scene.canvas.grid.size);
+      return {
+        x: focusLayout.center.x - size / 2,
+        y: focusLayout.center.y - size / 2,
+        width: size,
+        height: size,
+      };
+    }
     return focusLayout.frame;
   })();
+  const focusOutline = focusLayout?.kind === "circuitComponent"
+    ? focusLayout.focusOutline
+    : null;
   const focusHighlights: readonly Rect[] = (() => {
     if (focusLayout === undefined || focusFrame === null) return [];
+    if (focusLayout.kind === "circuitComponent") return [];
     if (focusLayout.kind !== "lifeline") return [focusFrame];
     if (nodeFocus?.kind === "lifelineSpine") {
       return [{
@@ -2217,21 +3836,84 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       },
     ];
   })();
-  const focusMenuPosition = (() => {
+  const focusMenuKey = (() => {
+    if (nodeFocus === null) return "";
+    const part = nodeFocus.kind === "section"
+      ? nodeFocus.sectionId
+      : nodeFocus.kind === "row"
+        ? nodeFocus.rowId
+        : nodeFocus.kind === "lifelineSpine"
+          ? nodeFocus.y
+          : "";
+    // Camera/viewport and node movement should move the menu; moving the
+    // focused row within its table must not, or reordering would drag the
+    // menu with it.
+    const anchor = nodeFocus.kind === "row" || focusFrame === null || focusLayout === undefined
+      ? ""
+      : `${focusFrame.x}:${focusFrame.y}:${focusFrame.width}:${focusFrame.height}:${focusLayout.frame.x}:${focusLayout.frame.y}:${focusLayout.frame.width}:${focusLayout.kind === "circuitComponent" ? focusLayout.rotation : 0}`;
+    return `${nodeFocus.nodeId}:${nodeFocus.kind}:${part}:${anchor}:${camera.x}:${camera.y}:${zoom}:${viewport.width}:${viewport.height}`;
+  })();
+  const focusMenuPosition = useMemo(() => {
     if (focusLayout === undefined || focusFrame === null) return null;
     const width = 320;
+    const menuHeight = 390;
     const left = focusLayout.frame.x * zoom + camera.x;
     const right = (focusLayout.frame.x + focusLayout.frame.width) * zoom + camera.x;
-    const anchorTop = focusFrame.y * zoom + camera.y;
-    const preferredLeft = right + 16;
-    const leftPosition = preferredLeft + width <= viewport.width - 10
-      ? preferredLeft
-      : Math.max(10, left - 16 - width);
+    let anchorTop = focusFrame.y * zoom + camera.y;
+    let leftPosition: number;
+    if (focusLayout.kind === "circuitComponent") {
+      const handle = circuitRotateHandleGeometry(
+        focusLayout.frame,
+        focusLayout.rotation,
+        zoom,
+      ).point;
+      const handleScreen = {
+        x: handle.x * zoom + camera.x,
+        y: handle.y * zoom + camera.y,
+      };
+      const bounds = focusLayout.bounds;
+      const outlineXs = focusLayout.focusOutline.map((entry) => entry.x);
+      const outlineYs = focusLayout.focusOutline.map((entry) => entry.y);
+      const leftEdge = Math.min(bounds.x, ...outlineXs);
+      const topEdge = Math.min(bounds.y, ...outlineYs);
+      const rightEdge = Math.max(bounds.x + bounds.width, ...outlineXs);
+      const bottomEdge = Math.max(bounds.y + bounds.height, ...outlineYs);
+      const componentLeft = leftEdge * zoom + camera.x;
+      const componentTop = topEdge * zoom + camera.y;
+      const componentRight = rightEdge * zoom + camera.x;
+      const componentBottom = bottomEdge * zoom + camera.y;
+      const obstacleLeft = Math.min(componentLeft, handleScreen.x - 8);
+      const obstacleRight = Math.max(componentRight, handleScreen.x + 8);
+      const preferred = obstacleRight + 16;
+      const fallback = obstacleLeft - 16 - width;
+      anchorTop = Math.min(componentTop, handleScreen.y - 8);
+      if (preferred + width <= viewport.width - 10) {
+        leftPosition = preferred;
+      } else if (fallback >= 10) {
+        leftPosition = fallback;
+      } else {
+        leftPosition = Math.max(
+          10,
+          Math.min(componentLeft, Math.max(10, viewport.width - width - 10)),
+        );
+        const below = Math.max(componentBottom, handleScreen.y + 8) + 16;
+        const above = Math.min(componentTop, handleScreen.y - 8) - 16 - menuHeight;
+        anchorTop = below + menuHeight <= viewport.height - 10
+          ? below
+          : Math.max(10, above);
+      }
+    } else {
+      leftPosition = right + 16 + width <= viewport.width - 10
+        ? right + 16
+        : Math.max(10, left - 16 - width);
+    }
     return {
       left: Math.max(10, Math.min(leftPosition, Math.max(10, viewport.width - width - 10))),
-      top: Math.max(10, Math.min(anchorTop, Math.max(10, viewport.height - 390))),
+      top: Math.max(10, Math.min(anchorTop, Math.max(10, viewport.height - menuHeight))),
     };
-  })();
+    // focusMenuKey intentionally captures only the stable focus identity plus
+    // camera/viewport; layout-only row movement keeps the current position.
+  }, [focusMenuKey]);
   const terminalPlacement = (() => {
     if (activeEndpoint === null || selectedEdgeLayout === undefined) return null;
     const points = selectedEdgeLayout.points;
@@ -2297,6 +3979,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         onPointerLeave={() => {
           lastPointerScreenRef.current = null;
           setHoveredPort(null);
+          setHoveredObjectNodeId(null);
         }}
         onContextMenu={handleContextMenu}
         onAuxClick={(event) => {
@@ -2327,6 +4010,22 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             edges={hitEdges}
             onSelect={handleEdgePointerDown}
             onReroute={onRerouteEdge}
+            allowContextReroute={scene.meta.diagramKind === "circuit"}
+            onAddJunction={
+              scene.meta.diagramKind === "circuit"
+                ? (edgeId, event) => {
+                    const svg = svgRef.current;
+                    if (svg === null) return;
+                    const screen = pointFromEvent(event, svg);
+                    const world = screenToWorld(
+                      screen,
+                      cameraRef.current,
+                      zoomRef.current,
+                    );
+                    onAddJunctionAtWire(edgeId, world);
+                  }
+                : undefined
+            }
           />
           <TerminalHitLayer
             edges={terminalHitItems}
@@ -2343,7 +4042,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             onDoublePress={(edgeId, end) => openTerminalMenu(edgeId, end, true)}
           />
           <CenterLabelHitLayer
-            edges={terminalHitItems}
+            edges={centerLabelHitItems}
             zoom={zoom}
             onDragStart={(edgeId, labelId, event) =>
               beginLabelDrag(edgeId, labelId, event, "line")}
@@ -2359,6 +4058,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 layout={nodeLayout}
                 theme={scene.theme}
                 selected={selectedNodeIds.includes(node.id)}
+                gridSize={scene.canvas.grid.size}
                 skeleton={false}
                 hoveredPart={hoveredNodePart?.nodeId === node.id ? hoveredNodePart : null}
                 onHoverPart={(focus) =>
@@ -2373,6 +4073,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 onPointerDown={(event) => handleNodePointerDown(event, node.id)}
                 onTextDoubleClick={(target) => onTextDoubleClick(node.id, target)}
                 onPartClick={handleNodePartClick}
+                labelDelta={
+                  nodeLabelDraft?.nodeId === node.id
+                    ? nodeLabelDraft.delta
+                    : undefined
+                }
                 activationDraft={
                   activationDraft?.nodeId === node.id
                     ? {
@@ -2425,6 +4130,18 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           ) : null}
           {[draftEdge, reattachPreview].map((preview, index) => {
             if (preview === null) return null;
+            const interaction = interactionRef.current;
+            const circuitGhost =
+              index === 0 &&
+              !preview.snapped &&
+              scene.meta.diagramKind === "circuit" &&
+              interaction?.kind === "draw" &&
+              canExtendToEmpty({
+                pointerTravelPx: interaction.pointerTravel,
+                source: interaction.source.point,
+                candidate: preview.to,
+                gridSize,
+              });
             return (
               <g pointerEvents="none" key={`edge-preview-${index}`}>
                 <line
@@ -2443,14 +4160,16 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                   r={3 / zoom}
                   fill={scene.theme.colors.selection}
                 />
-                <circle
-                  cx={preview.to.x}
-                  cy={preview.to.y}
-                  r={(preview.snapped ? 5 : 3) / zoom}
-                  fill={preview.snapped ? scene.theme.colors.selection : "white"}
-                  stroke={scene.theme.colors.selection}
-                  strokeWidth={1.4 / zoom}
-                />
+                {preview.snapped || circuitGhost ? (
+                  <circle
+                    cx={preview.to.x}
+                    cy={preview.to.y}
+                    r={(preview.snapped ? 5 : 4) / zoom}
+                    fill={preview.snapped ? scene.theme.colors.selection : "white"}
+                    stroke={scene.theme.colors.selection}
+                    strokeWidth={1.4 / zoom}
+                  />
+                ) : null}
               </g>
             );
           })}
@@ -2468,6 +4187,58 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               hiddenLabelId={labelDraft?.labelId}
             />
           )}
+          <NodeLabelHitLayer
+            nodes={nodeLabelHitItems}
+            zoom={zoom}
+            onDragStart={beginNodeLabelDrag}
+            onDoublePress={(nodeId) =>
+              onTextDoubleClick(nodeId, { kind: "nodeName" })}
+          />
+          {insertTarget !== null ? (() => {
+            const targetEdge = layout.edges[insertTarget.edgeId];
+            if (targetEdge === undefined) return null;
+            return (
+              <polyline
+                data-insert-wire-target="true"
+                points={targetEdge.points.map((entry) => `${entry.x},${entry.y}`).join(" ")}
+                fill="none"
+                stroke={scene.theme.colors.selection}
+                strokeWidth={3}
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            );
+          })() : null}
+          {coincidentHighlights.map((highlight, index) => (
+            <circle
+              key={`coincident-highlight-${index}`}
+              data-coincident-highlight="true"
+              cx={highlight.x}
+              cy={highlight.y}
+              r={6 / zoom}
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth={2.5}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          ))}
+          {branchIndicators.map((indicator, index) => (
+            <circle
+              key={`branch-indicator-${index}`}
+              data-branch-indicator="true"
+              cx={indicator.x}
+              cy={indicator.y}
+              r={7 / zoom}
+              fill="none"
+              stroke={scene.theme.colors.selection}
+              strokeWidth={2.5}
+              strokeDasharray="4 3"
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          ))}
           {hoveredTerminal !== null ? (
             <circle
               className="terminal-hover-ring"
@@ -2516,6 +4287,18 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               </g>
             );
           })() : null}
+          {focusOutline !== null ? (
+            <polygon
+              data-focus-outline="true"
+              points={focusOutline.map((entry) => `${entry.x},${entry.y}`).join(" ")}
+              fill="#2563eb"
+              fillOpacity={0.06}
+              stroke={scene.theme.colors.selection}
+              strokeWidth={1.2 / zoom}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          ) : null}
           {focusHighlights.map((frame, index) => (
             <rect
               key={`focus-${index}`}
@@ -2531,13 +4314,41 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               pointerEvents="none"
             />
           ))}
+          {selectedEdgeIds.length > 1 &&
+          sequenceMovePreview === null &&
+          reattachPreview === null &&
+          activeEndpoint === null
+            ? selectedEdgeIds.map((edgeId) => {
+                const edgeLayout = layout.edges[edgeId];
+                const edge = scene.edges[edgeId];
+                if (edgeLayout === undefined || edge === undefined) return null;
+                return (
+                  <path
+                    key={`multi-edge-${edgeId}`}
+                    d={edgePathData(
+                      edgeLinePoints(edgeLayout, edge.markers),
+                      edgeLayout.bridges ?? [],
+                    )}
+                    fill="none"
+                    stroke={scene.theme.colors.selection}
+                    strokeWidth={2.4}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                    opacity={0.85}
+                  />
+                );
+              })
+            : null}
           {selectedEdgeLayout !== undefined &&
           sequenceMovePreview === null &&
           reattachPreview === null ? (
             <>
               {activeEndpoint === null ? (
-                <polyline
-                  points={edgeLinePoints(selectedEdgeLayout, selectedEdge?.markers ?? { source: { family: "none", kind: "none" }, target: { family: "none", kind: "none" } }).map((p) => `${p.x},${p.y}`).join(" ")}
+                <path
+                  d={edgePathData(
+                    edgeLinePoints(selectedEdgeLayout, selectedEdge?.markers ?? { source: { family: "none", kind: "none" }, target: { family: "none", kind: "none" } }),
+                    selectedEdgeLayout.bridges ?? [],
+                  )}
                   fill="none"
                   stroke={scene.theme.colors.selection}
                   strokeWidth={2.4}
@@ -2584,9 +4395,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               ) : null}
             </>
           ) : null}
-          {selectedPorts.length > 0 && activationDraft === null ? (
+          {visiblePorts.length > 0 && activationDraft === null ? (
             <PortHandles
-              ports={selectedPorts}
+              ports={visiblePorts}
               zoom={zoom}
               hoveredPortId={hoveredPort?.id}
               theme={scene.theme}
@@ -2594,7 +4405,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               onStartEdge={beginEdgeDraw}
             />
           ) : null}
-          {selectedLayout !== undefined && selectedActivation === null ? (
+          {selectedLayout !== undefined &&
+          selectedActivation === null &&
+          selectedLayout.kind !== "circuitComponent" &&
+          selectedLayout.kind !== "circuitJunction" ? (
             <>
               {([
                 { corner: "nw", x: selectedLayout.frame.x, y: selectedLayout.frame.y, cursor: "nwse-resize" },
@@ -2634,6 +4448,48 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 />
               ))}
             </>
+          ) : null}
+          {rotateHandle !== null ? (
+            <g data-rotate-handle={rotateHandle.nodeId} style={{ cursor: "grab" }}>
+              <line
+                x1={rotateHandle.center.x}
+                y1={rotateHandle.center.y}
+                x2={rotateHandle.x}
+                y2={rotateHandle.y}
+                stroke={scene.theme.colors.selection}
+                strokeWidth={1 / zoom}
+                strokeDasharray={`${3 / zoom} ${3 / zoom}`}
+                pointerEvents="none"
+              />
+              <circle
+                cx={rotateHandle.x}
+                cy={rotateHandle.y}
+                r={11 / zoom}
+                fill="white"
+                stroke={scene.theme.colors.selection}
+                strokeWidth={1.4 / zoom}
+                onPointerDown={(event) => handleRotatePointerDown(rotateHandle.nodeId, event)}
+              >
+                <title>{`Rotate ${rotateHandle.rotation}° · drag in 45° steps`}</title>
+              </circle>
+              <path
+                d={`M ${rotateHandle.x - 5 / zoom} ${rotateHandle.y - 1 / zoom} A ${5 / zoom} ${5 / zoom} 0 1 1 ${rotateHandle.x + 3 / zoom} ${rotateHandle.y + 4 / zoom}`}
+                fill="none"
+                stroke={scene.theme.colors.selection}
+                strokeWidth={1.4 / zoom}
+                strokeLinecap="round"
+                pointerEvents="none"
+              />
+              <path
+                d={`M ${rotateHandle.x + 0.6 / zoom} ${rotateHandle.y + 4.4 / zoom} L ${rotateHandle.x + 3.4 / zoom} ${rotateHandle.y + 4 / zoom} L ${rotateHandle.x + 2.4 / zoom} ${rotateHandle.y + 1.4 / zoom}`}
+                fill="none"
+                stroke={scene.theme.colors.selection}
+                strokeWidth={1.4 / zoom}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            </g>
           ) : null}
           {marquee !== null ? (
             <rect
@@ -2691,10 +4547,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             onUpdateRow={onUpdateRow}
             onAddRow={onAddRow}
             onDeleteRow={onDeleteRow}
+            onMoveRow={onMoveRow}
+            onFocusRow={onFocusRow}
             onAddSection={onAddSection}
             onUpdateSection={onUpdateSection}
             onDeleteSection={onDeleteSection}
             onDeleteNode={onDeleteNode}
+            onMergeJunction={onMergeJunction}
+            junctionWireCount={focusJunctionWireCount}
             onAddActivation={onAddActivation}
             imageAssets={imageAssets}
             onAssignImage={onAssignImageToNode}
@@ -2738,8 +4598,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           <div className="line-popover">
             <div className="popover-head">
               <div>
-                <strong>Connector</strong>
-                <span>Line options</span>
+                <strong>{scene.meta.diagramKind === "circuit" ? "Wire" : "Connector"}</strong>
+                <span>{scene.meta.diagramKind === "circuit" ? "Wire options" : "Line options"}</span>
               </div>
               <button
                 type="button"
@@ -2754,6 +4614,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               edge={selectedEdge}
               layout={selectedEdgeLayout}
               compact
+              variant={scene.meta.diagramKind === "circuit" ? "circuit" : "default"}
               idPrefix="canvas"
               focusToken={lineFocusToken}
               labelTextStyle={scene.theme.edge.labelText}
@@ -2815,6 +4676,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           >
             <AddObjectMenu
               diagramKind={scene.meta.diagramKind}
+              standard={resolveCircuitSettings(scene).standard}
               onPick={(templateId) => {
                 const created = onAddObject(templateId, addMenu.world);
                 if (created !== null && addMenu.source === "button") {

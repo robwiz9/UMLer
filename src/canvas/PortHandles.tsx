@@ -12,7 +12,9 @@ interface PortHandlesProps {
 }
 
 const portColor = (port: PortGeometry, theme: Theme): string => {
-  if (port.ref.kind === "row") return theme.colors.port;
+  if (port.ref.kind === "row" || port.ref.kind === "pin" || port.ref.kind === "center") {
+    return theme.colors.port;
+  }
   if (port.ref.kind === "spine") return theme.colors.warning;
   return theme.colors.portActive;
 };
@@ -26,7 +28,8 @@ export const PortHandles = ({ ports, zoom, hoveredPortId, theme, onHover, onStar
     {ports.map((port) => {
       const active = hoveredPortId === port.id;
       const radius = (active ? 5 : 3.4) / zoom;
-      const filled = port.ref.kind === "row";
+      const filled =
+        port.ref.kind === "row" || port.ref.kind === "pin" || port.ref.kind === "center";
       const color = portColor(port, theme);
       return (
         <g key={port.id} data-port-handle={port.id}>

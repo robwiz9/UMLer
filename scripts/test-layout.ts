@@ -11,7 +11,7 @@ import {
 } from "../src/model/scene.ts";
 import { DEFAULT_THEME, MONO_FONT } from "../src/model/styles.ts";
 import { rect } from "../src/model/geometry.ts";
-import { asActivationId, asEdgeId, asNodeId } from "../src/model/ids.ts";
+import { asActivationId, asEdgeId, asNodeId, asRowId } from "../src/model/ids.ts";
 import { NO_MARKER } from "../src/model/edges.ts";
 import {
   nearestPort,
@@ -27,6 +27,7 @@ import {
   commitAutoLayout,
   insertConnectedObject,
   insertEdge,
+  moveRow,
   moveSequenceEdge,
   setEdgeAttachment,
   setEdgeLabelTextStyle,
@@ -233,6 +234,79 @@ assert.equal(
   Object.keys(ER_COMMERCE.edges).length + 1,
   "chained edge-to-edge connector must appear in the layout snapshot",
 );
+
+// New ER connectors are plain lines with editable cardinality text on both
+// ends; the terminal glyph is opt-in from the endpoint menu.
+const defaultErEdge = createEdgeForDiagram(
+  ER_COMMERCE,
+  { nodeId: asNodeId("customers"), port: { kind: "perimeter", side: "east" } },
+  { nodeId: asNodeId("orders"), port: { kind: "perimeter", side: "west" } },
+);
+assert.ok(defaultErEdge !== null);
+assert.equal(defaultErEdge.markers.source.family, "none");
+assert.equal(defaultErEdge.markers.target.family, "none");
+assert.equal(defaultErEdge.labels.find((label) => label.zone === "source")?.text, "1");
+assert.equal(defaultErEdge.labels.find((label) => label.zone === "target")?.text, "1");
+
+// A fresh entity table starts with one primary-key row.
+const freshEntity = createObjectFromTemplate("er", "entity-table", ER_COMMERCE, {
+  x: 120,
+  y: 120,
+});
+assert.ok(freshEntity !== null && freshEntity.node.kind === "table");
+if (freshEntity === null || freshEntity.node.kind !== "table") throw new Error("unreachable");
+assert.equal(freshEntity.node.sections.flatMap((section) => section.rows).length, 1);
+assert.deepEqual(
+  freshEntity.node.sections[0]?.rows[0]?.constraints,
+  ["PK"],
+  "a fresh entity row must start as a primary key",
+);
+
+// Weak entity presentation changes the header and the PK badge only; the row
+// itself keeps the PK constraint.
+const weakEntityNode = {
+  ...freshEntity.node,
+  header: { ...freshEntity.node.header, weak: true },
+};
+const weakScene: SceneDocument = {
+  ...ER_COMMERCE,
+  nodes: { ...ER_COMMERCE.nodes, [weakEntityNode.id]: weakEntityNode },
+};
+const weakLayout = buildLayoutSnapshot(weakScene, measurer);
+const weakTable = weakLayout.nodes[weakEntityNode.id];
+assert.ok(weakTable !== undefined && weakTable.kind === "table");
+if (weakTable === undefined || weakTable.kind !== "table") throw new Error("unreachable");
+assert.equal(weakTable.header.stereotype?.text, "«weak»");
+assert.ok(weakTable.sections[0]?.rows[0]?.badgeFrames.some((badge) => badge.label === "D"));
+
+// Row reordering crosses section boundaries while preserving row identities.
+const movedDown = moveRow(
+  UML_CLASS_PAYMENTS,
+  asNodeId("card_payment"),
+  asRowId("card_payment_expiry"),
+  "down",
+);
+const cardPayment = movedDown.nodes.card_payment;
+assert.ok(cardPayment !== undefined && cardPayment.kind === "table");
+if (cardPayment === undefined || cardPayment.kind !== "table") throw new Error("unreachable");
+assert.deepEqual(
+  cardPayment.sections[0]?.rows.map((rowEntry) => rowEntry.id),
+  ["card_payment_last4", "card_payment_brand"],
+);
+assert.equal(cardPayment.sections[1]?.rows[0]?.id, "card_payment_expiry");
+const movedBack = moveRow(
+  movedDown,
+  asNodeId("card_payment"),
+  asRowId("card_payment_expiry"),
+  "up",
+);
+const restoredCardPayment = movedBack.nodes.card_payment;
+assert.ok(restoredCardPayment !== undefined && restoredCardPayment.kind === "table");
+if (restoredCardPayment === undefined || restoredCardPayment.kind !== "table") {
+  throw new Error("unreachable");
+}
+assert.equal(restoredCardPayment.sections[0]?.rows[2]?.id, "card_payment_expiry");
+assert.equal(restoredCardPayment.sections[1]?.rows[0]?.id, "card_payment_authorize");
 
 const sequenceLayout = buildLayoutSnapshot(UML_SEQUENCE_CHECKOUT, measurer);
 assert.ok(sequenceLayout.fitBounds.height < sequenceLayout.contentBounds.height);
