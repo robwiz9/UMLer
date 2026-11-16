@@ -171,15 +171,17 @@ const TableBody = ({
           />
         ) : null;
       })}
-      <line
-        x1={layout.frame.x}
-        y1={rectBottom(layout.header.frame)}
-        x2={rectRight(layout.frame)}
-        y2={rectBottom(layout.header.frame)}
-        stroke={style.divider.color}
-        strokeWidth={style.divider.width}
-        strokeDasharray={dashArray(style.divider.pattern)}
-      />
+      {rectBottom(layout.header.frame) < rectBottom(layout.frame) - 0.001 ? (
+        <line
+          x1={layout.frame.x}
+          y1={rectBottom(layout.header.frame)}
+          x2={rectRight(layout.frame)}
+          y2={rectBottom(layout.header.frame)}
+          stroke={style.divider.color}
+          strokeWidth={style.divider.width}
+          strokeDasharray={dashArray(style.divider.pattern)}
+        />
+      ) : null}
       {layout.sections.map((section) => (
         <SectionBody
           key={section.sectionId}
