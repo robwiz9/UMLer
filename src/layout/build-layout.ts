@@ -97,6 +97,9 @@ import { routeOrthogonalAStar } from "./router.ts";
 
 const EPSILON = 0.001;
 
+/** Fixed band reserved for a table section title when sections are visible. */
+export const TABLE_SECTION_TITLE_HEIGHT = 14;
+
 const rectOfPoints = (points: readonly Point[]): Rect => {
   if (points.length === 0) return rect(0, 0, 0, 0);
   const xs = points.map((p) => p.x);
@@ -248,6 +251,7 @@ const measureTable = (
   node: TableNode | RelationAttributeNode,
   measurer: TextMeasurer,
   ports: Map<PortId, PortGeometry>,
+  gridSize: number,
 ): NodeLayout => {
   const frame = node.frame;
   const style = node.style;
@@ -264,8 +268,19 @@ const measureTable = (
 
   const totalRows = sectionsInput.reduce((count, section) => count + section.rows.length, 0);
   const titleCount = sectionsInput.filter((section) => section.title !== undefined).length;
-  const headerHeight = Math.min(style.headerHeight, Math.max(12, frame.height * 0.4));
-  const titleHeight = 14;
+  const grid = Math.max(1, gridSize);
+  const naturalHeaderHeight = Math.max(
+    grid,
+    Math.round(style.headerHeight / grid) * grid,
+  );
+  // With no rows there is no body to share the height with: keep the natural
+  // header height and let vertical resizing collapse the body to zero instead
+  // of scaling the header down as a percentage of the frame. The natural
+  // height is grid-aligned; the frame only limits it on very short tables.
+  const headerHeight = totalRows === 0
+    ? Math.min(naturalHeaderHeight, frame.height)
+    : Math.min(naturalHeaderHeight, Math.max(12, frame.height * 0.4));
+  const titleHeight = TABLE_SECTION_TITLE_HEIGHT;
   const availableRows = Math.max(0, frame.height - headerHeight - titleCount * titleHeight);
   const rowHeight = totalRows === 0 ? 0 : Math.max(8, availableRows / totalRows);
 
@@ -775,7 +790,7 @@ const measureNode = (
   ports: Map<PortId, PortGeometry>,
 ): NodeLayout => {
   if (node.kind === "table" || node.kind === "relationAttribute") {
-    return measureTable(node, measurer, ports);
+    return measureTable(node, measurer, ports, scene.canvas.grid.size);
   }
   if (node.kind === "lifeline") {
     return measureLifeline(node, measurer, ports);

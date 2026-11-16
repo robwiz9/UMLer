@@ -218,6 +218,10 @@ inserts a blank row below and focuses the new name; Enter in a row whose name an
 deletes that row and closes the menu. In other single-line fields Enter commits and closes the menu. Multiline
 comment fields keep their newline behaviour.
 
+Adding or removing a row grows or shrinks the table frame by the row's current absolute height, so the other
+rows keep their height. Section headers reserve a fixed band; adding a section grows the frame by that band plus
+one row. Manual vertical resize changes the absolute row height used by subsequent add/remove operations.
+
 ![Floating table header controls](./assets/step3-object-menu.png)
 
 Focus granularity for tables/classes:

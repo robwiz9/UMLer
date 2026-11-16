@@ -19,7 +19,14 @@ import {
   serializeSceneFile,
   type ImportedProject,
 } from "../model/persistence.ts";
-import { buildLayoutSnapshot, pointOnPolyline, withNodeFrames, withNodeRotations } from "../layout/build-layout.ts";
+import {
+  TABLE_SECTION_TITLE_HEIGHT,
+  buildLayoutSnapshot,
+  pointOnPolyline,
+  withNodeFrames,
+  withNodeRotations,
+} from "../layout/build-layout.ts";
+import { resizeTableFrameBy, tableRowHeightFor } from "../layout/table-resize.ts";
 import type { EdgeLayout, LayoutSnapshot } from "../model/layout.ts";
 import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
@@ -1835,14 +1842,18 @@ export const App = () => {
   const handleRowAdd = useCallback((nodeId: string, sectionId?: string, afterRowId?: string) => {
     const rowId = asRowId(newId("row"));
     setScene((current) =>
-      addRow(
-        current,
-        asNodeId(nodeId),
-        sectionId === undefined ? undefined : asSectionId(sectionId),
-        {
-          rowId,
-          afterRowId: afterRowId === undefined ? undefined : asRowId(afterRowId),
-        },
+      resizeTableFrameBy(
+        addRow(
+          current,
+          asNodeId(nodeId),
+          sectionId === undefined ? undefined : asSectionId(sectionId),
+          {
+            rowId,
+            afterRowId: afterRowId === undefined ? undefined : asRowId(afterRowId),
+          },
+        ),
+        nodeId,
+        tableRowHeightFor(current, layout, nodeId),
       ),
     );
     setSelectedNodeId(nodeId);
@@ -1854,11 +1865,17 @@ export const App = () => {
       target: { kind: "rowName", rowId },
       token: (current?.token ?? 0) + 1,
     }));
-  }, []);
+  }, [layout]);
 
   const handleRowDelete = useCallback((nodeId: string, rowId: string) => {
-    setScene((current) => deleteRow(current, asNodeId(nodeId), asRowId(rowId)));
-  }, []);
+    setScene((current) =>
+      resizeTableFrameBy(
+        deleteRow(current, asNodeId(nodeId), asRowId(rowId)),
+        nodeId,
+        -tableRowHeightFor(current, layout, nodeId),
+      ),
+    );
+  }, [layout]);
 
   const handleRowMove = useCallback((
     nodeId: string,
@@ -1869,8 +1886,14 @@ export const App = () => {
   }, []);
 
   const handleSectionAdd = useCallback((nodeId: string) => {
-    setScene((current) => addSection(current, asNodeId(nodeId)));
-  }, []);
+    setScene((current) =>
+      resizeTableFrameBy(
+        addSection(current, asNodeId(nodeId)),
+        nodeId,
+        TABLE_SECTION_TITLE_HEIGHT + tableRowHeightFor(current, layout, nodeId),
+      ),
+    );
+  }, [layout]);
 
   const handleSectionUpdate = useCallback(
     (nodeId: string, sectionId: string, patch: Partial<TableSection>) => {
@@ -1880,8 +1903,21 @@ export const App = () => {
   );
 
   const handleSectionDelete = useCallback((nodeId: string, sectionId: string) => {
-    setScene((current) => deleteSection(current, asNodeId(nodeId), asSectionId(sectionId)));
-  }, []);
+    setScene((current) => {
+      const node = current.nodes[nodeId];
+      const section = node?.kind === "table"
+        ? node.sections.find((entry) => entry.id === sectionId)
+        : undefined;
+      const removedHeight =
+        (section?.title === undefined ? 0 : TABLE_SECTION_TITLE_HEIGHT) +
+        (section?.rows.length ?? 0) * tableRowHeightFor(current, layout, nodeId);
+      return resizeTableFrameBy(
+        deleteSection(current, asNodeId(nodeId), asSectionId(sectionId)),
+        nodeId,
+        -removedHeight,
+      );
+    });
+  }, [layout]);
 
   const handleAddObject = useCallback(
     (templateId: ObjectTemplateId, world: Point): SceneNode | null => {
@@ -2583,9 +2619,20 @@ export const App = () => {
         }
         if (nodeFocus.kind === "section" && focusedNode?.kind === "table") {
           event.preventDefault();
-          setScene((current) =>
-            deleteSection(current, asNodeId(nodeFocus.nodeId), asSectionId(nodeFocus.sectionId)),
-          );
+          setScene((current) => {
+            const node = current.nodes[nodeFocus.nodeId];
+            const section = node?.kind === "table"
+              ? node.sections.find((entry) => entry.id === nodeFocus.sectionId)
+              : undefined;
+            const removedHeight =
+              (section?.title === undefined ? 0 : TABLE_SECTION_TITLE_HEIGHT) +
+              (section?.rows.length ?? 0) * tableRowHeightFor(current, layout, nodeFocus.nodeId);
+            return resizeTableFrameBy(
+              deleteSection(current, asNodeId(nodeFocus.nodeId), asSectionId(nodeFocus.sectionId)),
+              nodeFocus.nodeId,
+              -removedHeight,
+            );
+          });
           setNodeFocus(null);
           setLayoutNote("Section deleted. Press Delete again to remove the object.");
           return;
@@ -2593,7 +2640,11 @@ export const App = () => {
         if (nodeFocus.kind === "row") {
           event.preventDefault();
           setScene((current) =>
-            deleteRow(current, asNodeId(nodeFocus.nodeId), asRowId(nodeFocus.rowId)),
+            resizeTableFrameBy(
+              deleteRow(current, asNodeId(nodeFocus.nodeId), asRowId(nodeFocus.rowId)),
+              nodeFocus.nodeId,
+              -tableRowHeightFor(current, layout, nodeFocus.nodeId),
+            ),
           );
           setNodeFocus(null);
           setLayoutNote("Row deleted. Press Delete again to remove the object.");
@@ -2668,6 +2719,7 @@ export const App = () => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    layout,
     nodeFocus,
     scene,
     scene.nodes,

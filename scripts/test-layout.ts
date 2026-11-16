@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { ER_COMMERCE, STEP1_FIXTURES, UML_CLASS_PAYMENTS, UML_COMMUNICATION_CHECKOUT, UML_SEQUENCE_CHECKOUT, UML_USE_CASE_SHOP } from "../src/fixtures/index.ts";
-import { buildLayoutSnapshot, withNodeFrames } from "../src/layout/build-layout.ts";
+import {
+  TABLE_SECTION_TITLE_HEIGHT,
+  buildLayoutSnapshot,
+  withNodeFrames,
+} from "../src/layout/build-layout.ts";
 import { autoLayoutFrames } from "../src/layout/auto-layout.ts";
+import { resizeTableFrameBy, tableRowHeightFor } from "../src/layout/table-resize.ts";
 import { FixedTextMeasurer } from "../src/layout/text.ts";
 import {
   createEmptyScene,
@@ -24,7 +29,11 @@ import { createEdgeForDiagram } from "../src/model/edge-create.ts";
 import { createObjectFromTemplate } from "../src/model/object-catalog.ts";
 import {
   addActivation,
+  addRow,
+  addSection,
   commitAutoLayout,
+  deleteRow,
+  deleteSection,
   insertConnectedObject,
   insertEdge,
   moveRow,
@@ -41,6 +50,143 @@ import type { Point, Rect } from "../src/model/geometry.ts";
 
 const measurer = new FixedTextMeasurer();
 const layout = buildLayoutSnapshot(ER_COMMERCE, measurer);
+
+const emptyTableBase = ER_COMMERCE.nodes.customers;
+assert.ok(
+  emptyTableBase !== undefined && emptyTableBase.kind === "table",
+  "ER fixture should provide a table",
+);
+const emptyTableId = asNodeId("node_empty_table");
+const emptyTable = {
+  ...emptyTableBase,
+  id: emptyTableId,
+  name: "Empty",
+  frame: rect(0, 0, 180, 60),
+  sections: [],
+};
+const emptyTableScene = {
+  ...createEmptyScene("er"),
+  nodes: { [emptyTableId]: emptyTable },
+};
+const emptyTableLayout = buildLayoutSnapshot(emptyTableScene, measurer);
+const emptyTableNodeLayout = emptyTableLayout.nodes[emptyTableId];
+assert.ok(emptyTableNodeLayout?.kind === "table");
+const headerGrid = emptyTableScene.canvas.grid.size;
+const expectedHeaderHeight = Math.max(
+  headerGrid,
+  Math.round(emptyTable.style.headerHeight / headerGrid) * headerGrid,
+);
+assert.equal(
+  emptyTableNodeLayout.header.frame.height,
+  expectedHeaderHeight,
+  "a row-less table should keep its grid-aligned natural header height",
+);
+assert.equal(
+  emptyTableNodeLayout.header.frame.height % headerGrid,
+  0,
+  "the natural header height should align to the canvas grid",
+);
+assert.equal(
+  emptyTableNodeLayout.sections.length,
+  0,
+  "a row-less table should have no body sections",
+);
+const shortEmptyTableScene = withNodeFrames(emptyTableScene, {
+  [emptyTableId]: rect(0, 0, 180, 20),
+});
+const shortEmptyTableLayout = buildLayoutSnapshot(shortEmptyTableScene, measurer);
+const shortEmptyTableNodeLayout = shortEmptyTableLayout.nodes[emptyTableId];
+assert.ok(shortEmptyTableNodeLayout?.kind === "table");
+assert.equal(
+  shortEmptyTableNodeLayout.header.frame.height,
+  20,
+  "resizing a row-less table below the header height should hide the body",
+);
+
+const customerId = asNodeId("customers");
+const customerLayout = layout.nodes[customerId];
+assert.ok(customerLayout?.kind === "table");
+const originalRowHeight = customerLayout.sections
+  .flatMap((section) => section.rows)
+  .find((row) => row.frame.height > 0)?.frame.height;
+assert.ok(originalRowHeight !== undefined && originalRowHeight > 0);
+assert.equal(
+  tableRowHeightFor(ER_COMMERCE, layout, customerId),
+  originalRowHeight,
+  "the live row height helper should return the measured row height",
+);
+const originalCustomerHeight = ER_COMMERCE.nodes[customerId]?.frame.height ?? 0;
+
+const rowAddedScene = resizeTableFrameBy(
+  addRow(ER_COMMERCE, customerId),
+  customerId,
+  originalRowHeight,
+);
+const rowAddedLayout = buildLayoutSnapshot(rowAddedScene, measurer);
+const rowAddedCustomer = rowAddedLayout.nodes[customerId];
+assert.ok(rowAddedCustomer?.kind === "table");
+assert.equal(
+  Math.round((rowAddedScene.nodes[customerId]?.frame.height ?? 0) * 1000) / 1000,
+  Math.round((originalCustomerHeight + originalRowHeight) * 1000) / 1000,
+  "adding a row should grow the table by the current absolute row height",
+);
+for (const row of rowAddedCustomer.sections.flatMap((section) => section.rows)) {
+  assert.ok(
+    Math.abs(row.frame.height - originalRowHeight) < 0.01,
+    "adding a row should preserve the other rows' absolute height",
+  );
+}
+
+const sectionAddedScene = resizeTableFrameBy(
+  addSection(ER_COMMERCE, customerId),
+  customerId,
+  TABLE_SECTION_TITLE_HEIGHT + originalRowHeight,
+);
+const sectionAddedLayout = buildLayoutSnapshot(sectionAddedScene, measurer);
+const sectionAddedCustomer = sectionAddedLayout.nodes[customerId];
+assert.ok(sectionAddedCustomer?.kind === "table");
+for (const row of sectionAddedCustomer.sections.flatMap((section) => section.rows)) {
+  assert.ok(
+    Math.abs(row.frame.height - originalRowHeight) < 0.01,
+    "adding a section should preserve row height while its title takes fixed space",
+  );
+}
+
+const deletedRowId = customerLayout.sections
+  .flatMap((section) => section.rows)
+  .find((row) => row.frame.height > 0)?.rowId;
+assert.ok(deletedRowId !== undefined);
+const rowDeletedScene = resizeTableFrameBy(
+  deleteRow(ER_COMMERCE, customerId, deletedRowId),
+  customerId,
+  -originalRowHeight,
+);
+const rowDeletedCustomer = buildLayoutSnapshot(rowDeletedScene, measurer).nodes[customerId];
+assert.ok(rowDeletedCustomer?.kind === "table");
+for (const row of rowDeletedCustomer.sections.flatMap((section) => section.rows)) {
+  assert.ok(
+    Math.abs(row.frame.height - originalRowHeight) < 0.01,
+    "deleting a row should preserve the remaining rows' absolute height",
+  );
+}
+
+const addedSection = sectionAddedScene.nodes[customerId];
+assert.ok(addedSection?.kind === "table");
+const newSection = addedSection.sections[addedSection.sections.length - 1];
+assert.ok(newSection !== undefined);
+const sectionDeletedScene = resizeTableFrameBy(
+  deleteSection(sectionAddedScene, customerId, newSection.id),
+  customerId,
+  -(
+    (newSection.title === undefined ? 0 : TABLE_SECTION_TITLE_HEIGHT) +
+    newSection.rows.length * originalRowHeight
+  ),
+);
+assert.equal(
+  Math.round((sectionDeletedScene.nodes[customerId]?.frame.height ?? 0) * 1000) / 1000,
+  Math.round(originalCustomerHeight * 1000) / 1000,
+  "deleting a section should remove its fixed title height and row height",
+);
 
 for (const fixture of STEP1_FIXTURES) {
   const diagnostics = validateScene(fixture.scene);
