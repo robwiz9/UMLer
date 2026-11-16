@@ -17,7 +17,7 @@ export type UmlMarkerKind =
   | "directedAssociation"
   | "dependency";
 
-export type ErMarkerKind = "one" | "many" | "zeroOrOne" | "oneOrMany" | "zeroOrMany";
+export type ErMarkerKind = "one" | "many" | "zeroOrOne" | "oneOrMany" | "zeroOrMany" | "inheritance";
 
 /**
  * A generic arrow is deliberately outside UML/ER semantics. It is useful for
@@ -160,6 +160,14 @@ const ER_MARKERS: Record<ErMarkerKind, MarkerDefinition> = {
     fill: "hollow",
     dashed: false,
   },
+  inheritance: {
+    family: "er",
+    label: "Inheritance (hollow triangle)",
+    shortLabel: "inheritance",
+    cetzSymbol: "uml-hollow-triangle",
+    fill: "hollow",
+    dashed: false,
+  },
 };
 
 const NONE_MARKER: MarkerDefinition = {
@@ -210,6 +218,7 @@ export const markerSymbol = (marker: EndpointMarker): string | null =>
 export const markerLineInset = (marker: EndpointMarker): number => {
   if (marker.family === "none") return 0;
   if (marker.family === "er") {
+    if (marker.kind === "inheritance") return 10;
     if (marker.kind === "many" || marker.kind === "oneOrMany" || marker.kind === "zeroOrMany") {
       return 12;
     }

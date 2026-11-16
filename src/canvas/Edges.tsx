@@ -184,6 +184,17 @@ const ArrowGlyph = ({
       </g>
     );
   }
+  if (marker.kind === "inheritance") {
+    const shape = markerGeometry(tip, forward, 10, 9);
+    return (
+      <polygon
+        points={polygonPoints([tip, shape.baseLeft, shape.baseRight])}
+        fill="white"
+        stroke={color}
+        strokeWidth={0.9}
+      />
+    );
+  }
 
   const hasCrow = marker.kind === "oneOrMany" || marker.kind === "zeroOrMany";
   const hasCircle = marker.kind === "zeroOrOne" || marker.kind === "zeroOrMany";

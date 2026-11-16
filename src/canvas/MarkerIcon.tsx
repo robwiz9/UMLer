@@ -37,6 +37,18 @@ export const MarkerIcon = ({ marker, end = "target" }: MarkerIconProps) => {
           <line x1={tip - 13} y1={2} x2={tip - 13} y2={16} {...common} />
         </>
       );
+    } else if (marker.kind === "inheritance") {
+      body = (
+        <>
+          <line x1={2} y1={9} x2={tip - 10} y2={9} {...common} />
+          <polygon
+            points={`${tip},9 ${tip - 10},3 ${tip - 10},15`}
+            fill="white"
+            stroke="currentColor"
+            strokeWidth={1.2}
+          />
+        </>
+      );
     } else {
       const hasCircle = marker.kind === "zeroOrMany";
       const hasBar = marker.kind === "oneOrMany";

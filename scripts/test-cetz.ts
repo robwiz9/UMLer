@@ -180,7 +180,7 @@ if (relationshipEdge !== undefined) {
   // Endpoint glyphs must not measure their rotation around the previous
   // corner (short final stubs made crow's feet lean) and they must not be
   // emitted as bare `line(...)` calls inside a mark body.
-  const erMarkerKinds = ["one", "many", "zeroOrOne", "oneOrMany", "zeroOrMany"] as const;
+  const erMarkerKinds = ["one", "many", "zeroOrOne", "oneOrMany", "zeroOrMany", "inheritance"] as const;
   for (const kind of erMarkerKinds) {
     const markerScene: SceneDocument = {
       ...er.scene,
@@ -221,6 +221,28 @@ if (relationshipEdge !== undefined) {
   }).code;
   check(oneCode.includes("draw.line((l / 3, -w / 2)"), "ER one keeps its single visible bar");
   check(!oneCode.includes("draw.line((0, -w / 2)"), "ER one omits the bar hidden by the node border");
+
+  const inheritanceCode = serialize({
+    ...er.scene,
+    edges: {
+      ...er.scene.edges,
+      [relationshipEdge.id]: {
+        ...relationshipEdge,
+        markers: {
+          source: { family: "er", kind: "inheritance" },
+          target: NO_MARKER,
+        },
+      },
+    },
+  }).code;
+  check(
+    inheritanceCode.includes('draw.register-mark("uml-hollow-triangle"'),
+    "ER inheritance registers the hollow-triangle mark",
+  );
+  check(
+    inheritanceCode.includes('symbol: "uml-hollow-triangle"'),
+    "ER inheritance emits the hollow-triangle symbol",
+  );
 }
 
 const zoomed = serialize(er.scene, {

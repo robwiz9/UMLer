@@ -1283,6 +1283,8 @@ const markSymbolFor = (marker: EndpointMarker): string | null => {
         return "er-one-many";
       case "zeroOrMany":
         return "er-zero-many";
+      case "inheritance":
+        return "uml-hollow-triangle";
     }
   }
   return marker.kind === "filledArrow" ? "generic-filled-arrow" : "uml-open-arrow";
