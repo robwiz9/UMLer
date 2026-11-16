@@ -79,7 +79,7 @@ import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
 import type { StrokePattern, TextStyleOverride, Theme } from "../model/styles.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
-import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import type { ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
 import { resolveCircuitSettings, setCircuitStandard, type CircuitStandard } from "../model/circuit.ts";
 import {
   addCircuitJunctionToWire,
@@ -148,6 +148,7 @@ import {
   setNodeImage,
   setRoutingMode,
   setSceneTheme,
+  setSectionVisibility,
   setStrokePattern,
   setStrokeWidth,
   updateActivation,
@@ -1902,6 +1903,20 @@ export const App = () => {
     [],
   );
 
+  const handleSectionVisibility = useCallback(
+    (nodeId: string, sectionId: string, visibility: Visibility | undefined) => {
+      setScene((current) =>
+        setSectionVisibility(
+          current,
+          asNodeId(nodeId),
+          asSectionId(sectionId),
+          visibility,
+        ),
+      );
+    },
+    [],
+  );
+
   const handleSectionDelete = useCallback((nodeId: string, sectionId: string) => {
     setScene((current) => {
       const node = current.nodes[nodeId];
@@ -2394,7 +2409,7 @@ export const App = () => {
       ? ""
       : ` and ${payload.edges.length} connector${payload.edges.length === 1 ? "" : "s"}`;
     showToast(
-      `Copied ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}${connectors}.${shared ? " Available in other UMLer tabs." : " Too large to share across tabs."}`,
+      `Copied ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}${connectors}.${shared ? "" : " Too large to share across tabs."}`,
       shared ? "info" : "warning",
     );
   }, [nodeFocus, scene, selectedEdgeId, selectedNodeIds, showToast]);
@@ -2421,7 +2436,7 @@ export const App = () => {
     selectNodes([], null);
     setSelectedEdgeId(null);
     showToast(
-      `Cut ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}.${shared ? " Available in other UMLer tabs." : " Too large to share across tabs."}`,
+      `Cut ${payload.nodes.length} object${payload.nodes.length === 1 ? "" : "s"}.${shared ? "" : " Too large to share across tabs."}`,
       shared ? "info" : "warning",
     );
   }, [nodeFocus, scene, selectedNodeIds, selectNodes, showToast]);
@@ -3287,6 +3302,7 @@ export const App = () => {
             handleCanvasTextDoubleClick(nodeId, { kind: "rowName", rowId })}
           onAddSection={handleSectionAdd}
           onUpdateSection={handleSectionUpdate}
+          onSetSectionVisibility={handleSectionVisibility}
           onDeleteSection={handleSectionDelete}
           onAddObject={handleAddObject}
           onAddActivation={handleAddActivation}

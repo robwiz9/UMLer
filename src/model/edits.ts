@@ -18,6 +18,7 @@ import type {
   TableNode,
   TableRow,
   TableSection,
+  Visibility,
 } from "./nodes.ts";
 import type {
   EdgeAttachment,
@@ -384,6 +385,32 @@ export const updateRow = (
       rows: section.rows.map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
     }));
     return withSections(node, sections);
+  });
+
+/** Applies one UML visibility prefix to every row in a class-table section. */
+export const setSectionVisibility = (
+  scene: SceneDocument,
+  nodeId: NodeId,
+  sectionId: SectionId,
+  visibility: Visibility | undefined,
+): SceneDocument =>
+  updateNode(scene, nodeId, (node) => {
+    if (node.kind !== "table") return node;
+    return {
+      ...node,
+      sections: node.sections.map((section) =>
+        section.id === sectionId
+          ? {
+              ...section,
+              rows: section.rows.map((row) => ({
+                ...row,
+                visibility,
+                prefix: undefined,
+              })),
+            }
+          : section,
+      ),
+    };
   });
 
 export interface AddRowOptions {

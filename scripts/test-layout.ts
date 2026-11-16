@@ -43,6 +43,7 @@ import {
   setEdgePreferredPosition,
   setEndpointLabel,
   setSceneTheme,
+  setSectionVisibility,
   updateRow,
   updateActivation,
 } from "../src/model/edits.ts";
@@ -186,6 +187,34 @@ assert.equal(
   Math.round((sectionDeletedScene.nodes[customerId]?.frame.height ?? 0) * 1000) / 1000,
   Math.round(originalCustomerHeight * 1000) / 1000,
   "deleting a section should remove its fixed title height and row height",
+);
+
+const classTable = Object.values(UML_CLASS_PAYMENTS.nodes).find(
+  (node) =>
+    node.kind === "table" &&
+    node.tableKind === "class" &&
+    node.sections.some((section) => section.rows.length > 0),
+);
+assert.ok(classTable !== undefined && classTable.kind === "table");
+const visibilitySection = classTable.sections.find((section) => section.rows.length > 0);
+assert.ok(visibilitySection !== undefined);
+const sectionVisibilityScene = setSectionVisibility(
+  UML_CLASS_PAYMENTS,
+  classTable.id,
+  visibilitySection.id,
+  "#",
+);
+const sectionVisibilityNode = sectionVisibilityScene.nodes[classTable.id];
+assert.ok(sectionVisibilityNode?.kind === "table");
+const updatedVisibilitySection = sectionVisibilityNode.sections.find(
+  (section) => section.id === visibilitySection.id,
+);
+assert.ok(updatedVisibilitySection !== undefined);
+assert.ok(
+  updatedVisibilitySection.rows.every(
+    (row) => row.visibility === "#" && row.prefix === undefined,
+  ),
+  "setting a section visibility should apply to every row",
 );
 
 for (const fixture of STEP1_FIXTURES) {

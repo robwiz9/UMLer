@@ -232,8 +232,10 @@ Focus granularity for tables/classes:
   editor-only overlay and must **not** be emitted by the Typst/CeTZ serializer. Double-clicking the
   header starts editing the table name.
 - **Section focus** — first click a section (header, empty section area, or the top border/divider line above
-  its rows). Controls: section header text, Add row, Add section, Remove this section. **Add row** appends a
-  blank row and switches to that row's menu with its name field focused. A second click on that section's
+  its rows). Controls: section header text, Add row, Add section, Remove this section, and on class tables
+  **Set visibility prefix to all**, which applies one UML visibility (`+`, `-`, `#`, `~`, or none) to every
+  row in that section. **Add row** appends a blank row and switches to that row's menu with its name field
+  focused. A second click on that section's
   header focuses the header input. The divider above the rows is a dedicated hit strip, so an untitled section
   remains selectable even when its header text is empty.
 - **Row focus** — click anywhere in a row. Controls: attribute/operation name, data type or return type,

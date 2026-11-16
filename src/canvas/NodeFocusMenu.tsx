@@ -92,6 +92,11 @@ interface NodeFocusMenuProps {
   readonly onFocusRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
+  readonly onSetSectionVisibility: (
+    nodeId: string,
+    sectionId: SectionId,
+    visibility: Visibility | undefined,
+  ) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
   readonly onDeleteNode: (nodeId: string) => void;
   readonly onMergeJunction?: (nodeId: string) => void;
@@ -177,6 +182,7 @@ export const NodeFocusMenu = ({
   onFocusRow,
   onAddSection,
   onUpdateSection,
+  onSetSectionVisibility,
   onDeleteSection,
   onDeleteNode,
   onMergeJunction,
@@ -704,6 +710,17 @@ export const NodeFocusMenu = ({
   }
 
   if (focus.kind === "section" && section !== undefined) {
+    const isClassTable = node.kind === "table" && node.tableKind === "class";
+    const firstRow = section.rows[0];
+    const commonVisibility = firstRow === undefined
+      ? null
+      : section.rows.every(
+          (entry) =>
+            entry.prefix === undefined &&
+            entry.visibility === firstRow.visibility,
+        )
+        ? firstRow.visibility ?? "none"
+        : "mixed";
     return (
       <div className="node-focus-menu">
         <div className="popover-head">
@@ -738,6 +755,36 @@ export const NodeFocusMenu = ({
           value={section.textStyle}
           onChange={(textStyle) => onUpdateSection(node.id, section.id, { textStyle })}
         />
+        {isClassTable ? (
+          <div className="field-label">
+            <span>Set visibility prefix to all</span>
+            <div
+              className="chip-row compact"
+              role="group"
+              aria-label="Set visibility prefix to all rows in this section"
+            >
+              <button
+                type="button"
+                className={`chip ${commonVisibility === "none" ? "on" : ""}`}
+                onClick={() => onSetSectionVisibility(node.id, section.id, undefined)}
+                title="No visibility prefix for all rows"
+              >
+                none
+              </button>
+              {VISIBILITIES.map((visibility) => (
+                <button
+                  key={visibility}
+                  type="button"
+                  className={`chip ${commonVisibility === visibility ? "on" : ""}`}
+                  onClick={() => onSetSectionVisibility(node.id, section.id, visibility)}
+                  title={`UML ${visibility} visibility for every row`}
+                >
+                  {visibility}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="focus-actions">
           <button type="button" className="editor-add" onClick={() => onAddRow(node.id, section.id)}>
             + Add row

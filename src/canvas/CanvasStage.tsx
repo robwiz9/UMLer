@@ -4,7 +4,7 @@ import type { SceneDocument } from "../model/scene.ts";
 import type { EdgeLabelLayout, EdgeLayout, LayoutSnapshot, NodeLayout, PortGeometry } from "../model/layout.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
-import type { ImageAsset, SceneNode, TableRow, TableSection } from "../model/nodes.ts";
+import type { ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
 import { asNodeId, type ActivationId, type NodeId, type RowId, type SectionId } from "../model/ids.ts";
 import { NodeFocusMenu } from "./NodeFocusMenu.tsx";
 import { DraggablePanel } from "./DraggablePanel.tsx";
@@ -167,6 +167,11 @@ interface CanvasStageProps {
   readonly onFocusRow: (nodeId: string, rowId: RowId) => void;
   readonly onAddSection: (nodeId: string) => void;
   readonly onUpdateSection: (nodeId: string, sectionId: SectionId, patch: Partial<TableSection>) => void;
+  readonly onSetSectionVisibility: (
+    nodeId: string,
+    sectionId: SectionId,
+    visibility: Visibility | undefined,
+  ) => void;
   readonly onDeleteSection: (nodeId: string, sectionId: SectionId) => void;
   readonly onAddObject: (templateId: ObjectTemplateId, world: Point) => SceneNode | null;
   readonly onAddActivation: (nodeId: string, worldY: number) => void;
@@ -1151,6 +1156,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onFocusRow,
   onAddSection,
   onUpdateSection,
+  onSetSectionVisibility,
   onDeleteSection,
   onAddObject,
   onAddActivation,
@@ -4970,6 +4976,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             onFocusRow={onFocusRow}
             onAddSection={onAddSection}
             onUpdateSection={onUpdateSection}
+            onSetSectionVisibility={onSetSectionVisibility}
             onDeleteSection={onDeleteSection}
             onDeleteNode={onDeleteNode}
             onMergeJunction={onMergeJunction}
