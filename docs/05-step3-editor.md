@@ -365,10 +365,12 @@ Clicking a connector selects it and exposes:
 - a **Re-route with A\*** action.
 
 Selecting a connector also shows square endpoint handles on the canvas. **Dragging either endpoint handle**
-onto another object reattaches that source or target, preserving the opposite end. The drop resolves through the
-same port logic as drawing a new connector: nearest row/perimeter port, an exact spine point on a lifeline, or
-an edge-to-edge attachment when dropped on another line. A preview line and snap marker are shown while
-dragging, and the 5° axis snap/Alt bypass applies. A click without dragging still opens the terminal menu.
+onto another object reattaches that source or target, preserving the opposite end. The endpoint's click-to-focus
+circle starts the same reattach drag, so the connector can be redirected without first opening the terminal menu.
+The drop resolves through the same port logic as drawing a new connector: nearest row/perimeter port, an exact
+spine point on a lifeline, or an edge-to-edge attachment when dropped on another line. A preview line and snap
+marker are shown while dragging, and the 5° axis snap/Alt bypass applies. A click without dragging still opens
+the terminal menu.
 
 Clicking an endpoint handle, the terminal glyph itself, or its cardinality label opens a compact terminal menu
 for **that end only**. Terminal and line hit layers are painted **below nodes**, so clicking inside an entity

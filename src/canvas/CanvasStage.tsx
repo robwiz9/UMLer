@@ -315,6 +315,17 @@ type Interaction =
       moved: boolean;
     }
   | {
+      readonly kind: "edge-press";
+      readonly pointerId: number;
+      readonly edgeId: string;
+      readonly end: EdgeEnd | null;
+      readonly startWorld: Point;
+      readonly startScreen: Point;
+      lastWorld: Point;
+      pointerTravel: number;
+      moved: boolean;
+    }
+  | {
       readonly kind: "label-drag";
       readonly pointerId: number;
       readonly edgeId: string;
@@ -943,7 +954,7 @@ const NodeLabelHitLayer = ({
 const TerminalHitLayer = ({
   edges,
   zoom,
-  onPress,
+  onReattachStart,
   onHoverTerminal,
   onLabelDragStart,
   onDoublePress,
@@ -953,7 +964,11 @@ const TerminalHitLayer = ({
     readonly layout: EdgeLayout;
   }[];
   readonly zoom: number;
-  readonly onPress: (edgeId: string, end: EdgeEnd) => void;
+  readonly onReattachStart: (
+    edgeId: string,
+    end: EdgeEnd,
+    event: React.PointerEvent<SVGCircleElement>,
+  ) => void;
   readonly onHoverTerminal: (
     edgeId: string,
     end: EdgeEnd | null,
@@ -1001,8 +1016,7 @@ const TerminalHitLayer = ({
               onPointerLeave={() => onHoverTerminal(id, null)}
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
-                event.stopPropagation();
-                onPress(id, "source");
+                onReattachStart(id, "source", event);
               }}
               onDoubleClick={(event) => {
                 event.preventDefault();
@@ -1024,8 +1038,7 @@ const TerminalHitLayer = ({
               onPointerLeave={() => onHoverTerminal(id, null)}
               onPointerDown={(event) => {
                 if (event.button !== 0) return;
-                event.stopPropagation();
-                onPress(id, "target");
+                onReattachStart(id, "target", event);
               }}
               onDoubleClick={(event) => {
                 event.preventDefault();
@@ -1700,7 +1713,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const beginReattach = (
     edgeId: string,
     end: EdgeEnd,
-    event: React.PointerEvent<SVGGElement>,
+    event: React.PointerEvent<SVGElement>,
   ): void => {
     if (event.button !== 0) return;
     const svg = svgRef.current;
@@ -2325,7 +2338,26 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       return;
     }
     if (scene.meta.diagramKind !== "circuit" && Math.min(sourceDistance, targetDistance) <= 16) {
-      setActiveEndpoint(sourceDistance <= targetDistance ? "source" : "target");
+      const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      interactionRef.current = {
+        kind: "edge-press",
+        pointerId: event.pointerId,
+        edgeId,
+        end: sourceDistance <= targetDistance ? "source" : "target",
+        startWorld: world,
+        startScreen: screen,
+        lastWorld: world,
+        pointerTravel: 0,
+        moved: false,
+      };
+      try {
+        svg.setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic pointer events cannot own capture.
+      }
+      event.preventDefault();
       return;
     }
     const edge = scene.edges[edgeId];
@@ -2378,8 +2410,26 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         // Synthetic pointer events cannot own capture.
       }
     } else {
+      const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
       setActiveEndpoint(null);
-      setLinePopover({ edgeId, x: screen.x + 12, y: screen.y + 12 });
+      setLinePopover(null);
+      interactionRef.current = {
+        kind: "edge-press",
+        pointerId: event.pointerId,
+        edgeId,
+        end: null,
+        startWorld: world,
+        startScreen: screen,
+        lastWorld: world,
+        pointerTravel: 0,
+        moved: false,
+      };
+      try {
+        svg.setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic pointer events cannot own capture.
+      }
+      event.preventDefault();
     }
   };
 
@@ -3043,6 +3093,54 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       return;
     }
 
+    if (interaction.kind === "edge-press") {
+      if (commit) {
+        const edge = scene.edges[interaction.edgeId];
+        const edgeLayout = layout.edges[interaction.edgeId];
+        if (interaction.moved) {
+          // Re-check on release: the route or endpoint alignment may have
+          // changed since pointerdown, so a drag can still become a slide.
+          const slide = edge === undefined || edgeLayout === undefined
+            ? null
+            : straightSlideInfo(edge, scene, edgeLayout.points, gridSize);
+          const firstPoint = edgeLayout?.points[0];
+          if (slide !== null && firstPoint !== undefined) {
+            const pointerAxis = slide.axis === "y"
+              ? interaction.lastWorld.y
+              : interaction.lastWorld.x;
+            const originAxis = slide.axis === "y"
+              ? interaction.startWorld.y
+              : interaction.startWorld.x;
+            const startPosition = slide.axis === "y" ? firstPoint.y : firstPoint.x;
+            const step = snapEnabled ? Math.max(1, gridSize) : 1;
+            const position = Math.min(
+              slide.max,
+              Math.max(slide.min, startPosition + snap(pointerAxis - originAxis, step)),
+            );
+            onSlideStraightEdge(interaction.edgeId, position);
+          }
+        } else if (interaction.end !== null) {
+          // Menus are deferred to pointer release so a press that turns into
+          // a drag never flashes a popover under the pointer.
+          openTerminalMenu(interaction.edgeId, interaction.end, false);
+        } else {
+          // Also redo the straight-line check on a plain click; it keeps the
+          // hit-test and slide eligibility in sync with the latest layout.
+          if (edge !== undefined && edgeLayout !== undefined) {
+            straightSlideInfo(edge, scene, edgeLayout.points, gridSize);
+          }
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+        }
+      }
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
     if (interaction.kind === "node-label-drag") {
       if (commit && interaction.moved) {
         const localDelta = interaction.rotation === 0
@@ -3362,6 +3460,16 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       const deltaY = snap(world.y - interaction.startWorld.y, Math.max(1, gridSize));
       interaction.lastDelta = deltaY;
       setSequenceMovePreview({ edgeId: interaction.edgeId, deltaY });
+      return;
+    }
+
+    if (interaction.kind === "edge-press") {
+      interaction.lastWorld = world;
+      interaction.pointerTravel = Math.hypot(
+        world.x - interaction.startWorld.x,
+        world.y - interaction.startWorld.y,
+      ) * zoomRef.current;
+      interaction.moved = interaction.moved || interaction.pointerTravel > 3;
       return;
     }
 
@@ -4301,7 +4409,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           <TerminalHitLayer
             edges={terminalHitItems}
             zoom={zoom}
-            onPress={(edgeId, end) => openTerminalMenu(edgeId, end, false)}
+            onReattachStart={(edgeId, end, event) =>
+              beginReattach(edgeId, end, event)}
             onHoverTerminal={(edgeId, end, center, radius) =>
               setHoveredTerminal(
                 end === null || center === undefined || radius === undefined
