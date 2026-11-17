@@ -41,7 +41,7 @@ const SHORT_LABELS: Record<DiagramKind, string> = {
 };
 
 const defaultSceneName = (kind: DiagramKind): string =>
-  `Untitled ${DIAGRAM_KIND_LABELS[kind]} diagram`;
+  `${DIAGRAM_KIND_LABELS[kind]} diagram`;
 
 const DiagramTypeIcon = ({ kind }: { readonly kind: DiagramKind }) => {
   const common = {

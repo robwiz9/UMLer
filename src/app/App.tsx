@@ -352,6 +352,11 @@ export const App = () => {
 
   const measurer = useMemo(() => new CanvasTextMeasurer(), [fontTick]);
 
+  useEffect(() => {
+    const title = scene.meta.title.trim();
+    document.title = title.length > 0 ? `${title} - UMLer` : "UMLer Diagram Editor";
+  }, [scene.meta.title]);
+
   useEffect(
     () => subscribeSceneClipboard((clipboard) => {
       clipboardRef.current = clipboard;
