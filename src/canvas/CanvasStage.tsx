@@ -680,14 +680,12 @@ const EdgeHitLayer = ({
   edges,
   onSelect,
   onReroute,
-  onAddJunction,
   allowContextReroute,
   slideEdgeIds,
 }: {
   readonly edges: readonly { readonly id: string; readonly points: readonly Point[] }[];
   readonly onSelect: (edgeId: string, event: React.PointerEvent<SVGPolylineElement>) => void;
   readonly onReroute: (edgeId: string) => void;
-  readonly onAddJunction?: (edgeId: string, event: React.MouseEvent<SVGPolylineElement>) => void;
   readonly allowContextReroute?: boolean;
   readonly slideEdgeIds?: ReadonlySet<string>;
 }) => (
@@ -731,15 +729,6 @@ const EdgeHitLayer = ({
               event.preventDefault();
               event.stopPropagation();
               onReroute(edge.id);
-            }}
-            onDoubleClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (onAddJunction !== undefined) {
-                onAddJunction(edge.id, event);
-              } else {
-                onReroute(edge.id);
-              }
             }}
           />
         </g>
@@ -1315,6 +1304,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   } | null>(null);
   const [draftEdge, setDraftEdge] = useState<DraftEdge | null>(null);
   const draftTargetRef = useRef<DrawTarget | null>(null);
+  const edgePressRef = useRef<{ readonly edgeId: string; readonly time: number } | null>(null);
+  const pendingEdgeSplitRef = useRef<{
+    readonly edgeId: string;
+    readonly point: Point;
+    readonly pointerId: number;
+  } | null>(null);
   const [reattachPreview, setReattachPreview] = useState<DraftEdge & {
     readonly edgeId: string;
   } | null>(null);
@@ -2373,6 +2368,28 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const edgeLayout = layout.edges[edgeId];
     if (svg === null || edgeLayout === undefined) return;
     const screen = pointFromEvent(event, svg);
+    const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    const now = performance.now();
+    const previousPress = edgePressRef.current;
+    if (
+      scene.meta.diagramKind === "circuit" &&
+      previousPress !== null &&
+      previousPress.edgeId === edgeId &&
+      now - previousPress.time <= LABEL_DOUBLE_PRESS_MS
+    ) {
+      edgePressRef.current = null;
+      pendingEdgeSplitRef.current = {
+        edgeId,
+        point: world,
+        pointerId: event.pointerId,
+      };
+      setLinePopover(null);
+      setActiveEndpoint(null);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    edgePressRef.current = { edgeId, time: now };
     const source = edgeLayout.points[0];
     const target = edgeLayout.points[edgeLayout.points.length - 1];
     const screenPoint = (p: Point): Point => ({ x: p.x * zoomRef.current + cameraRef.current.x, y: p.y * zoomRef.current + cameraRef.current.y });
@@ -2943,11 +2960,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       } else {
         onPreviewFrames({});
         if (commit) {
-          setLinePopover({
-            edgeId: interaction.edgeId,
-            x: interaction.startScreen.x + 12,
-            y: interaction.startScreen.y + 12,
-          });
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, true);
         }
       }
       interactionRef.current = null;
@@ -3140,7 +3153,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         if (interaction.moved && Math.abs(interaction.lastDelta) > 0.5) {
           onMoveSequenceEdge(interaction.edgeId, interaction.lastDelta);
         } else if (!interaction.moved) {
-          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, true);
         }
       }
       setSequenceMovePreview(null);
@@ -3158,7 +3171,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         if (interaction.moved) {
           onSlideStraightEdge(interaction.edgeId, interaction.lastPosition);
         } else {
-          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, true);
         }
       }
       setEdgeSlidePreview(null);
@@ -3207,7 +3220,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           if (edge !== undefined && edgeLayout !== undefined) {
             straightSlideInfo(edge, scene, edgeLayout.points, gridSize);
           }
-          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, true);
         }
       }
       interactionRef.current = null;
@@ -3247,7 +3260,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             y: interaction.startOffset.y + interaction.lastDelta.y,
           });
         } else if (interaction.menu === "line") {
-          openLineMenuAt(interaction.edgeId, interaction.startWorld, false);
+          openLineMenuAt(interaction.edgeId, interaction.startWorld, true);
         } else if (interaction.end !== undefined) {
           openTerminalMenu(interaction.edgeId, interaction.end, false);
         }
@@ -3951,6 +3964,15 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   };
 
   const handlePointerUp = (event: React.PointerEvent<SVGSVGElement>): void => {
+    const pendingSplit = pendingEdgeSplitRef.current;
+    if (pendingSplit !== null) {
+      pendingEdgeSplitRef.current = null;
+      if (pendingSplit.pointerId === event.pointerId) {
+        onAddJunctionAtWire(pendingSplit.edgeId, pendingSplit.point);
+        event.preventDefault();
+        return;
+      }
+    }
     const interaction = interactionRef.current;
     if (interaction?.kind === "marquee") {
       const svg = svgRef.current;
@@ -4468,21 +4490,6 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             onReroute={onRerouteEdge}
             allowContextReroute={scene.meta.diagramKind === "circuit"}
             slideEdgeIds={slideEdgeIds}
-            onAddJunction={
-              scene.meta.diagramKind === "circuit"
-                ? (edgeId, event) => {
-                    const svg = svgRef.current;
-                    if (svg === null) return;
-                    const screen = pointFromEvent(event, svg);
-                    const world = screenToWorld(
-                      screen,
-                      cameraRef.current,
-                      zoomRef.current,
-                    );
-                    onAddJunctionAtWire(edgeId, world);
-                  }
-                : undefined
-            }
           />
           <TerminalHitLayer
             edges={terminalHitItems}

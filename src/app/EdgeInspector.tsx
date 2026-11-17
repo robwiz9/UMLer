@@ -187,12 +187,12 @@ export const EdgeInspector = ({
   if (isCircuit) {
     return (
       <div className="edge-inspector">
-        <div className="selected-kind">Plain wire</div>
+        {/* <div className="selected-kind">Plain wire</div> */}
         {centerField}
-        <p className="panel-footnote">
+        {/* <p className="panel-footnote">
           Wires have no arrowheads or line styles. Crossings get an omega bridge; a junction dot is
           created when a wire meets another wire.
-        </p>
+        </p> */}
       </div>
     );
   }

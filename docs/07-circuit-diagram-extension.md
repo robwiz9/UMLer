@@ -1590,8 +1590,9 @@ behaviour; where earlier sections differ, this section wins.
 18. **Right-click reroute, double-click junction.** A single right click on a circuit wire computes an
     obstacle-aware orthogonal route with the fewest bends, then splits the wire at every bend into
     separate straight wires joined by junctions. Corner junctions snap to the scene grid while retaining
-    horizontal/vertical segments. Double-clicking a wire creates a small filled junction at the nearest
-    grid point and splits the wire.
+    horizontal/vertical segments. A single left-click opens the wire menu and focuses its center label
+    field. Double-clicking a wire creates a small filled junction at the nearest grid point and splits the
+    wire.
 19. **Unconnected-junction warning.** A junction with no attached wire renders as a gray dashed hollow
     circle, regardless of its configured dot style, in the canvas and CeTZ export.
 20. **Delete from label fields.** Circuit label inputs carry a scope marker. Delete at the end of a

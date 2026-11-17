@@ -223,7 +223,8 @@ chooser opens.
   junction that gains a third connection becomes filled. Right-clicking
   a wire computes an obstacle-aware orthogonal path with the fewest bends and splits it at each bend
   into separate straight wires joined by grid-snapped corner junctions; double-clicking adds a small
-  filled junction at the nearest grid point and splits the wire. Drawing from a node onto another wire
+  filled junction at the nearest grid point and splits the wire. A single click opens the wire menu with
+  its label field focused. Drawing from a node onto another wire
   projects the attachment onto the hovered segment so the new wire meets it orthogonally, but only when
   that projection is within one grid square of the pointer. A wire between two junctions can be dragged sideways
   (perpendicular to itself), carrying both junctions and stretching perpendicular branches. None-style
