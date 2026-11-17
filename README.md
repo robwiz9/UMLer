@@ -1,4 +1,4 @@
-﻿# UMLer
+# UMLer
 
 A UX-focused editor for **ER**, **UML** and **circuit** diagrams — Use Case, Class, Sequence, Communication,
 State Machine and Circuit — with a skeleton-first interactive canvas and a **Typst + CeTZ** rendering/export core.
@@ -152,7 +152,7 @@ chooser opens.
   storage events. Connectors are copied only when both endpoint objects are selected, so a connector cannot be
   copied alone. Pasted objects
   are selected, given fresh IDs and placed under the mouse pointer (or the visible canvas centre when the
-  pointer is elsewhere); image assets travel with their nodes. Selecting a table header makes the whole table
+  pointer is elsewhere), with the whole paste offset grid-snapped in every diagram type; image assets travel with their nodes. Selecting a table header makes the whole table
   the copy subject, including while its name field is focused. Any number of copied objects can be pasted into
   another diagram type: every object with an equivalent is converted, connectors between converted objects
   (including edge-to-edge tethers) are rebuilt, and objects without an equivalent are skipped with a warning.

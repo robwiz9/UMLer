@@ -1076,6 +1076,8 @@ Remove dot (keep wires)     Delete object
 
 - Same-scene copy/paste uses the existing clipboard: nodes plus wires whose both endpoints are selected.
   Junction nodes must be selected to copy the wires attached to them.
+- Paste is placed under the pointer and the whole paste offset is grid-snapped, so every pasted object
+  keeps its relative alignment while landing on grid positions. This applies to every diagram kind.
 - **Copy/paste and duplicate must preserve component labels exactly.** Do not call
   `nextComponentLabel` on pasted objects and do not re-enumerate them, even when the copied `R1` lands
   next to an existing `R1`. The copies retain the user-visible designators from the source. This applies

@@ -2454,9 +2454,14 @@ export const App = () => {
       x: (viewport.width / 2 - camera.x) / zoom,
       y: (viewport.height / 2 - camera.y) / zoom,
     };
+    const gridSize = Math.max(1, scene.canvas.grid.size);
+    const snappedPastePoint = {
+      x: snap(pastePoint.x, gridSize),
+      y: snap(pastePoint.y, gridSize),
+    };
 
     if (clipboard.sceneId !== scene.id && clipboard.diagramKind !== scene.meta.diagramKind) {
-      const conversion = convertClipboardForDiagram(clipboard, scene, pastePoint);
+      const conversion = convertClipboardForDiagram(clipboard, scene, snappedPastePoint);
       if (conversion.nodes.length === 0) {
         showToast("None of the copied objects can be converted to this diagram type.", "warning");
         return;
@@ -2486,12 +2491,16 @@ export const App = () => {
     }
 
     const bounds = unionRects(clipboard.nodes.map((node) => node.frame));
-    const offset = bounds === null
+    const rawOffset = bounds === null
       ? pastePoint
       : {
           x: pastePoint.x - (bounds.x + bounds.width / 2),
           y: pastePoint.y - (bounds.y + bounds.height / 2),
         };
+    const offset = {
+      x: snap(rawOffset.x, gridSize),
+      y: snap(rawOffset.y, gridSize),
+    };
     const result = pasteSceneClipboard(scene, clipboard, offset);
     if (result === null) {
       showToast("Nothing to paste.", "warning");
