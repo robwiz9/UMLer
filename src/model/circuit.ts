@@ -17,6 +17,7 @@ export type CircuitStandard = "iec" | "ansi";
 export type CircuitComponentKind =
   | "resistor"
   | "capacitor"
+  | "capacitor-polarized"
   | "coil"
   | "potentiometer"
   | "voltage-source"
@@ -173,6 +174,7 @@ export type CircuitPrimitive =
 export const CIRCUIT_PREFIX: Record<CircuitComponentKind, string> = {
   resistor: "R",
   capacitor: "C",
+  "capacitor-polarized": "C",
   coil: "L",
   potentiometer: "RV",
   "voltage-source": "V",

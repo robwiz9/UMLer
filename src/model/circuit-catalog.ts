@@ -172,8 +172,15 @@ const resistor = (standard: CircuitStandard): readonly CircuitSymbolPrimitive[] 
 ];
 
 const capacitor = (): readonly CircuitSymbolPrimitive[] => [
-  line(-9, -12, -9, 12),
-  line(9, -12, 9, 12),
+  line(-4.5, -12, -4.5, 12),
+  line(4.5, -12, 4.5, 12),
+];
+
+const polarizedCapacitor = (): readonly CircuitSymbolPrimitive[] => [
+  box(-12, -6.5, 24, 4, "body", "none", 1),
+  line(-12, 4.5, 12, 4.5),
+  line(-10, -12, -16, -12),
+  line(-13, -15, -13, -9),
 ];
 
 const coil = (standard: CircuitStandard): readonly CircuitSymbolPrimitive[] => {
@@ -246,10 +253,10 @@ const acSource = (standard: CircuitStandard): readonly CircuitSymbolPrimitive[] 
 const battery = (standard: CircuitStandard): readonly CircuitSymbolPrimitive[] => {
   void standard;
   return [
-    line(-18, -18, 18, -18),
-    line(-9, -6, 9, -6),
-    line(-18, 6, 18, 6),
-    line(-9, 18, 9, 18),
+    line(-18, -4.5, 18, -4.5),
+    line(-9, 4.5, 9, 4.5),
+    line(-10, -12, -16, -12),
+    line(-13, -15, -13, -9),
   ];
 };
 
@@ -346,8 +353,13 @@ const commonPins = (bodyX = 18): readonly CircuitPinDef[] => [
 ];
 
 const capacitorPins = (): readonly CircuitPinDef[] => [
-  { id: "A", label: "A", x: -18, y: 0, bx: -9, by: 0, nx: -1, ny: 0 },
-  { id: "B", label: "B", x: 18, y: 0, bx: 9, by: 0, nx: 1, ny: 0 },
+  { id: "A", label: "A", x: -18, y: 0, bx: -4.5, by: 0, nx: -1, ny: 0 },
+  { id: "B", label: "B", x: 18, y: 0, bx: 4.5, by: 0, nx: 1, ny: 0 },
+];
+
+const polarizedCapacitorPins = (): readonly CircuitPinDef[] => [
+  { id: "+", label: "+", x: 0, y: -18, bx: 0, by: -6.5, nx: 0, ny: -1 },
+  { id: "−", label: "−", x: 0, y: 18, bx: 0, by: 4.5, nx: 0, ny: 1 },
 ];
 
 const diodePins = (): readonly CircuitPinDef[] => [
@@ -358,6 +370,11 @@ const diodePins = (): readonly CircuitPinDef[] => [
 const verticalPins = (): readonly CircuitPinDef[] => [
   { id: "+", label: "+", x: 0, y: -27, bx: 0, by: -18, nx: 0, ny: -1 },
   { id: "−", label: "−", x: 0, y: 27, bx: 0, by: 18, nx: 0, ny: 1 },
+];
+
+const batteryPins = (): readonly CircuitPinDef[] => [
+  { id: "+", label: "+", x: 0, y: -18, bx: 0, by: -4.5, nx: 0, ny: -1 },
+  { id: "−", label: "−", x: 0, y: 18, bx: 0, by: 4.5, nx: 0, ny: 1 },
 ];
 
 const transistorPins = (): readonly CircuitPinDef[] => [
@@ -400,6 +417,7 @@ const def = (
 export const CIRCUIT_COMPONENTS: readonly CircuitComponentDef[] = [
   def("resistor", "Resistor", "passive", "Fixed resistance", ["resistance", "ohm", "r"], 54, 36, commonPins(), p(0, 22), resistor),
   def("capacitor", "Capacitor", "passive", "Stores charge between two plates", ["cap", "farad", "c"], 36, 36, capacitorPins(), p(0, 22), capacitor),
+  def("capacitor-polarized", "Polarized capacitor", "passive", "Electrolytic capacitor with marked positive plate", ["polarized", "electrolytic", "cap", "farad", "c"], 36, 36, polarizedCapacitorPins(), p(28, 0), polarizedCapacitor),
   def("coil", "Coil", "passive", "Inductor / choke", ["inductor", "choke", "henry", "l"], 54, 36, commonPins(), p(0, 22), coil),
   def("potentiometer", "Potentiometer", "passive", "Variable resistor with a wiper", ["pot", "trimmer", "rheostat", "rv"], 54, 54, [
     ...commonPins(),
@@ -408,7 +426,7 @@ export const CIRCUIT_COMPONENTS: readonly CircuitComponentDef[] = [
   def("voltage-source", "Voltage source", "sources", "DC voltage source", ["vsource", "dc", "voltage", "generator"], 36, 54, verticalPins(), p(28, 0), voltageSource),
   def("current-source", "Current source", "sources", "Ideal current source", ["isource", "current", "generator"], 36, 54, verticalPins(), p(28, 0), currentSource),
   def("ac-source", "AC source", "sources", "Alternating voltage source", ["alternating", "sine", "ac", "generator"], 36, 54, verticalPins(), p(28, 0), acSource),
-  def("battery", "Battery", "sources", "Multi-cell DC source", ["cell", "accumulator", "battery"], 36, 54, verticalPins(), p(28, 0), battery),
+  def("battery", "Battery", "sources", "Single-cell DC source", ["cell", "accumulator", "battery"], 36, 36, batteryPins(), p(28, 0), battery),
   def("diode", "Diode", "semiconductors", "Rectifier diode", ["rectifier", "d"], 36, 36, diodePins(), p(0, 22), diode),
   def("led", "LED", "semiconductors", "Light-emitting diode", ["light", "emitting", "lamp", "d"], 36, 36, diodePins(), p(0, 22), led),
   def("zener-diode", "Zener diode", "semiconductors", "Voltage-reference diode", ["zener", "regulator", "reference", "d"], 36, 36, diodePins(), p(0, 22), zener),

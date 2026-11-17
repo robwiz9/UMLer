@@ -581,7 +581,7 @@ const attachmentFor = (port: PortGeometry): PortAttachmentRef => ({
 const closestPointOnPolyline = (
   points: readonly Point[],
   target: Point,
-): { readonly distance: number; readonly t: number; readonly point: Point } | null => {
+): { readonly distance: number; readonly t: number; readonly point: Point; readonly segmentIndex: number } | null => {
   const first = points[0];
   if (first === undefined) return null;
   if (points.length === 1) {
@@ -589,6 +589,7 @@ const closestPointOnPolyline = (
       distance: Math.hypot(first.x - target.x, first.y - target.y),
       t: 0,
       point: first,
+      segmentIndex: 0,
     };
   }
   let total = 0;
@@ -599,7 +600,7 @@ const closestPointOnPolyline = (
     total += Math.hypot(b.x - a.x, b.y - a.y);
   }
   let travelled = 0;
-  let best: { distance: number; t: number; point: Point } | null = null;
+  let best: { distance: number; t: number; point: Point; segmentIndex: number } | null = null;
   for (let index = 1; index < points.length; index += 1) {
     const a = points[index - 1];
     const b = points[index];
@@ -617,11 +618,62 @@ const closestPointOnPolyline = (
         distance,
         t: total === 0 ? 0 : (travelled + segmentLength * ratio) / total,
         point,
+        segmentIndex: index - 1,
       };
     }
     travelled += segmentLength;
   }
   return best;
+};
+
+/**
+ * Project a source point onto the same polyline segment the pointer is over so
+ * the new wire leaves the target wire perpendicularly.
+ */
+const perpendicularPointOnPolyline = (
+  points: readonly Point[],
+  segmentIndex: number,
+  source: Point,
+  target: Point,
+  maxSnapDistance: number,
+): { readonly t: number; readonly point: Point } | null => {
+  const a = points[segmentIndex];
+  const b = points[segmentIndex + 1];
+  if (a === undefined || b === undefined) return null;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const segmentLength = Math.hypot(dx, dy);
+  if (segmentLength < 1e-6) return null;
+  let point: Point;
+  let ratio: number;
+  if (Math.abs(dy) < 1e-6) {
+    point = { x: clampValue(source.x, Math.min(a.x, b.x), Math.max(a.x, b.x)), y: a.y };
+    ratio = dx === 0 ? 0 : (point.x - a.x) / dx;
+  } else if (Math.abs(dx) < 1e-6) {
+    point = { x: a.x, y: clampValue(source.y, Math.min(a.y, b.y), Math.max(a.y, b.y)) };
+    ratio = dy === 0 ? 0 : (point.y - a.y) / dy;
+  } else {
+    return null;
+  }
+  if (Math.hypot(point.x - target.x, point.y - target.y) > maxSnapDistance) {
+    return null;
+  }
+  const total = points.slice(1).reduce((sum, entry, index) => {
+    const previous = points[index];
+    return previous === undefined
+      ? sum
+      : sum + Math.hypot(entry.x - previous.x, entry.y - previous.y);
+  }, 0);
+  const before = points.slice(1, segmentIndex + 1).reduce((sum, entry, index) => {
+    const previous = points[index];
+    return previous === undefined
+      ? sum
+      : sum + Math.hypot(entry.x - previous.x, entry.y - previous.y);
+  }, 0);
+  return {
+    point,
+    t: total === 0 ? 0 : (before + segmentLength * ratio) / total,
+  };
 };
 
 const EdgeHitLayer = ({
@@ -1652,6 +1704,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       distance: number;
       t: number;
       point: Point;
+      segmentIndex: number;
     } | null = null;
     let bestDistance = edgeThreshold;
     for (const edge of Object.values(layout.edges)) {
@@ -1666,12 +1719,31 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         distance: hit.distance,
         t: hit.t,
         point: hit.point,
+        segmentIndex: hit.segmentIndex,
       };
     }
     if (bestEdge !== null) {
+      let targetPoint = bestEdge.point;
+      let targetT = bestEdge.t;
+      if (scene.meta.diagramKind === "circuit" && preferredPoint !== undefined) {
+        const targetPoints = layout.edges[bestEdge.edgeId]?.points;
+        const perpendicular = targetPoints === undefined
+          ? null
+          : perpendicularPointOnPolyline(
+              targetPoints,
+              bestEdge.segmentIndex,
+              preferredPoint,
+              bestEdge.point,
+              Math.max(1, scene.canvas.grid.size),
+            );
+        if (perpendicular !== null) {
+          targetPoint = perpendicular.point;
+          targetT = perpendicular.t;
+        }
+      }
       return {
-        point: bestEdge.point,
-        attachment: { edgeId: bestEdge.edgeId, t: bestEdge.t },
+        point: targetPoint,
+        attachment: { edgeId: bestEdge.edgeId, t: targetT },
       };
     }
     return null;

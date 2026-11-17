@@ -433,12 +433,13 @@ the layout pass rotates, translates and measures them.
 |---|---|---|---|---|
 | Resistor | `resistor` | `R` | `A`, `B` | IEC box vs ANSI zigzag. |
 | Capacitor | `capacitor` | `C` | `A`, `B` | Two plates, non-polarised. |
+| Polarized capacitor | `capacitor-polarized` | `C` | `+`, `−` | Hollow positive plate, plus mark, one grid square from the negative plate. |
 | Coil / inductor | `coil` | `L` | `A`, `B` | Bumps; IEC/ANSI variants. |
 | Potentiometer | `potentiometer` | `RV` | `A`, `B`, `W` | Wiper arrow, three pins. |
 | DC voltage source | `voltage-source` | `V` | `+`, `−` | Circle with polarity. |
 | Current source | `current-source` | `I` | `+`, `−` | Circle with arrow. |
 | AC source | `ac-source` | `V` | `+`, `−` | Circle with sine; shares the `V` counter with DC sources. |
-| Battery | `battery` | `B` | `+`, `−` | Multi-cell long/short plates. |
+| Battery | `battery` | `B` | `+`, `−` | Single long/short plate pair, one grid square apart. |
 | Diode | `diode` | `D` | `A`, `K` | Filled triangle + bar. |
 | LED | `led` | `D` | `A`, `K` | Diode + two emission arrows. |
 | Zener diode | `zener-diode` | `D` | `A`, `K` | Bent cathode bar. |
@@ -469,9 +470,11 @@ frame is placed on the grid:
 |---|---|
 | Resistor, coil | `54 × 36` |
 | Capacitor | `36 × 36` |
+| Polarized capacitor | `36 × 36` |
 | Diode, LED, zener | `36 × 36` |
 | Potentiometer | `54 × 54` |
-| Voltage/current/AC source, battery, meters | `36 × 54` |
+| Voltage/current/AC source, meters | `36 × 54` |
+| Battery | `36 × 36` |
 | Transistor / MOSFET | `54 × 54` |
 
 These are fixed footprint symbols. Circuit components do **not** get the four corner resize handles;
@@ -484,9 +487,11 @@ Suggested pin coordinates (local, origin = centre; normals point outward):
 |---|---|
 | Resistor / coil | `A(-27, 0)`, `B(27, 0)`; normals `(-1, 0)` / `(1, 0)` |
 | Capacitor | `A(-18, 0)`, `B(18, 0)`; normals `(-1, 0)` / `(1, 0)` |
+| Polarized capacitor | `+` `(0, -18)`, `−` `(0, 18)`; normals `(0, -1)` / `(0, 1)` |
 | Diode / LED / zener | `A(-18, 0)`, `B(18, 0)`; normals `(-1, 0)` / `(1, 0)` |
 | Potentiometer | `A(-27, 0)`, `B(27, 0)`, `W(0, -18)`; wiper normal `(0, -1)` |
-| Voltage / current / AC source, battery, meters | `+` `(0, -27)`, `−` `(0, 27)`; normals `(0, -1)` / `(0, 1)` |
+| Voltage / current / AC source, meters | `+` `(0, -27)`, `−` `(0, 27)`; normals `(0, -1)` / `(0, 1)` |
+| Battery | `+` `(0, -18)`, `−` `(0, 18)`; normals `(0, -1)` / `(0, 1)` |
 | NPN / PNP transistor | `B(-27, 0)`, `C(18, -18)`, `E(18, 18)`; diagonals normalised |
 | N / P MOSFET | `G(-27, 0)`, `D(18, -18)`, `S(18, 18)`; diagonals normalised |
 
@@ -897,9 +902,9 @@ if (scene.meta.diagramKind === "circuit") {
   4. otherwise empty canvas.
 - For circuit scenes, an empty target is valid **only after a deliberate drag**. Both checks live in
   `canExtendToEmpty()` (`src/canvas/circuit-draw.ts`) and must pass before a no-dot Node is created:
-  - `MIN_EXTEND_SCREEN_PX = 18` — pointer travel in screen space, so a click or a few pixels of jitter
+  - `MIN_EXTEND_SCREEN_PX = 8` — pointer travel in screen space, so a click or a few pixels of jitter
     never creates a node;
-  - `MIN_EXTEND_WORLD = max(2 * grid.size, 18)` scene units — distance from the source pin/centre handle
+  - `MIN_EXTEND_WORLD = max(grid.size, 8)` scene units — distance from the source pin/centre handle
     to the snapped candidate point.
   These guards apply only to the empty-canvas `none`-node path. Dropping on a pin, junction centre or
   another wire connects normally even with a short drag, because the target is explicit.
@@ -1539,10 +1544,12 @@ behaviour; where earlier sections differ, this section wins.
    `e.g. out or V_1` placeholder; circuit component/junction label fields show an `R_1` / `R_"12"`
    placeholder instead of relationship wording.
 7. **One-grid-square leads and grid-aligned pins.** Two-terminal leads are 9 units long: resistor/coil
-   pins at ±27 with a ±18 body; capacitor pins at ±18 with plates at ±9; diode/LED/zener pins at ±18
-   with a ±9 body; vertical sources/meters pins at ±27 with an 18-radius circle; battery outer plates at
-   ±18. Frame sizes are multiples of 18 so every pin lands on the 9-unit grid when the frame is
-   grid-placed. Transistor and MOSFET pins are all grid multiples; their leads keep the envelope
+   pins at ±27 with a ±18 body; capacitor pins at ±18 with plates at ±4.5 (one grid square apart);
+   polarized capacitor uses vertical pins at ±18 with a hollow positive plate; diode/LED/zener pins at
+   ±18 with a ±9 body; vertical sources/meters pins at ±27 with an 18-radius circle; battery pins at ±18
+   with a single long/short plate pair at ±4.5 and a plus mark on the long-plate side. Frame sizes are multiples
+   of 18 so every pin lands on the 9-unit grid when the frame is grid-placed. Transistor and MOSFET pins
+   are all grid multiples; their leads keep the envelope
    footprint.
 8. **Junction variants.** `filled` is a new small filled dot and is the default. The former filled dot
    is now `solid`, displayed as **Filled XL**. `hollow` and `none` remain. New junctions created by
@@ -1701,8 +1708,13 @@ behaviour; where earlier sections differ, this section wins.
 43. **Auto-merged junction refinement.** Junctions created by coincidence merging are marked and, when
     Visual layout refinements is enabled, rendered in None style while they have exactly two connections.
     If a third connection is added they become visible again; with refinements disabled they stay visible.
+44. **Orthogonal wire-to-wire targeting.** While drawing from a circuit node/junction and hovering another
+    wire, the attachment point is projected onto the hovered segment using the source coordinate normal to
+    that segment. The projection is used only when it lies within one grid square of the pointer; otherwise
+    the target stays at the nearest point under the pointer. This makes the new wire meet the target wire
+    perpendicularly without snapping across a long distance; the projected point is clamped to the segment.
 
-The circuit test suite now covers these cases (111 assertions at the time of writing).
+The circuit test suite now covers these cases (112 assertions at the time of writing).
 
 ---
 
@@ -1730,6 +1742,7 @@ The circuit test suite now covers these cases (111 assertions at the time of wri
 - [ ] CeTZ export contains the same components, rotations, junction styles, labels and hops as the
       canvas, with no editor overlays.
 - [ ] `npm run check` passes, including new circuit tests and all existing fixture checks.
+
 
 
 

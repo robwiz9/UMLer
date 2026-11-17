@@ -124,7 +124,11 @@ const check = (condition: boolean, message: string): void => {
 };
 
 // --- catalogue and numbering -------------------------------------------------
-check(CIRCUIT_COMPONENTS.length === 19, "catalogue should expose 19 components");
+check(CIRCUIT_COMPONENTS.length === 20, "catalogue should expose 20 components");
+check(
+  circuitComponent("capacitor-polarized") !== undefined,
+  "polarized capacitor is catalogued",
+);
 check(circuitComponent("transistor-pnp") !== undefined, "PNP transistor is catalogued");
 check(circuitComponent("mosfet-p") !== undefined, "P-MOSFET is catalogued");
 check(circuitComponent("switch") !== undefined, "switch is catalogued");

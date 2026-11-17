@@ -9,10 +9,10 @@
 
 import type { Point } from "../model/geometry.ts";
 
-export const MIN_EXTEND_SCREEN_PX = 18;
+export const MIN_EXTEND_SCREEN_PX = 8;
 
 export const minExtendWorld = (gridSize: number): number =>
-  Math.max(2 * Math.max(1, gridSize), 18);
+  Math.max(Math.max(1, gridSize), 8);
 
 export interface ExtendGuardInput {
   /** Total pointer travel since pointer-down, in screen pixels. */
