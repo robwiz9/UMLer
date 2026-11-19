@@ -12,6 +12,7 @@ interface TextStyleControlsProps {
   readonly base: TextStyle;
   readonly value?: TextStyleOverride;
   readonly onChange: (next: TextStyleOverride | undefined) => void;
+  readonly objectColor?: boolean;
 }
 
 const clean = (value: TextStyleOverride): TextStyleOverride | undefined => {
@@ -25,6 +26,7 @@ export const TextStyleControls = ({
   base,
   value,
   onChange,
+  objectColor = false,
 }: TextStyleControlsProps) => {
   const id = useId();
   const effective = resolveTextStyle(base, value);
@@ -100,7 +102,7 @@ export const TextStyleControls = ({
             }}
           />
         </label>
-        <label className="text-style-color" title="Font Color">
+        <label className="text-style-color" title={objectColor ? "Object color" : "Font color"}>
           <DeferredColorInput
             id={`${id}-color`}
             name={`${id}-color`}

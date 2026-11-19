@@ -1035,18 +1035,20 @@ export const NodeSkeleton = ({
 
   const junctionCompactFrame: Rect | null =
     layout.kind === "circuitJunction"
-      ? {
-          x: layout.center.x - gridSize / 2,
-          y: layout.center.y - gridSize / 2,
-          width: gridSize,
-          height: gridSize,
-        }
+      ? layout.measurement !== undefined
+        ? layout.hitFrame ?? layout.frame
+        : {
+            x: layout.center.x - gridSize / 2,
+            y: layout.center.y - gridSize / 2,
+            width: gridSize,
+            height: gridSize,
+          }
       : null;
   const hitOutline = layout.kind === "circuitComponent"
     ? layout.focusOutline
     : null;
   const hoverOutline = layout.kind === "circuitComponent"
-    ? layout.outline
+    ? layout.focusOutline
     : null;
   const hitFrame = junctionCompactFrame ?? layout.frame;
   const shownHoverFrame = junctionCompactFrame !== null && hoverFrame !== null
@@ -1196,7 +1198,7 @@ export const NodeSkeleton = ({
           </g>
         ) : layout.kind === "circuitComponent" ? (
           <polygon
-            points={layout.outline.map((p) => `${p.x},${p.y}`).join(" ")}
+            points={layout.focusOutline.map((p) => `${p.x},${p.y}`).join(" ")}
             fill="none"
             stroke={theme.colors.selection}
             strokeWidth={1.4}

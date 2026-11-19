@@ -227,7 +227,13 @@ export const NodeFocusMenu = ({
     const objectTitle =
       node.kind === "circuitComponent"
         ? circuitComponent(node.component)?.label ?? kindTitle[node.kind]
-        : kindTitle[node.kind] ?? node.kind;
+        : node.kind === "circuitJunction" && node.measurement !== undefined
+          ? node.measurement.kind === "voltage"
+            ? "Voltage label"
+            : node.measurement.kind === "loop-current"
+              ? "Loop current label"
+              : "Current label"
+          : kindTitle[node.kind] ?? node.kind;
     const lockButton = (
       <button
         type="button"
@@ -256,6 +262,20 @@ export const NodeFocusMenu = ({
     const objectTextBase = node.kind === "frame" || node.kind === "lifeline"
       ? { ...node.style.text, weight: 600 as const }
       : node.style.text;
+    const applyObjectTextStyle = (textStyle: typeof node.textStyle): void => {
+      if (node.kind === "circuitComponent" || node.kind === "circuitJunction") {
+        const color = textStyle?.color ?? node.style.text.color;
+        onUpdateNode(node.id, {
+          textStyle,
+          style: {
+            ...node.style,
+            stroke: { ...node.style.stroke, color },
+          },
+        });
+        return;
+      }
+      onUpdateNode(node.id, { textStyle });
+    };
 
     if (focus.kind === "lifelineSpine" && node.kind === "lifeline") {
       return (
@@ -508,33 +528,95 @@ export const NodeFocusMenu = ({
         ) : null}
         {node.kind === "circuitJunction" ? (
           <div className="circuit-junction-controls">
-            <span className="field-label">Dot style</span>
-            <div className="circuit-rotation-row">
-              {(["filled", "solid", "hollow", "none"] as const satisfies readonly CircuitJunctionStyle[]).map(
-                (style) => (
+            {node.measurement !== undefined ? (
+              <>
+                <span className="field-label">Measurement</span>
+                <div className="circuit-rotation-row">
+                  {node.measurement.kind !== "loop-current" ? (
+                    <button
+                      type="button"
+                      className={`chip ${node.measurement.mirrorY === true ? "on" : ""}`}
+                      aria-label="Mirror measurement arrow vertically"
+                      title="Mirror measurement arrow vertically"
+                      onClick={() => {
+                        const measurement = node.measurement;
+                        if (measurement === undefined) return;
+                        onUpdateNode(node.id, {
+                          measurement: {
+                            ...measurement,
+                            mirrorY: measurement.mirrorY !== true,
+                          },
+                        });
+                      }}
+                    >
+                      <MirrorGlyph axis="vertical" />
+                    </button>
+                  ) : null}
                   <button
-                    key={style}
                     type="button"
-                    className={`chip ${node.junctionStyle === style ? "on" : ""}`}
-                    onClick={() => onUpdateNode(node.id, { junctionStyle: style })}
+                    className={`chip ${node.measurement.mirrorX === true ? "on" : ""}`}
+                    aria-label="Mirror measurement arrow horizontally"
+                    title="Mirror measurement arrow horizontally"
+                    onClick={() => {
+                      const measurement = node.measurement;
+                      if (measurement === undefined) return;
+                      onUpdateNode(node.id, {
+                        measurement: {
+                          ...measurement,
+                          mirrorX: measurement.mirrorX !== true,
+                        },
+                      });
+                    }}
                   >
-                    {style === "filled"
-                      ? "● Filled"
-                      : style === "solid"
-                        ? "● Filled XL"
-                        : style === "hollow"
-                          ? "○ Hollow"
-                          : "None"}
+                    <MirrorGlyph axis="horizontal" />
                   </button>
-                ),
-              )}
-            </div>
+                  <label className="field-inline">
+                    <span>Angle</span>
+                    <input
+                      type="number"
+                      value={Math.round(node.rotation ?? 0)}
+                      step={1}
+                      onChange={(event) =>
+                        onUpdateNode(node.id, {
+                          rotation: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              </>
+            ) : (
+              <>
+                <span className="field-label">Dot style</span>
+                <div className="circuit-rotation-row">
+                  {(["filled", "solid", "hollow", "none"] as const satisfies readonly CircuitJunctionStyle[]).map(
+                    (style) => (
+                      <button
+                        key={style}
+                        type="button"
+                        className={`chip ${node.junctionStyle === style ? "on" : ""}`}
+                        onClick={() => onUpdateNode(node.id, { junctionStyle: style })}
+                      >
+                        {style === "filled"
+                          ? "● Filled"
+                          : style === "solid"
+                            ? "● Filled XL"
+                            : style === "hollow"
+                              ? "○ Hollow"
+                              : "None"}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </>
+            )}
           </div>
         ) : null}
         <TextStyleControls
           base={objectTextBase}
           value={node.textStyle}
-          onChange={(textStyle) => onUpdateNode(node.id, { textStyle })}
+          objectColor={node.kind === "circuitComponent" || node.kind === "circuitJunction"}
+          onChange={applyObjectTextStyle}
         />
         <div className="focus-actions">
           {node.kind === "circuitJunction" &&

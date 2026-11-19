@@ -264,9 +264,22 @@ export interface CircuitJunctionNode extends NodeBase {
   readonly generatedBranch?: boolean;
   /** Created by coincidence merging; may be refined to None at degree two. */
   readonly autoMerged?: boolean;
+  /** Non-electrical measurement marker drawn as a half-elliptical arrow. */
+  readonly measurement?: CircuitMeasurement;
+  /** Custom measurement arrow rotation in degrees. */
+  readonly rotation?: number;
   /** Label anchor in scene coordinates, relative to the junction centre. */
   readonly labelOffset?: Point;
   readonly style: ShapeNodeStyle;
+}
+
+export interface CircuitMeasurement {
+  readonly kind: "voltage" | "current" | "loop-current";
+  readonly firstLabel: string;
+  readonly secondLabel?: string;
+  readonly reverse: boolean;
+  readonly mirrorX?: boolean;
+  readonly mirrorY?: boolean;
 }
 
 export type SceneNode =

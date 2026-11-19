@@ -113,10 +113,11 @@ export const EdgeInspector = ({
           </button>
         ) : null}
       </div>
-      {labelFor("center").length > 0 ? (
+      {isCircuit || labelFor("center").length > 0 ? (
         <TextStyleControls
           base={labelTextStyle}
           value={labelStyleFor("center")}
+          objectColor={isCircuit}
           onChange={(style) => onSetLabelStyle("center", style)}
         />
       ) : null}

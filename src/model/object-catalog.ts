@@ -66,6 +66,9 @@ export type ObjectTemplateId =
   | "comment"
   | "image"
   | "circuit-node"
+  | "circuit-voltage-label"
+  | "circuit-current-label"
+  | "circuit-loop-current-label"
   | CircuitTemplateId;
 
 export type ObjectTemplateGroup = "diagram" | "annotation";
@@ -241,6 +244,30 @@ const BY_DIAGRAM: Record<DiagramKind, readonly ObjectTemplate[]> = {
       icon: "●",
       group: "diagram",
       keywords: ["junction", "dot", "branch", "node"],
+    },
+    {
+      id: "circuit-voltage-label",
+      label: "Voltage label",
+      hint: "Semi-elliptical voltage measurement arrow",
+      icon: "⌒",
+      group: "diagram",
+      keywords: ["voltage", "measure", "meter", "u", "v"],
+    },
+    {
+      id: "circuit-current-label",
+      label: "Current label",
+      hint: "Straight current measurement arrow",
+      icon: "→",
+      group: "diagram",
+      keywords: ["current", "measure", "meter", "i"],
+    },
+    {
+      id: "circuit-loop-current-label",
+      label: "Loop current label",
+      hint: "3/4-circle loop current arrow",
+      icon: "↻",
+      group: "diagram",
+      keywords: ["loop", "current", "measure", "mesh", "i"],
     },
     ...COMMON_TEMPLATES,
   ],
@@ -495,8 +522,34 @@ const circuitJunctionAt = (
   junctionStyle,
 });
 
-const circuitComponentAt = (
+const circuitMeasurementAt = (
   scene: SceneDocument,
+  center: Point,
+  kind: "voltage" | "current" | "loop-current",
+  name: string,
+  firstLabel: string,
+): CircuitJunctionNode => {
+  const width = kind === "loop-current" ? 36 : kind === "current" ? 36 : 54;
+  const height = kind === "loop-current" ? 36 : 18;
+  const frame = placeObjectFrame(scene, center, width, height);
+  const base = circuitJunctionAt(frame);
+  return {
+    ...base,
+    frame,
+    name,
+    labelOffset: kind === "loop-current" ? { x: 0, y: 0 } : { x: 0, y: -19 },
+    generatedBranch: true,
+    measurement: {
+      kind,
+      firstLabel,
+      reverse: false,
+    },
+    rotation: 0,
+    z: 6,
+  };
+};
+
+const circuitComponentAt = (  scene: SceneDocument,
   kind: CircuitComponentKind,
   frame: Rect,
 ): CircuitComponentNode | null => {
@@ -569,6 +622,47 @@ export const createObjectFromTemplate = (
       ? { node: withSceneTheme(node) }
       : { node: withSceneTheme(node), asset };
 
+  if (
+    templateId === "circuit-voltage-label" ||
+    templateId === "circuit-current-label" ||
+    templateId === "circuit-loop-current-label"
+  ) {
+    const standard = resolveCircuitSettings(scene).standard;
+    if (templateId === "circuit-loop-current-label") {
+      const used = new Set<number>();
+      for (const node of Object.values(scene.nodes)) {
+        if (
+          node.kind === "circuitJunction" &&
+          node.measurement?.kind === "loop-current"
+        ) {
+          const match = /^I_(\d+)$/.exec(node.name.trim());
+          if (match?.[1] !== undefined) used.add(Number(match[1]));
+        }
+      }
+      let index = 1;
+      while (used.has(index)) index += 1;
+      return created(
+        circuitMeasurementAt(
+          scene,
+          center,
+          "loop-current",
+          `I_${index}`,
+          String(index),
+        ),
+      );
+    }
+    return created(
+      circuitMeasurementAt(
+        scene,
+        center,
+        templateId === "circuit-voltage-label" ? "voltage" : "current",
+        templateId === "circuit-voltage-label"
+          ? `${standard === "iec" ? "U" : "V"}_"1"`
+          : 'I_"1"',
+        "1",
+      ),
+    );
+  }
   if (templateId === "circuit-node") {
     return created(circuitJunctionAt(placeObjectFrame(scene, center, 18, 18)));
   }

@@ -256,6 +256,67 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
       ) {
         error("circuit/label-offset", `${path}.labelOffset`, "labelOffset must have finite coordinates");
       }
+      if (node.rotation !== undefined && !isFiniteNumber(node.rotation)) {
+        error("circuit/measurement-rotation", `${path}.rotation`, "rotation must be a finite number");
+      }
+      if (node.measurement !== undefined) {
+        const measurement = node.measurement;
+        if (
+          measurement.kind !== "voltage" &&
+          measurement.kind !== "current" &&
+          measurement.kind !== "loop-current"
+        ) {
+          error(
+            "circuit/measurement-kind",
+            `${path}.measurement.kind`,
+            'measurement.kind must be "voltage", "current" or "loop-current"',
+          );
+        }
+        if (typeof measurement.firstLabel !== "string") {
+          error(
+            "circuit/measurement-first-label",
+            `${path}.measurement.firstLabel`,
+            "firstLabel must be a string",
+          );
+        }
+        if (
+          measurement.secondLabel !== undefined &&
+          typeof measurement.secondLabel !== "string"
+        ) {
+          error(
+            "circuit/measurement-second-label",
+            `${path}.measurement.secondLabel`,
+            "secondLabel must be a string",
+          );
+        }
+        if (typeof measurement.reverse !== "boolean") {
+          error(
+            "circuit/measurement-reverse",
+            `${path}.measurement.reverse`,
+            "reverse must be a boolean",
+          );
+        }
+        if (
+          measurement.mirrorX !== undefined &&
+          typeof measurement.mirrorX !== "boolean"
+        ) {
+          error(
+            "circuit/measurement-mirror-x",
+            `${path}.measurement.mirrorX`,
+            "mirrorX must be a boolean",
+          );
+        }
+        if (
+          measurement.mirrorY !== undefined &&
+          typeof measurement.mirrorY !== "boolean"
+        ) {
+          error(
+            "circuit/measurement-mirror-y",
+            `${path}.measurement.mirrorY`,
+            "mirrorY must be a boolean",
+          );
+        }
+      }
       if (
         node.generatedBranch !== undefined &&
         typeof node.generatedBranch !== "boolean"

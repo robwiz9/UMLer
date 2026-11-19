@@ -16,6 +16,30 @@ interface CircuitAddObjectMenuProps {
   readonly onClose: () => void;
 }
 
+const MEASUREMENT_TEMPLATES = [
+  {
+    id: "circuit-voltage-label" as const,
+    label: "Voltage label",
+    icon: "⌒",
+    description: "Semi-elliptical voltage measurement arrow",
+    keywords: ["voltage", "measure", "meter", "u", "v"],
+  },
+  {
+    id: "circuit-current-label" as const,
+    label: "Current label",
+    icon: "→",
+    description: "Straight current measurement arrow",
+    keywords: ["current", "measure", "meter", "i"],
+  },
+  {
+    id: "circuit-loop-current-label" as const,
+    label: "Loop current label",
+    icon: "↻",
+    description: "3/4-circle loop current arrow",
+    keywords: ["loop", "current", "mesh", "measure", "i"],
+  },
+];
+
 export const CircuitAddObjectMenu = ({
   standard,
   onPick,
@@ -54,6 +78,14 @@ export const CircuitAddObjectMenu = ({
     ["node", "junction", "dot", "branch", "connection"].some((word) =>
       word.includes(normalized) || normalized.includes(word),
     );
+
+  const measurementMatches = MEASUREMENT_TEMPLATES.filter(
+    (template) =>
+      normalized.length === 0 ||
+      [template.label, template.description, ...template.keywords].some(
+        (value) => value.toLowerCase().includes(normalized),
+      ),
+  );
 
   const pick = (templateId: ObjectTemplateId): void => {
     remember(templateId);
@@ -138,7 +170,7 @@ export const CircuitAddObjectMenu = ({
           <span>Description</span>
         </div>
         <div className="circuit-table" ref={tableRef} role="group" aria-label="Circuit components">
-        {groups.length === 0 && !nodeMatches ? (
+        {groups.length === 0 && !nodeMatches && measurementMatches.length === 0 ? (
           <div className="circuit-empty">No components match “{query.trim()}”.</div>
         ) : (
           groups.map((group) => (
@@ -195,6 +227,37 @@ export const CircuitAddObjectMenu = ({
             <span className="circuit-table-ref">—</span>
             <span className="circuit-table-desc">Branch point; filled, hollow or hidden dot</span>
           </button>
+        </div>
+      ) : null}
+
+      {measurementMatches.length > 0 ? (
+        <div className="circuit-table-group">
+          <div className="circuit-table-group-title">Measurements</div>
+          {measurementMatches.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              className="circuit-table-row"
+              data-circuit-row="true"
+              role="menuitem"
+              onClick={() => pick(template.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  onClose();
+                }
+              }}
+            >
+              <span className="circuit-table-symbol">
+                <span className="circuit-node-symbol" aria-hidden="true">
+                  {template.icon}
+                </span>
+              </span>
+              <span className="circuit-table-name">{template.label}</span>
+              <span className="circuit-table-ref">—</span>
+              <span className="circuit-table-desc">{template.description}</span>
+            </button>
+          ))}
         </div>
       ) : null}
 

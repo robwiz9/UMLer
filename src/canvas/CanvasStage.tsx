@@ -157,7 +157,7 @@ interface CanvasStageProps {
   readonly onTextDoubleClick: (nodeId: string, target: CanvasTextTarget) => void;
   readonly nodeFocus: NodeFocus | null;
   readonly focusRequest: CanvasTextFocusRequest | null;
-  readonly onNodePartClick: (focus: NodeFocus) => void;
+  readonly onNodePartClick: (focus: NodeFocus, additive?: boolean) => void;
   readonly onClearNodeFocus: () => void;
   readonly onUpdateNode: (nodeId: string, patch: Partial<SceneNode>) => void;
   readonly onUpdateRow: (nodeId: string, rowId: RowId, patch: Partial<TableRow>) => void;
@@ -804,6 +804,7 @@ const coincidentDragHighlights = (
     const frame = frames[id] ?? node?.frame;
     if (node === undefined || frame === undefined) continue;
     if (node.kind === "circuitJunction") {
+      if (node.measurement !== undefined) continue;
       movingPoints.push(rectCenter(frame));
     } else if (node.kind === "circuitComponent") {
       const definition = circuitComponent(node.component);
@@ -820,6 +821,7 @@ const coincidentDragHighlights = (
   for (const nodeLayout of Object.values(layout.nodes)) {
     if (movingIds.has(nodeLayout.nodeId)) continue;
     if (nodeLayout.kind === "circuitJunction") {
+      if (nodeLayout.measurement !== undefined) continue;
       staticPoints.push(nodeLayout.center);
     } else if (nodeLayout.kind === "circuitComponent") {
       for (const pin of nodeLayout.pins) staticPoints.push(pin.point);
@@ -1236,7 +1238,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const duplicateDragRef = useRef(false);
   const detachIntentRef = useRef<readonly NodeId[] | null>(null);
   const detachDragRef = useRef(false);
-  const portClickFocusRef = useRef<{ readonly nodeId: NodeId } | null>(null);
+  const portClickFocusRef = useRef<{
+    readonly nodeId: NodeId;
+    readonly additive: boolean;
+  } | null>(null);
   const lastFittedSceneIdRef = useRef<string | null>(null);
   const wireInsertNodeIdRef = useRef<string | null>(null);
   const insertTargetRef = useRef<InsertionTarget | null>(null);
@@ -1994,7 +1999,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const owner = sceneRef.current.nodes[port.nodeId];
     portClickFocusRef.current =
       owner?.kind === "circuitJunction" && port.ref.kind === "center"
-        ? { nodeId: port.nodeId }
+        ? {
+            nodeId: port.nodeId,
+            additive: event.ctrlKey || event.metaKey,
+          }
         : null;
     const svg = svgRef.current;
     const screen = svg === null ? { x: 0, y: 0 } : pointFromEvent(event, svg);
@@ -2863,7 +2871,15 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (event.button !== 0) return;
     const nodeLayout = layout.nodes[nodeId];
     const svg = svgRef.current;
-    if (nodeLayout === undefined || nodeLayout.kind !== "circuitComponent" || svg === null) {
+    if (
+      nodeLayout === undefined ||
+      !(
+        nodeLayout.kind === "circuitComponent" ||
+        (nodeLayout.kind === "circuitJunction" &&
+          nodeLayout.measurement !== undefined)
+      ) ||
+      svg === null
+    ) {
       return;
     }
     const screen = pointFromEvent(event, svg);
@@ -3021,7 +3037,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         interaction.pointerTravel <= 3 &&
         target === null
       ) {
-        onNodePartClick({ kind: "object", nodeId: clickFocus.nodeId });
+        onNodePartClick(
+          { kind: "object", nodeId: clickFocus.nodeId },
+          clickFocus.additive,
+        );
         draftTargetRef.current = null;
         setDraftEdge(null);
         interactionRef.current = null;
@@ -3650,9 +3669,22 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         y: interaction.center.y * zoomRef.current + cameraRef.current.y,
       };
       const angle = (Math.atan2(screen.y - centerScreen.y, screen.x - centerScreen.x) * 180) / Math.PI;
-      interaction.lastRotation = normalizeRotation(
-        interaction.startRotation + (angle - interaction.startPointerAngle),
-      );
+      const rawRotation =
+        interaction.startRotation + (angle - interaction.startPointerAngle);
+      const rotatingNode = scene.nodes[interaction.nodeId];
+      if (
+        rotatingNode?.kind === "circuitJunction" &&
+        rotatingNode.measurement !== undefined
+      ) {
+        const wrapped = ((rawRotation % 360) + 360) % 360;
+        const nearest = (Math.round(wrapped / 45) * 45) % 360;
+        interaction.lastRotation =
+          Math.abs(wrapped - nearest) <= 4
+            ? nearest
+            : Math.round(wrapped * 10) / 10;
+      } else {
+        interaction.lastRotation = normalizeRotation(rawRotation);
+      }
       const radians = (angle * Math.PI) / 180;
       setRotationHandleOverride({
         nodeId: interaction.nodeId,
@@ -4018,29 +4050,48 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     : null;
   const selectedLayout =
     singleSelectedNodeId === null ? undefined : layout.nodes[singleSelectedNodeId];
-  const rotateHandle = selectedLayout !== undefined && selectedLayout.kind === "circuitComponent"
-    ? (() => {
-        const geometry = circuitRotateHandleGeometry(
-          selectedLayout.frame,
-          selectedLayout.rotation,
-          zoom,
-        );
-        const override = rotationHandleOverride?.nodeId === selectedLayout.nodeId
-          ? rotationHandleOverride.point
-          : null;
-        return {
-          nodeId: selectedLayout.nodeId,
-          x: override?.x ?? geometry.point.x,
-          y: override?.y ?? geometry.point.y,
-          center: geometry.center,
-          rotation: selectedLayout.rotation,
-        };
-      })()
-    : null;
+  const selectedResizeFrame =
+    selectedLayout?.kind === "circuitJunction"
+      ? selectedLayout.hitFrame ?? selectedLayout.frame
+      : selectedLayout?.frame;
+  const rotateHandle =
+    selectedLayout !== undefined &&
+    (selectedLayout.kind === "circuitComponent" ||
+      (selectedLayout.kind === "circuitJunction" &&
+        selectedLayout.measurement !== undefined))
+      ? (() => {
+          const rotation =
+            selectedLayout.kind === "circuitComponent"
+              ? selectedLayout.rotation
+              : selectedLayout.rotation;
+          const geometry = circuitRotateHandleGeometry(
+            selectedLayout.frame,
+            rotation,
+            zoom,
+          );
+          const override = rotationHandleOverride?.nodeId === selectedLayout.nodeId
+            ? rotationHandleOverride.point
+            : null;
+          return {
+            nodeId: selectedLayout.nodeId,
+            x: override?.x ?? geometry.point.x,
+            y: override?.y ?? geometry.point.y,
+            center: geometry.center,
+            rotation,
+            measurement: selectedLayout.kind === "circuitJunction",
+          };
+        })()
+      : null;
   const selectedPorts = singleSelectedNodeId === null
     ? []
     : (() => {
         const selectedNodeLayout = layout.nodes[singleSelectedNodeId];
+        if (
+          selectedNodeLayout?.kind === "circuitJunction" &&
+          selectedNodeLayout.measurement !== undefined
+        ) {
+          return [];
+        }
         if (
           selectedNodeLayout?.kind === "circuitComponent" &&
           hoveredObjectNodeId !== singleSelectedNodeId &&
@@ -4050,9 +4101,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         }
         return snapHandlesForNode(layout.ports, singleSelectedNodeId);
       })();
-  const hoveredPorts = hoveredObjectNodeId === null || selectedEdgeIds.length > 0
-    ? []
-    : snapHandlesForNode(layout.ports, hoveredObjectNodeId);
+  const hoveredPorts =
+    hoveredObjectNodeId === null ||
+    selectedEdgeIds.length > 0 ||
+    (layout.nodes[hoveredObjectNodeId]?.kind === "circuitJunction" &&
+      layout.nodes[hoveredObjectNodeId].measurement !== undefined)
+      ? []
+      : snapHandlesForNode(layout.ports, hoveredObjectNodeId);
   const visiblePorts = (() => {
     const seen = new Set<string>();
     return [...selectedPorts, ...hoveredPorts].filter((port) => {
@@ -4097,11 +4152,19 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                   : { family: "generic" as const, kind: "filledArrow" as const },
             }
           : edge.markers;
+      const centerColor = scene.meta.diagramKind === "circuit"
+        ? edge.labels.find((label) => label.zone === "center")?.textStyle?.color
+        : undefined;
+      const baseStroke = scene.meta.diagramKind === "circuit"
+        ? scene.theme.shape.stroke
+        : edge.style.stroke;
       return [
         edgeLayerItem(
           edgeLayout,
           markers,
-          scene.meta.diagramKind === "circuit" ? scene.theme.shape.stroke : edge.style.stroke,
+          centerColor === undefined
+            ? baseStroke
+            : { ...baseStroke, color: centerColor },
           scene.meta.diagramKind !== "circuit",
         ),
       ];
@@ -4260,6 +4323,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       return focusLayout.headFrame;
     }
     if (focusLayout.kind === "circuitJunction") {
+      if (focusLayout.measurement !== undefined) {
+        return focusLayout.hitFrame ?? focusLayout.frame;
+      }
       const size = Math.max(1, scene.canvas.grid.size);
       return {
         x: focusLayout.center.x - size / 2,
@@ -4912,26 +4978,29 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           {selectedLayout !== undefined &&
           selectedActivation === null &&
           selectedLayout.kind !== "circuitComponent" &&
-          selectedLayout.kind !== "circuitJunction" ? (
+          !(
+            selectedLayout.kind === "circuitJunction" &&
+            selectedLayout.measurement === undefined
+          ) ? (
             <>
               {([
-                { corner: "nw", x: selectedLayout.frame.x, y: selectedLayout.frame.y, cursor: "nwse-resize" },
+                { corner: "nw", x: selectedResizeFrame?.x ?? 0, y: selectedResizeFrame?.y ?? 0, cursor: "nwse-resize" },
                 {
                   corner: "ne",
-                  x: selectedLayout.frame.x + selectedLayout.frame.width,
-                  y: selectedLayout.frame.y,
+                  x: (selectedResizeFrame?.x ?? 0) + (selectedResizeFrame?.width ?? 0),
+                  y: selectedResizeFrame?.y ?? 0,
                   cursor: "nesw-resize",
                 },
                 {
                   corner: "sw",
-                  x: selectedLayout.frame.x,
-                  y: selectedLayout.frame.y + selectedLayout.frame.height,
+                  x: selectedResizeFrame?.x ?? 0,
+                  y: (selectedResizeFrame?.y ?? 0) + (selectedResizeFrame?.height ?? 0),
                   cursor: "nesw-resize",
                 },
                 {
                   corner: "se",
-                  x: selectedLayout.frame.x + selectedLayout.frame.width,
-                  y: selectedLayout.frame.y + selectedLayout.frame.height,
+                  x: (selectedResizeFrame?.x ?? 0) + (selectedResizeFrame?.width ?? 0),
+                  y: (selectedResizeFrame?.y ?? 0) + (selectedResizeFrame?.height ?? 0),
                   cursor: "nwse-resize",
                 },
               ] as const).map((handle) => (
@@ -4974,7 +5043,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 strokeWidth={1.4 / zoom}
                 onPointerDown={(event) => handleRotatePointerDown(rotateHandle.nodeId, event)}
               >
-                <title>{`Rotate ${rotateHandle.rotation}° · drag in 45° steps`}</title>
+                <title>
+                  {rotateHandle.measurement
+                    ? `Rotate ${rotateHandle.rotation}° · snaps near 45°`
+                    : `Rotate ${rotateHandle.rotation}° · drag in 45° steps`}
+                </title>
               </circle>
               <path
                 d={`M ${rotateHandle.x - 5 / zoom} ${rotateHandle.y - 1 / zoom} A ${5 / zoom} ${5 / zoom} 0 1 1 ${rotateHandle.x + 3 / zoom} ${rotateHandle.y + 4 / zoom}`}

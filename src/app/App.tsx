@@ -37,6 +37,13 @@ import { GitHubDecisionDialog, type GitHubDecision, type GitHubDecisionOption } 
 import { GitHubProjectDialog } from "./GitHubProjectDialog.tsx";
 import { LayoutPanel } from "./LayoutPanel.tsx";
 import { CircuitPanel } from "./CircuitPanel.tsx";
+import {
+  ActionsPanel,
+  CurrentActionIcon,
+  LoopCurrentActionIcon,
+  VoltageActionIcon,
+  type ActionItem,
+} from "./ActionsPanel.tsx";
 import { ProjectImportDialog } from "./ProjectImportDialog.tsx";
 import { SceneDialog, type SceneDialogMode } from "./SceneDialog.tsx";
 import { ThemePanel } from "./ThemePanel.tsx";
@@ -79,14 +86,16 @@ import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
 import type { StrokePattern, TextStyleOverride, Theme } from "../model/styles.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
-import type { ImageAsset, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
+import type { ImageAsset, CircuitJunctionNode, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
 import { resolveCircuitSettings, setCircuitStandard, type CircuitStandard } from "../model/circuit.ts";
+import { circuitComponent } from "../model/circuit-catalog.ts";
 import {
   addCircuitJunctionToWire,
   cleanupShiftBranches,
   connectCircuitWireToPoint,
   connectCircuitWireToWire,
   createCircuitWire,
+  createCircuitJunction,
   hideDegreeTwoJunctions,
   insertCircuitComponentOnWire,
   mergeCircuitJunction,
@@ -104,7 +113,7 @@ import {
   type WireOrientation,
 } from "../model/circuit-wires.ts";
 import { asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, newId, type ActivationId, type SceneId } from "../model/ids.ts";
-import { expandRect, rectsIntersect, snap, unionRects, type Point } from "../model/geometry.ts";
+import { expandRect, point, rect, rectsIntersect, snap, unionRects, type Point } from "../model/geometry.ts";
 import type { ObjectTemplateId } from "../model/object-catalog.ts";
 import { createImageObject, createObjectFromTemplate } from "../model/object-catalog.ts";
 import { collectProjectAssets, pruneUnusedProjectAssets, unusedProjectAssets } from "../model/assets.ts";
@@ -2521,6 +2530,337 @@ export const App = () => {
     );
   }, [camera, scene, selectNodes, showToast, viewport.height, viewport.width, zoom]);
 
+  const addMeasurement = useCallback(
+    (kind: "voltage" | "current" | "loop-current") => {
+      const standard = resolveCircuitSettings(scene).standard;
+      const grid = Math.max(1, scene.canvas.grid.size);
+      const prefix = kind === "voltage" ? (standard === "iec" ? "U" : "V") : "I";
+      const cleanLabel = (text: string): string => text.replace(/_/g, "");
+      const quote = (text: string): string => `${prefix}_"${cleanLabel(text)}"`;
+      const selectedNodes = selectedNodeIds
+        .map((id) => scene.nodes[id])
+        .filter((node): node is SceneNode => node !== undefined);
+      let basePoint: Point | null = null;
+      let angle = 0;
+      let firstLabel = "";
+      let secondLabel: string | undefined;
+      let label = "";
+      let arrowWidth = 54;
+      let arrowHeight = 18;
+      let loopCurrent = false;
+
+      if (kind === "loop-current") {
+        const loopNodes = selectedNodes.filter(
+          (node) =>
+            node.kind === "circuitComponent" ||
+            (node.kind === "circuitJunction" && node.measurement === undefined),
+        );
+        const centers = loopNodes.flatMap((node) => {
+          const nodeLayout = layout.nodes[node.id];
+          return nodeLayout === undefined ? [] : [nodeLayout.frame];
+        });
+        if (centers.length < 2) {
+          showToast("Select a complete loop of components and junctions.", "warning");
+          return;
+        }
+        basePoint = {
+          x: centers.reduce((sum, frame) => sum + frame.x + frame.width / 2, 0) / centers.length,
+          y: centers.reduce((sum, frame) => sum + frame.y + frame.height / 2, 0) / centers.length,
+        };
+        const used = new Set<number>();
+        for (const node of Object.values(scene.nodes)) {
+          if (
+            node.kind === "circuitJunction" &&
+            node.measurement?.kind === "loop-current"
+          ) {
+            const match = /^I_(\d+)$/.exec(node.name.trim());
+            if (match?.[1] !== undefined) used.add(Number(match[1]));
+          }
+        }
+        let index = 1;
+        while (used.has(index)) index += 1;
+        firstLabel = String(index);
+        label = `I_${index}`;
+        arrowWidth = 36;
+        arrowHeight = 36;
+        loopCurrent = true;
+      } else if (kind === "voltage" && selectedNodes.length === 2 &&
+        selectedNodes.every(
+          (node) =>
+            node.kind === "circuitJunction" &&
+            node.measurement === undefined,
+        )) {
+        const first = selectedNodes[0];
+        const second = selectedNodes[1];
+        const firstLayout = first === undefined ? undefined : layout.nodes[first.id];
+        const secondLayout = second === undefined ? undefined : layout.nodes[second.id];
+        if (
+          first !== undefined &&
+          second !== undefined &&
+          firstLayout?.kind === "circuitJunction" &&
+          secondLayout?.kind === "circuitJunction"
+        ) {
+          basePoint = {
+            x: (firstLayout.center.x + secondLayout.center.x) / 2,
+            y: (firstLayout.center.y + secondLayout.center.y) / 2,
+          };
+          const dx = secondLayout.center.x - firstLayout.center.x;
+          const dy = secondLayout.center.y - firstLayout.center.y;
+          angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          arrowWidth = Math.max(18, Math.hypot(dx, dy) - 2 * grid);
+          firstLabel = cleanLabel(first.name);
+          secondLabel = cleanLabel(second.name);
+          label = quote(`${firstLabel}${secondLabel}`);
+        }
+      } else if (
+        (kind === "voltage" || kind === "current") &&
+        selectedNodes.length === 1 &&
+        selectedNodes[0]?.kind === "circuitComponent"
+      ) {
+        const node = selectedNodes[0];
+        const nodeLayout = layout.nodes[node.id];
+        if (
+          nodeLayout?.kind === "circuitComponent" &&
+          nodeLayout.pins.length >= 2
+        ) {
+          const first = nodeLayout.pins[0];
+          const second = nodeLayout.pins[1];
+          if (first !== undefined && second !== undefined) {
+            basePoint = {
+              x: (first.point.x + second.point.x) / 2,
+              y: (first.point.y + second.point.y) / 2,
+            };
+            const dx = second.point.x - first.point.x;
+            const dy = second.point.y - first.point.y;
+            angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+            arrowWidth = Math.max(18, Math.hypot(dx, dy) - 2 * grid);
+          }
+          label = quote(node.name);
+          firstLabel = cleanLabel(node.name);
+        }
+      } else if (kind === "current" && selectedEdgeId !== null) {
+        const edge = scene.edges[selectedEdgeId];
+        const edgeLayout = layout.edges[selectedEdgeId];
+        if (edge !== undefined && edgeLayout !== undefined) {
+          let best: { a: Point; b: Point; length: number } | null = null;
+          for (let index = 1; index < edgeLayout.points.length; index += 1) {
+            const a = edgeLayout.points[index - 1];
+            const b = edgeLayout.points[index];
+            if (a === undefined || b === undefined) continue;
+            const length = Math.hypot(b.x - a.x, b.y - a.y);
+            if (best === null || length > best.length) best = { a, b, length };
+          }
+          if (best !== null) {
+            basePoint = {
+              x: (best.a.x + best.b.x) / 2,
+              y: (best.a.y + best.b.y) / 2,
+            };
+            angle = (Math.atan2(
+              best.b.y - best.a.y,
+              best.b.x - best.a.x,
+            ) * 180) / Math.PI;
+          }
+          const centerLabel = edge.labels.find((entry) => entry.zone === "center")?.text ?? "";
+          firstLabel = cleanLabel(centerLabel);
+          if (firstLabel.length === 0) {
+            const sourceName = edge.source.target === "node"
+              ? scene.nodes[edge.source.nodeId]?.name ?? ""
+              : "";
+            const targetName = edge.target.target === "node"
+              ? scene.nodes[edge.target.nodeId]?.name ?? ""
+              : "";
+            firstLabel = cleanLabel(`${sourceName}${targetName}`);
+          }
+          arrowWidth = 36;
+          label = quote(firstLabel);
+        }
+      }
+
+      if (basePoint === null) {
+        showToast(
+          kind === "voltage"
+            ? "Select two junctions or one two-terminal component for a voltage label."
+            : "Select a wire or one two-terminal component for a current label.",
+          "warning",
+        );
+        return;
+      }
+
+      const radians = (angle * Math.PI) / 180;
+      const arcSide = { x: Math.sin(radians), y: -Math.cos(radians) };
+      const localFrameAt = (center: Point): ReturnType<typeof rect> =>
+        rect(center.x - arrowWidth / 2, center.y - arrowHeight / 2, arrowWidth, arrowHeight);
+      const placementFrameAt = (center: Point): ReturnType<typeof rect> => {
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const width = Math.abs(arrowWidth * cos) + Math.abs(arrowHeight * sin);
+        const height = Math.abs(arrowWidth * sin) + Math.abs(arrowHeight * cos);
+        return rect(center.x - width / 2, center.y - height / 2, width, height);
+      };
+      const clear = (frame: ReturnType<typeof rect>): boolean => {
+        const padded = expandRect(frame, 4);
+        for (const nodeLayout of Object.values(layout.nodes)) {
+          if (rectsIntersect(padded, nodeLayout.frame)) return false;
+        }
+        for (const edgeLayout of Object.values(layout.edges)) {
+          if (edgeLayout.points.some((entry) => rectsIntersect(padded, rect(entry.x - 1, entry.y - 1, 2, 2)))) {
+            return false;
+          }
+        }
+        return true;
+      };
+      const baseOffset = loopCurrent ? 0 : 4;
+      let center = basePoint;
+      if (!loopCurrent) {
+        for (const distance of [
+          baseOffset,
+          baseOffset + 1,
+          baseOffset + 2,
+          baseOffset + 3,
+          -baseOffset,
+        ]) {
+          const candidate = {
+            x: basePoint.x + arcSide.x * distance * grid,
+            y: basePoint.y + arcSide.y * distance * grid,
+          };
+          if (clear(placementFrameAt(candidate))) {
+            center = candidate;
+            break;
+          }
+        }
+      }
+
+      const base = createCircuitJunction(scene, center, "none");
+      const node: CircuitJunctionNode = {
+        ...base,
+        frame: localFrameAt(center),
+        name: label,
+        labelOffset: loopCurrent ? point(0, 0) : point(0, -19),
+        junctionStyle: "none",
+        generatedBranch: true,
+        measurement: {
+          kind,
+          firstLabel,
+          secondLabel,
+          reverse: false,
+        },
+        rotation: angle,
+        z: 6,
+      };
+      setScene((current) => insertSubgraph(current, [node], []));
+      selectNodes([node.id], node.id);
+      setSelectedEdgeId(null);
+      setNodeFocus({ kind: "object", nodeId: node.id });
+      showToast(
+        kind === "voltage"
+          ? "Voltage label added."
+          : kind === "loop-current"
+            ? "Loop current label added."
+            : "Current label added.",
+      );
+    },
+    [layout, scene, selectedEdgeId, selectedNodeIds, selectNodes, showToast],
+  );
+
+  const loopSelection = useMemo(() => {
+    if (scene.meta.diagramKind !== "circuit") return false;
+    const loopNodeIds = selectedNodeIds.filter((id) => {
+      const node = scene.nodes[id];
+      return (
+        node?.kind === "circuitComponent" ||
+        (node?.kind === "circuitJunction" && node.measurement === undefined)
+      );
+    });
+    if (loopNodeIds.length < 2) return false;
+    const selected = new Set(loopNodeIds);
+    const degrees = new Map<string, number>();
+    for (const id of loopNodeIds) degrees.set(id, 0);
+    const loopEdges = Object.values(scene.edges).filter(
+      (edge) =>
+        edge.semantic.family === "circuit" &&
+        edge.source.target === "node" &&
+        edge.target.target === "node" &&
+        selected.has(edge.source.nodeId) &&
+        selected.has(edge.target.nodeId),
+    );
+    for (const edge of loopEdges) {
+      if (edge.source.target !== "node" || edge.target.target !== "node") continue;
+      degrees.set(edge.source.nodeId, (degrees.get(edge.source.nodeId) ?? 0) + 1);
+      degrees.set(edge.target.nodeId, (degrees.get(edge.target.nodeId) ?? 0) + 1);
+    }
+    if (
+      loopEdges.length !== selected.size ||
+      [...degrees.values()].some((degree) => degree !== 2)
+    ) {
+      return false;
+    }
+    const adjacency = new Map<string, string[]>();
+    for (const id of loopNodeIds) adjacency.set(id, []);
+    for (const edge of loopEdges) {
+      if (edge.source.target !== "node" || edge.target.target !== "node") continue;
+      adjacency.get(edge.source.nodeId)?.push(edge.target.nodeId);
+      adjacency.get(edge.target.nodeId)?.push(edge.source.nodeId);
+    }
+    const queue = [loopNodeIds[0] ?? ""];
+    const visited = new Set<string>();
+    while (queue.length > 0) {
+      const id = queue.pop();
+      if (id === undefined || visited.has(id)) continue;
+      visited.add(id);
+      for (const next of adjacency.get(id) ?? []) {
+        if (!visited.has(next)) queue.push(next);
+      }
+    }
+    return visited.size === selected.size;
+  }, [scene, selectedNodeIds]);
+
+  const actions = useMemo<readonly ActionItem[]>(() => {
+    if (scene.meta.diagramKind !== "circuit") return [];
+    const selected = selectedNodeIds
+      .map((id) => scene.nodes[id])
+      .filter((node): node is SceneNode => node !== undefined);
+    const twoJunctions =
+      selected.length === 2 &&
+      selected.every(
+        (node) =>
+          node.kind === "circuitJunction" &&
+          node.measurement === undefined,
+      );
+    const singleComponent =
+      selected.length === 1 && selected[0]?.kind === "circuitComponent"
+        ? selected[0]
+        : undefined;
+    const twoTerminal =
+      singleComponent !== undefined &&
+      (circuitComponent(singleComponent.component)?.pins.length ?? 0) === 2;
+    const items: ActionItem[] = [];
+    if (twoJunctions || singleComponent !== undefined) {
+      items.push({
+        id: "add-voltage-label",
+        label: "Add Voltage label",
+        icon: <VoltageActionIcon />,
+        onClick: () => addMeasurement("voltage"),
+      });
+    }
+    if (twoTerminal || (selected.length === 0 && selectedEdgeId !== null)) {
+      items.push({
+        id: "add-current-label",
+        label: "Add Current label",
+        icon: <CurrentActionIcon />,
+        onClick: () => addMeasurement("current"),
+      });
+    }
+    if (loopSelection) {
+      items.push({
+        id: "add-loop-current-label",
+        label: "Add Loop Current label",
+        icon: <LoopCurrentActionIcon />,
+        onClick: () => addMeasurement("loop-current"),
+      });
+    }
+    return items;
+  }, [addMeasurement, loopSelection, scene, selectedEdgeId, selectedNodeIds]);
+
   useEffect(() => {
     const handleClipboardKey = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
@@ -3115,10 +3455,21 @@ export const App = () => {
     requestFocus(nodeId, target);
   }, [requestFocus, scene.nodes, selectNodes]);
 
-  const handleNodePartClick = useCallback((focus: NodeFocus) => {
+  const handleNodePartClick = useCallback((focus: NodeFocus, additive = false) => {
+    if (additive) {
+      const has = selectedNodeIds.includes(focus.nodeId);
+      const next = has
+        ? selectedNodeIds.filter((id) => id !== focus.nodeId)
+        : [...selectedNodeIds, focus.nodeId];
+      setSelectedNodeIds(next);
+      setSelectedNodeId(has ? next[next.length - 1] ?? null : focus.nodeId);
+      setSelectedEdgeId(null);
+      setNodeFocus(null);
+      return;
+    }
     selectNodes([focus.nodeId], focus.nodeId);
     setNodeFocus(focus);
-  }, [selectNodes]);
+  }, [selectNodes, selectedNodeIds]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -3208,7 +3559,7 @@ export const App = () => {
             </button>
             {scene.meta.diagramKind === "circuit" ? (
               <>
-                <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="circuit" />
+                <ActionsPanel actions={actions} />
                 <CircuitPanel
                   standard={resolveCircuitSettings(scene).standard}
                   onChange={handleCircuitStandard}
@@ -3227,11 +3578,11 @@ export const App = () => {
                   onLowPerformanceModeChange={setLowPerformanceMode}
                   onRun={runAutoLayout}
                 />
+                <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="circuit" />
               </>
             ) : (
               <>
               
-              <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="full" />
               <LayoutPanel
                 direction={scene.layout.direction}
                 spacing={scene.layout.spacing ?? "normal"}
@@ -3243,6 +3594,7 @@ export const App = () => {
                 onLowPerformanceModeChange={setLowPerformanceMode}
                 onRun={runAutoLayout}
                 />
+              <ThemePanel theme={scene.theme} onChange={handleThemeChange} variant="full" />
                 </>
             )}
           </section>

@@ -4370,6 +4370,75 @@ button {
   border-left: 1px dashed #cbd5e1;
 }
 
+.actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-row:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.action-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 16px;
+  color: #94a3b8;
+}
+.actions-panel {
+  height: 12em;
+}
+.actions-empty {
+  display: flex;
+  height: 90%;
+  flex-direction: row;
+  align-items: center;
+  text-align: center;
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+  /* margin-top: 4px; */
+}
+
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.field-inline input {
+  width: 58px;
+  padding: 4px 6px;
+  border: 1px solid #dbe3ee;
+  border-radius: 6px;
+  font: inherit;
+}
+
 .circuit-rotation-row .chip {
   display: inline-flex;
   min-width: 28px;

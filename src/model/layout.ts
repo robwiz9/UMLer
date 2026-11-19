@@ -9,6 +9,7 @@
 
 import type { ActivationId, EdgeId, LabelId, NodeId, PortId, RowId, SectionId } from "./ids.ts";
 import type { EdgeLabelZone } from "./edges.ts";
+import type { CircuitJunctionNode } from "./nodes.ts";
 import type { NodePortRef, PinPortRef } from "./edges.ts";
 import type { Point, Rect } from "./geometry.ts";
 import type { TextStyle } from "./styles.ts";
@@ -158,6 +159,11 @@ export interface CircuitJunctionLayout extends NodeLayoutBase {
   readonly junctionStyle: CircuitJunctionStyle;
   readonly center: Point;
   readonly radius: number;
+  /** Measurement marker metadata, when this junction is a voltage/current arrow. */
+  readonly measurement?: CircuitJunctionNode["measurement"];
+  readonly rotation: number;
+  /** Rotated bounds used for hit-testing/selection handles. */
+  readonly hitFrame?: Rect;
   /** False when no wire is attached (rendered as a warning). */
   readonly connected: boolean;
   readonly labelFrame?: Rect;

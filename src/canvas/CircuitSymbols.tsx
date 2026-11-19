@@ -217,7 +217,9 @@ export const CircuitJunctionBody = ({
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
 }) => (
   <>
-    {node.junctionStyle === "none" && layout.connected ? null : (
+    {node.measurement !== undefined ? (
+      <MeasurementArrow node={node} layout={layout} />
+    ) : node.junctionStyle === "none" && layout.connected ? null : (
       <circle
         cx={layout.center.x}
         cy={layout.center.y}
@@ -244,6 +246,102 @@ export const CircuitJunctionBody = ({
     {labelText(layout.label, layout.labelFrame, labelDelta, onTextDoubleClick)}
   </>
 );
+
+const MeasurementArrow = ({
+  node,
+  layout,
+}: {
+  readonly node: CircuitJunctionNode;
+  readonly layout: CircuitJunctionLayout;
+}) => {
+  const measurement = node.measurement;
+  if (measurement === undefined) return null;
+  const radians = ((node.rotation ?? 0) * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const halfWidth = Math.max(6, layout.frame.width / 2);
+  const halfHeight = Math.max(3, layout.frame.height / 2);
+  const localToScene = (x: number, y: number): Point => ({
+    x:
+      layout.center.x +
+      (measurement.mirrorX === true ? -x : x) * cos -
+      (measurement.mirrorY === true ? -y : y) * sin,
+    y:
+      layout.center.y +
+      (measurement.mirrorX === true ? -x : x) * sin +
+      (measurement.mirrorY === true ? -y : y) * cos,
+  });
+  const localVectorToScene = (x: number, y: number): Point => ({
+    x: (measurement.mirrorX === true ? -x : x) * cos -
+      (measurement.mirrorY === true ? -y : y) * sin,
+    y: (measurement.mirrorX === true ? -x : x) * sin +
+      (measurement.mirrorY === true ? -y : y) * cos,
+  });
+  const ordered = measurement.kind === "current"
+    ? [
+        localToScene(-halfWidth, 0),
+        localToScene(halfWidth, 0),
+      ]
+    : measurement.kind === "loop-current"
+      ? (() => {
+          const radius = Math.min(halfWidth, halfHeight);
+          return Array.from({ length: 28 }, (_, index) => {
+            const t = Math.PI / 2 + (Math.PI * 1.5 * index) / 27;
+            return localToScene(radius * Math.cos(t), radius * Math.sin(t));
+          });
+        })()
+      : Array.from({ length: 19 }, (_, index) => {
+          const t = (Math.PI * (index + 1)) / 20;
+          return localToScene(
+            -halfWidth * Math.cos(t),
+            -halfHeight * Math.sin(t),
+          );
+        });
+  if (measurement.reverse) ordered.reverse();
+  const tip = ordered[ordered.length - 1];
+  if (tip === undefined) return null;
+  let ux: number;
+  let uy: number;
+  if (measurement.kind === "loop-current") {
+    const tangent = localVectorToScene(0, measurement.reverse ? -1 : 1);
+    const tangentLength = Math.hypot(tangent.x, tangent.y) || 1;
+    ux = tangent.x / tangentLength;
+    uy = tangent.y / tangentLength;
+  } else {
+    const previous = ordered[Math.max(0, ordered.length - 4)];
+    if (previous === undefined) return null;
+    const length = Math.hypot(tip.x - previous.x, tip.y - previous.y) || 1;
+    ux = (tip.x - previous.x) / length;
+    uy = (tip.y - previous.y) / length;
+  }
+  const back = { x: tip.x - ux * 6, y: tip.y - uy * 6 };
+  const normal = { x: -uy, y: ux };
+  const head = [
+    { x: back.x + normal.x * 2.8, y: back.y + normal.y * 2.8 },
+    tip,
+    { x: back.x - normal.x * 2.8, y: back.y - normal.y * 2.8 },
+  ];
+  return (
+    <g pointerEvents="none">
+      <polyline
+        points={ordered.map((entry) => `${entry.x},${entry.y}`).join(" ")}
+        fill="none"
+        stroke={node.style.stroke.color}
+        strokeWidth={node.style.stroke.width}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <polyline
+        points={head.map((entry) => `${entry.x},${entry.y}`).join(" ")}
+        fill="none"
+        stroke={node.style.stroke.color}
+        strokeWidth={node.style.stroke.width}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </g>
+  );
+};
 
 /** Tiny palette preview built from the same catalog symbol. */
 export const CircuitSymbolPreview = ({

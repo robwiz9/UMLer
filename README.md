@@ -177,7 +177,16 @@ chooser opens.
 - **Circuit diagrams** use a searchable, scrollable component table with recently placed components on top
   and Image/Comment plus a Node row below it. The catalogue covers resistors, capacitors, coils,
   potentiometers, DC/AC voltage sources, current sources, batteries, diodes/LEDs/zener diodes, NPN/PNP
-  transistors, N/P MOSFETs, switches, lightbulbs and voltage/current meters. Switches expose ON/OFF
+  transistors, N/P MOSFETs, switches, lightbulbs and voltage/current meters. The sidebar's Actions panel
+  offers voltage labels for two junctions or a component, current labels for a wire or a two-terminal
+  component, and a loop-current label when the selection forms a closed loop; voltage markers are curved
+  and current markers are straight, both stretch-resizable with editable labels, custom-angle rotation
+  and vertical/horizontal mirror controls. Loop markers use a 3/4-circle arrow with horizontal mirroring,
+  and all three measurement symbols are available from the new-object menu. In circuit diagrams the
+  theme's Object color recolors wires, symbols and text together; object-local text color does the same
+  and wire color remains available without a label. Other diagram types keep text-only color behavior. Selection/hover
+  outlines are padded rectangles around the symbol body rather than fixed catalog frames, so components
+  no longer show unnecessary empty rows or irregular boxes. Switches expose ON/OFF
   focus-menu controls. External leads are one grid
   square long and all pins are aligned to the 9 pt grid, including the potentiometer wiper and
   three-terminal devices.
@@ -408,7 +417,7 @@ Clipboard checks passed (26 assertions).
 
 Conversion checks passed (53 assertions).
 
-Circuit checks passed (112 assertions).
+Circuit checks passed (116 assertions).
 
 GitHub project checks passed (73 assertions).
 
@@ -592,6 +601,10 @@ CLI downloader: the compiler/renderer WASM modules are bundled by Vite, and CeTZ
 **Step 5 — Document assembly and file export:** add PDF/SVG download from the export panel, a multi-scene
 document builder, and an optional image-resources manifest. Keep the serializer as the single source of
 geometry; the preview and any file export must consume the same `CetzExportResult`.
+
+
+
+
 
 
 

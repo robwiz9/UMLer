@@ -1716,8 +1716,33 @@ behaviour; where earlier sections differ, this section wins.
     that segment. The projection is used only when it lies within one grid square of the pointer; otherwise
     the target stays at the nearest point under the pointer. This makes the new wire meet the target wire
     perpendicularly without snapping across a long distance; the projected point is clamped to the segment.
+45. **Actions panel and measurement arrows.** The circuit sidebar includes an Actions panel whose rows
+    depend on the selection. Two junctions or a component offer Add Voltage label; a wire or a
+    two-terminal component offers Add Current label. Voltage markers are half-elliptical arrows; current
+    markers are straight arrows. Both use a 2-grid-high local box, are stretch-resizable, and inherit a
+    voltage span reduced by two grid squares. They are placed above/right when the first junction was
+    selected first and below/left for the reverse order, four grid squares to the side the arc opens
+    toward. Default
+    labels strip underscores from inherited names, and selecting the arrow exposes label, custom-angle,
+    mirror-vertical and mirror-horizontal controls. The canvas rotation handle snaps near multiples of
+    45° while allowing other angles. Measurement markers are not junctions: they have no junction title
+    and no wire-drag handles.
+46. **Tight component outlines.** Selection and hover outlines are padded rectangles around the actual
+    symbol primitives rather than the fixed catalog frame, while the frame remains the layout/drag
+    footprint. Pins contribute to the focus rectangle but not the body rectangle, so a resistor selects
+    as a shallow padded body instead of a 6×4 box with empty rows and complex symbols keep rectangular
+    boxes.
+47. **Loop-current action.** When the selected components and junctions form one closed degree-two loop,
+    the Actions panel offers Add Loop Current label. It creates a rotatable, horizontally mirrorable
+    3/4-circle arrow starting at bottom centre and ending at right centre with a downward arrowhead,
+    labelled with the next unused `I_n` number. Voltage, current and loop-current symbols are also listed
+    in the new-object menu under Measurements.
+48. **Circuit Object color.** In circuit diagrams the theme panel's former Text color is now Object color
+    and recolors text, component/arrow strokes and wires together. Object-local text color in the focus
+    menu does the same for the selected circuit object; the wire center-label color drives its line and
+    is shown even when the wire label is empty. Non-circuit diagrams retain text-only color behavior.
 
-The circuit test suite now covers these cases (112 assertions at the time of writing).
+The circuit test suite now covers these cases (116 assertions at the time of writing).
 
 ---
 
@@ -1745,6 +1770,10 @@ The circuit test suite now covers these cases (112 assertions at the time of wri
 - [ ] CeTZ export contains the same components, rotations, junction styles, labels and hops as the
       canvas, with no editor overlays.
 - [ ] `npm run check` passes, including new circuit tests and all existing fixture checks.
+
+
+
+
 
 
 

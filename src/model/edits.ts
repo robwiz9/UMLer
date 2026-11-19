@@ -89,8 +89,11 @@ export const insertConnectedObject = (
  * text overrides live outside `node.style`, so they keep winning over the new
  * defaults after this pass.
  */
-export const setSceneTheme = (scene: SceneDocument, theme: Theme): SceneDocument =>
-  stamp(scene, {
+export const setSceneTheme = (scene: SceneDocument, theme: Theme): SceneDocument => {
+  const recolorEdges =
+    scene.meta.diagramKind === "circuit" &&
+    scene.theme.edge.stroke.color !== theme.edge.stroke.color;
+  return stamp(scene, {
     theme,
     nodes: Object.fromEntries(
       Object.entries(scene.nodes).map(([id, node]) => [
@@ -100,7 +103,24 @@ export const setSceneTheme = (scene: SceneDocument, theme: Theme): SceneDocument
           : { ...node, style: theme.shape },
       ]),
     ),
+    ...(recolorEdges
+      ? {
+          edges: Object.fromEntries(
+            Object.entries(scene.edges).map(([id, edge]) => [
+              id,
+              {
+                ...edge,
+                style: {
+                  ...edge.style,
+                  stroke: { ...edge.style.stroke, color: theme.edge.stroke.color },
+                },
+              },
+            ]),
+          ),
+        }
+      : {}),
   });
+};
 
 /**
  * Removes several nodes and every connector whose endpoint references one of
@@ -649,12 +669,27 @@ export const setEdgeLabelTextStyle = (
   zone: EdgeLabelZone,
   textStyle: TextStyleOverride | undefined,
 ): SceneDocument =>
-  updateEdge(scene, edgeId, (edge) => ({
-    ...edge,
-    labels: edge.labels.map((label) =>
-      label.zone === zone ? { ...label, textStyle } : label,
-    ),
-  }));
+  updateEdge(scene, edgeId, (edge) => {
+    const existing = edge.labels.some((label) => label.zone === zone);
+    const labels: readonly EdgeLabel[] = existing
+      ? edge.labels.map((label) =>
+          label.zone === zone ? { ...label, textStyle } : label,
+        )
+      : [
+          ...edge.labels,
+          {
+            id: asLabelId(newId("label")),
+            zone,
+            text: "",
+            anchor: { kind: "edgePoint", t: 0.5 },
+            offset: { x: 0, y: 0 },
+            locked: false,
+            visible: true,
+            textStyle,
+          },
+        ];
+    return { ...edge, labels };
+  });
 
 export const setMarker = (
   scene: SceneDocument,

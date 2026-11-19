@@ -768,16 +768,34 @@ const measureCircuitJunction = (
     point(1, 0),
     "center",
   );
+  const rotation = node.rotation ?? 0;
+  const measurementFrame = (() => {
+    if (node.measurement === undefined) return undefined;
+    const angle = (rotation * Math.PI) / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const width = Math.abs(node.frame.width * cos) + Math.abs(node.frame.height * sin);
+    const height = Math.abs(node.frame.width * sin) + Math.abs(node.frame.height * cos);
+    return rect(
+      resolved.center.x - width / 2,
+      resolved.center.y - height / 2,
+      width,
+      height,
+    );
+  })();
   return {
     nodeId: node.id,
     kind: "circuitJunction",
     frame: node.frame,
-    bounds: unionCircuitBounds(node.frame, resolved.labelFrame),
+    bounds: unionCircuitBounds(measurementFrame ?? node.frame, resolved.labelFrame),
     ports: [port],
     junctionStyle: node.junctionStyle,
     center: resolved.center,
     radius: resolved.radius,
-    connected,
+    measurement: node.measurement,
+    rotation,
+    hitFrame: measurementFrame,
+    connected: node.measurement !== undefined ? true : connected,
     labelFrame: resolved.labelFrame,
     label: resolved.label,
   };
@@ -2081,10 +2099,16 @@ export const withNodeRotations = (
     nodes: Object.fromEntries(
       Object.entries(scene.nodes).map(([id, node]) => {
         const rotation = rotations[id];
-        if (rotation === undefined || node.kind !== "circuitComponent") {
+        if (rotation === undefined) {
           return [id, node];
         }
-        return [id, { ...node, rotation: rotation as CircuitComponentNode["rotation"] }];
+        if (node.kind === "circuitComponent") {
+          return [id, { ...node, rotation: rotation as CircuitComponentNode["rotation"] }];
+        }
+        if (node.kind === "circuitJunction" && node.measurement !== undefined) {
+          return [id, { ...node, rotation }];
+        }
+        return [id, node];
       }),
     ),
   };

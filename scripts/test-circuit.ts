@@ -42,6 +42,7 @@ import {
 } from "../src/model/circuit-wires.ts";
 import { circuitPrefixFor, nextComponentLabel, setCircuitStandard } from "../src/model/circuit.ts";
 import { CIRCUIT_COMPONENTS, circuitComponent } from "../src/model/circuit-catalog.ts";
+import { createObjectFromTemplate } from "../src/model/object-catalog.ts";
 import { canExtendToEmpty } from "../src/canvas/circuit-draw.ts";
 import { copySceneNodes, pasteSceneClipboard } from "../src/model/clipboard.ts";
 import { validateScene } from "../src/model/validate.ts";
@@ -652,6 +653,94 @@ check(
   refinedAutoMergeJunction?.kind === "circuitJunction" &&
     refinedAutoMergeJunction.junctionStyle === "none",
   "a degree-two auto-merged junction should become None under visual refinements",
+);
+const measurementBase = createCircuitJunction(
+  createEmptyScene("circuit", "measurement"),
+  { x: 90, y: 90 },
+  "none",
+);
+const measurementNode = {
+  ...measurementBase,
+  frame: rect(63, 72, 54, 36),
+  name: 'U_"AB"',
+  labelOffset: { x: 0, y: -30 },
+  generatedBranch: true,
+  measurement: {
+    kind: "voltage" as const,
+    firstLabel: "A",
+    secondLabel: "B",
+    reverse: false,
+  },
+  rotation: 30,
+};
+const measurementLayout = buildLayoutSnapshot(
+  withNodes([measurementNode]),
+  measurer,
+).nodes[measurementNode.id];
+check(
+  measurementLayout?.kind === "circuitJunction" &&
+    measurementLayout.measurement?.kind === "voltage" &&
+    measurementLayout.rotation === 30 &&
+    measurementLayout.connected === true,
+  "measurement arrows should render as connected junction markers with custom rotation",
+);
+const tightOutlineLayout = buildLayoutSnapshot(
+  withNodes([component("r1", "R1", "resistor")]),
+  measurer,
+).nodes.r1;
+const tightOutlineBounds =
+  tightOutlineLayout?.kind === "circuitComponent"
+    ? {
+        minY: Math.min(...tightOutlineLayout.outline.map((entry) => entry.y)),
+        maxY: Math.max(...tightOutlineLayout.outline.map((entry) => entry.y)),
+      }
+    : null;
+check(
+  tightOutlineBounds !== null &&
+    tightOutlineBounds.maxY - tightOutlineBounds.minY <= 24 + 1e-6 &&
+    tightOutlineLayout?.kind === "circuitComponent" &&
+    tightOutlineLayout.outline.length === 4,
+  "component selection outlines should be padded rectangles around the symbol body",
+);
+const loopMeasurementBase = createCircuitJunction(
+  createEmptyScene("circuit", "loop-measurement"),
+  { x: 120, y: 120 },
+  "none",
+);
+const loopMeasurementNode = {
+  ...loopMeasurementBase,
+  frame: rect(102, 102, 36, 36),
+  name: "I_1",
+  labelOffset: { x: 0, y: 0 },
+  generatedBranch: true,
+  measurement: {
+    kind: "loop-current" as const,
+    firstLabel: "1",
+    reverse: false,
+  },
+  rotation: 0,
+};
+const loopMeasurementLayout = buildLayoutSnapshot(
+  withNodes([loopMeasurementNode]),
+  measurer,
+).nodes[loopMeasurementNode.id];
+check(
+  loopMeasurementLayout?.kind === "circuitJunction" &&
+    loopMeasurementLayout.measurement?.kind === "loop-current" &&
+    loopMeasurementLayout.connected === true,
+  "loop-current measurements should render as connected circular-arrow markers",
+);
+const menuMeasurement = createObjectFromTemplate(
+  "circuit",
+  "circuit-loop-current-label",
+  createEmptyScene("circuit", "menu-measurement"),
+  { x: 90, y: 90 },
+);
+check(
+  menuMeasurement?.node.kind === "circuitJunction" &&
+    menuMeasurement.node.measurement?.kind === "loop-current" &&
+    menuMeasurement.node.name.startsWith("I_"),
+  "measurement symbols should be creatable from the new-object menu",
 );
 
 // --- orthogonal corner junctions -------------------------------------------

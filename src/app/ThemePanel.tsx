@@ -26,6 +26,27 @@ const withBackground = (theme: Theme, color: string | null): Theme => ({
   shape: { ...theme.shape, fill: { ...theme.shape.fill, color } },
 });
 
+const withObjectColor = (theme: Theme, color: string): Theme => ({
+  ...theme,
+  table: {
+    ...theme.table,
+    stroke: { ...theme.table.stroke, color },
+    divider: { ...theme.table.divider, color },
+    text: { ...theme.table.text, color },
+    headerText: { ...theme.table.headerText, color },
+  },
+  shape: {
+    ...theme.shape,
+    stroke: { ...theme.shape.stroke, color },
+    text: { ...theme.shape.text, color },
+  },
+  edge: {
+    ...theme.edge,
+    stroke: { ...theme.edge.stroke, color },
+    labelText: { ...theme.edge.labelText, color },
+  },
+});
+
 const withFontColor = (theme: Theme, color: string): Theme => ({
   ...theme,
   table: {
@@ -80,7 +101,7 @@ export const ThemePanel = ({ theme, onChange, variant = "full" }: ThemePanelProp
     if (next !== null) setTint(next);
   }, [theme.table.headerFill.color]);
 
-  const fontColor = theme.table.text.color;
+  const objectColor = theme.table.text.color;
   const fontSize = theme.table.text.fontSize;
 
   return (
@@ -120,13 +141,18 @@ export const ThemePanel = ({ theme, onChange, variant = "full" }: ThemePanelProp
           />
         </label>
         <label className="theme-field">
-          <span>Text</span>
+          <span>{variant === "circuit" ? "Object color" : "Text"}</span>
           <DeferredColorInput
             id={`${id}-font-color`}
             name={`${id}-font-color`}
-            value={fontColor}
-            title="Default diagram font Color"
-            onCommit={(color) => onChange(withFontColor(theme, color))}
+            value={objectColor}
+            title={variant === "circuit" ? "Object and text color" : "Default diagram font color"}
+            onCommit={(color) =>
+              onChange(
+                variant === "circuit"
+                  ? withObjectColor(theme, color)
+                  : withFontColor(theme, color),
+              )}
           />
         </label>
         <label className="theme-field">

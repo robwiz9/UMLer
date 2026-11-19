@@ -54,40 +54,6 @@ export interface ResolvedCircuitComponent {
   readonly label?: TextMeasurement;
 }
 
-const convexHull = (points: readonly Point[]): readonly Point[] => {
-  const unique = [...new Map(
-    points.map((entry) => [`${entry.x.toFixed(4)}:${entry.y.toFixed(4)}`, entry]),
-  ).values()].sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
-  if (unique.length <= 2) return unique;
-  const cross = (o: Point, a: Point, b: Point): number =>
-    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const lower: Point[] = [];
-  for (const entry of unique) {
-    while (lower.length >= 2) {
-      const a = lower[lower.length - 2];
-      const b = lower[lower.length - 1];
-      if (a !== undefined && b !== undefined && cross(a, b, entry) <= 0) lower.pop();
-      else break;
-    }
-    lower.push(entry);
-  }
-  const upper: Point[] = [];
-  for (let index = unique.length - 1; index >= 0; index -= 1) {
-    const entry = unique[index];
-    if (entry === undefined) continue;
-    while (upper.length >= 2) {
-      const a = upper[upper.length - 2];
-      const b = upper[upper.length - 1];
-      if (a !== undefined && b !== undefined && cross(a, b, entry) <= 0) upper.pop();
-      else break;
-    }
-    upper.push(entry);
-  }
-  lower.pop();
-  upper.pop();
-  return [...lower, ...upper];
-};
-
 export const rotatePoint = (value: Point, degrees: number): Point => {
   const angle = (degrees * Math.PI) / 180;
   const cos = Math.cos(angle);
@@ -183,6 +149,33 @@ const resolvePrimitive = (
   }
 };
 
+const primitivePoints = (
+  primitive: CircuitPrimitive,
+): readonly Point[] => {
+  switch (primitive.kind) {
+    case "polyline":
+      return primitive.points;
+    case "circle":
+      return [
+        point(primitive.center.x - primitive.radius, primitive.center.y - primitive.radius),
+        point(primitive.center.x + primitive.radius, primitive.center.y - primitive.radius),
+        point(primitive.center.x + primitive.radius, primitive.center.y + primitive.radius),
+        point(primitive.center.x - primitive.radius, primitive.center.y + primitive.radius),
+      ];
+    case "rect":
+      return [
+        point(primitive.frame.x, primitive.frame.y),
+        point(primitive.frame.x + primitive.frame.width, primitive.frame.y),
+        point(primitive.frame.x + primitive.frame.width, primitive.frame.y + primitive.frame.height),
+        point(primitive.frame.x, primitive.frame.y + primitive.frame.height),
+      ];
+    case "bezier":
+      return [primitive.start, primitive.c1, primitive.c2, primitive.end];
+    case "text":
+      return [];
+  }
+};
+
 export const resolveCircuitComponent = (
   node: CircuitComponentNode,
   measurer: TextMeasurer,
@@ -203,8 +196,8 @@ export const resolveCircuitComponent = (
     point(definition.width / 2, definition.height / 2),
     point(-definition.width / 2, definition.height / 2),
   ];
-  const outline = localCorners.map(local);
-  const frame = boundsOfPoints(outline);
+  const frameOutline = localCorners.map(local);
+  const frame = boundsOfPoints(frameOutline);
   const rawPins = definition.pins.map((pin) => ({
     pinId: pin.id,
     label: pin.label,
@@ -227,6 +220,7 @@ export const resolveCircuitComponent = (
     : definition.symbol(standard);
   const primitives = symbol
     .map((primitive) => resolvePrimitive(primitive, center, rotation, mirrorX, mirrorY, measurer, textStyle));
+  const symbolPoints = primitives.flatMap(primitivePoints);
   for (let index = 0; index < pins.length; index += 1) {
     const pin = pins[index];
     if (pin === undefined) continue;
@@ -257,12 +251,32 @@ export const resolveCircuitComponent = (
     );
   }
 
+  const paddedCorners = (bounds: Rect, padding: number): readonly Point[] =>
+    rectCorners(
+      rect(
+        bounds.x - padding,
+        bounds.y - padding,
+        bounds.width + padding * 2,
+        bounds.height + padding * 2,
+      ),
+    );
+  const padding = 3;
+  const outline = paddedCorners(
+    symbolPoints.length > 0 ? boundsOfPoints(symbolPoints) : frameOutline.length > 0
+      ? boundsOfPoints(frameOutline)
+      : frame,
+    padding,
+  );
+  const focusOutline = paddedCorners(
+    boundsOfPoints([...symbolPoints, ...pins.map((pin) => pin.point)]),
+    padding,
+  );
   return {
     definition,
     center,
     frame,
     outline,
-    focusOutline: convexHull([...outline, ...pins.map((pin) => pin.point)]),
+    focusOutline,
     pins,
     primitives,
     labelFrame,
