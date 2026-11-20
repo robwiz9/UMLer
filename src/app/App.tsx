@@ -3685,7 +3685,10 @@ export const App = () => {
             const value = target.value;
             const atEnd = target.selectionStart === target.selectionEnd &&
               target.selectionEnd === value.length;
-            const shouldDelete = value.length === 0 || (event.key === "Delete" && atEnd);
+            const onlyWhenEmpty = target.dataset.labelDeleteOnlyEmpty === "true";
+            const shouldDelete =
+              value.length === 0 ||
+              (!onlyWhenEmpty && event.key === "Delete" && atEnd);
             if (shouldDelete) {
               event.preventDefault();
               target.blur();

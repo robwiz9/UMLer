@@ -95,8 +95,9 @@ export const EdgeInspector = ({
             id={`${idPrefix}-edge-${edge.id}-center-label`}
             name={`${idPrefix}-edge-${edge.id}-center-label`}
             value={labelFor("center")}
-            data-label-scope={isCircuit ? "edge" : undefined}
-            data-label-edge-id={isCircuit ? edge.id : undefined}
+            data-label-scope="edge"
+            data-label-edge-id={edge.id}
+            data-label-delete-only-empty={isCircuit ? undefined : "true"}
             placeholder={isCircuit ? 'e.g. out or V_1' : "relationship name"}
             onChange={(event) => onSetLabel("center", event.target.value)}
           />
