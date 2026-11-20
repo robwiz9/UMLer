@@ -422,13 +422,10 @@ const classTable = (frame: Rect): TableNode => ({
   header: {},
   sections: [
     section("attributes", [row("id", { visibility: "-", type: "UUID" })]),
-    section("methods", [
-      row("operation", {
-        kind: "method",
-        visibility: "+",
-        returnType: "void",
-      }),
-    ]),
+    // Keep the methods section available for quick row entry, but do not
+    // create an operation row: a fresh class should not acquire an
+    // uneditable `()` suffix before the author asks for a method.
+    section("methods", []),
   ],
 });
 

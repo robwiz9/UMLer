@@ -1003,8 +1003,40 @@ export const NodeFocusMenu = ({
             </button>
           </div>
         </div>
+        {isClassRow ? (
+          <div className="field-label">
+            <span>Row type</span>
+            <div className="chip-row compact" role="group" aria-label="Row type">
+              <button
+                type="button"
+                className={`chip ${!isMethod ? "on" : ""}`}
+                onClick={() =>
+                  onUpdateRow(node.id, row.id, {
+                    kind: "attribute",
+                    type: row.returnType ?? row.type,
+                    returnType: undefined,
+                    parameters: undefined,
+                  })}
+              >
+                Attribute
+              </button>
+              <button
+                type="button"
+                className={`chip ${isMethod ? "on" : ""}`}
+                onClick={() =>
+                  onUpdateRow(node.id, row.id, {
+                    kind: "method",
+                    returnType: row.type ?? row.returnType,
+                    type: undefined,
+                  })}
+              >
+                Method
+              </button>
+            </div>
+          </div>
+        ) : null}
         <label className="field-label">
-          Attribute name
+          {isMethod ? "Method name" : "Attribute name"}
           <input
             id={`row-${row.id}-name`}
             name={`row-${row.id}-name`}
