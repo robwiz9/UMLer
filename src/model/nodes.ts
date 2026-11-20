@@ -314,9 +314,17 @@ export const allRows = (node: TableLikeNode): readonly TableRow[] =>
     ? visibleSections(node).flatMap((section) => section.rows)
     : node.rows;
 
-/** Finds a row without assuming a specific section. */
+/**
+ * Finds a row without assuming a specific section. Collapsed sections still
+ * contain their rows, and connectors may legitimately remain attached to
+ * those rows, so lookup must not depend on the section's presentation state.
+ */
 export const findRow = (node: TableLikeNode, rowId: RowId): TableRow | undefined =>
-  allRows(node).find((row) => row.id === rowId);
+  node.kind === "table"
+    ? node.sections
+        .flatMap((section) => section.rows)
+        .find((row) => row.id === rowId)
+    : node.rows.find((row) => row.id === rowId);
 
 /** Display text for a row; the exact formatter can evolve without a schema change. */
 export const formatRow = (row: TableRow, includeConstraints = true): string => {

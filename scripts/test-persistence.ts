@@ -235,4 +235,29 @@ assertThrows(
   "an inherited object key should not be accepted as a diagram kind",
 );
 
+const classScene = scenes.find((scene) => scene.meta.diagramKind === "uml-class");
+if (classScene === undefined) throw new Error("class fixture missing");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const staleRowScene: any = JSON.parse(JSON.stringify(classScene));
+const staleEdge = Object.values(staleRowScene.edges)[0] as
+  | { source: { nodeId: string } }
+  | undefined;
+if (staleEdge === undefined) throw new Error("class fixture has no edge");
+staleEdge.source = {
+  target: "node",
+  nodeId: staleEdge.source.nodeId,
+  port: { kind: "row", rowId: "row_missing", side: "east" },
+} as never;
+const repaired = deserializeProjectFile(
+  serializeProjectFile([staleRowScene], staleRowScene.id),
+).scenes[0];
+const repairedEdge = repaired === undefined
+  ? undefined
+  : Object.values(repaired.edges)[0];
+assert(
+  repairedEdge?.source.target === "node" &&
+    repairedEdge.source.port.kind === "perimeter",
+  "stale row ports should migrate to an object perimeter",
+);
+
 console.log(`Persistence checks passed (${checked} assertions).`);

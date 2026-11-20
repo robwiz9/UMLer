@@ -14,6 +14,7 @@
 import type { SceneDocument } from "./scene.ts";
 import { DIAGRAM_KIND_LABELS } from "./scene.ts";
 import type { ImageAsset } from "./nodes.ts";
+import type { EdgeAttachment, SceneEdge } from "./edges.ts";
 import { assetMetadataOnly, collectProjectAssets, pruneUnusedProjectAssets, type ProjectAssets } from "./assets.ts";
 import { validateScene, type Diagnostic } from "./validate.ts";
 
@@ -132,6 +133,49 @@ const formatDiagnostics = (diagnostics: readonly Diagnostic[]): string => {
   return `${messages.join("; ")}${remainder}`;
 };
 
+/**
+ * Older project files can retain row ports after their row was removed (for
+ * example when a class section was edited or converted). The edge can still
+ * attach to the object perimeter, so repair that reference instead of
+ * rejecting the whole project. Genuinely missing nodes/edges remain errors.
+ */
+const migrateStaleRowPorts = (scene: SceneDocument): SceneDocument => {
+  let changed = false;
+  const edges: Record<string, SceneEdge> = {};
+  for (const [edgeId, edge] of Object.entries(scene.edges)) {
+    const migrate = (attachment: EdgeAttachment): EdgeAttachment => {
+      if (attachment.target !== "node" || attachment.port.kind !== "row") {
+        return attachment;
+      }
+      const node = scene.nodes[attachment.nodeId];
+      if (node === undefined) return attachment;
+      const rowId = attachment.port.rowId;
+      const rowExists = node.kind === "table"
+        ? node.sections.some((section) =>
+            section.rows.some((row) => row.id === rowId),
+          )
+        : node.kind === "relationAttribute"
+          ? node.rows.some((row) => row.id === rowId)
+          : false;
+      if (rowExists) return attachment;
+      changed = true;
+      return {
+        ...attachment,
+        port: {
+          kind: "perimeter",
+          side: attachment.port.side === "west" ? "west" : "east",
+        },
+      };
+    };
+    edges[edgeId] = {
+      ...edge,
+      source: migrate(edge.source),
+      target: migrate(edge.target),
+    };
+  }
+  return changed ? { ...scene, edges } : scene;
+};
+
 const readScene = (
   value: unknown,
   label: string,
@@ -181,10 +225,10 @@ const readScene = (
     }
   }
 
-  const candidate = {
+  const candidate = migrateStaleRowPorts({
     ...scene,
     assets: mergedAssets,
-  } as unknown as SceneDocument;
+  } as unknown as SceneDocument);
   let diagnostics: readonly Diagnostic[];
   try {
     diagnostics = validateScene(candidate);
