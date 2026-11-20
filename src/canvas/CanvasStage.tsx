@@ -5508,6 +5508,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               layout={selectedEdgeLayout}
               compact
               variant={scene.meta.diagramKind === "circuit" ? "circuit" : "default"}
+              diagramKind={scene.meta.diagramKind}
               idPrefix="canvas"
               focusToken={lineFocusToken}
               labelTextStyle={scene.theme.edge.labelText}

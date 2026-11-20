@@ -4,6 +4,7 @@ import type { EdgeLabelZone, EdgeRoutingMode, SceneEdge } from "../model/edges.t
 import { edgeDisplayName } from "../model/edges.ts";
 import { CARDINALITY_CHIPS, markerDefinition } from "../model/markers.ts";
 import type { StrokePattern, TextStyle, TextStyleOverride } from "../model/styles.ts";
+import type { DiagramKind } from "../model/scene.ts";
 import { TextStyleControls } from "./TextStyleControls.tsx";
 
 interface EdgeInspectorProps {
@@ -11,6 +12,7 @@ interface EdgeInspectorProps {
   readonly layout: EdgeLayout;
   readonly compact?: boolean;
   readonly variant?: "default" | "circuit";
+  readonly diagramKind?: DiagramKind;
   readonly idPrefix?: string;
   readonly focusToken?: number;
   readonly labelTextStyle: TextStyle;
@@ -37,6 +39,7 @@ const PATTERN_LABELS: Record<StrokePattern, string> = {
   dotted: "Dotted",
 };
 const ROUTES: readonly EdgeRoutingMode[] = ["orthogonal", "straight"];
+const CLASS_STEREOTYPES = ["«use»", "«extends»", "«instantiate»"] as const;
 
 const LinePatternPreview = ({ pattern }: { readonly pattern: StrokePattern }) => (
   <svg viewBox="0 0 44 10" width="40" height="10" aria-hidden="true">
@@ -58,6 +61,7 @@ export const EdgeInspector = ({
   layout,
   compact = false,
   variant = "default",
+  diagramKind,
   idPrefix = "inspector",
   focusToken = 0,
   labelTextStyle,
@@ -116,14 +120,36 @@ export const EdgeInspector = ({
           </button>
         ) : null}
       </div>
-      {isCircuit || labelFor("center").length > 0 ? (
-        <TextStyleControls
-          base={labelTextStyle}
-          value={labelStyleFor("center")}
-          objectColor={isCircuit}
-          onChange={(style) => onSetLabelStyle("center", style)}
-        />
+      {diagramKind === "uml-class" ? (
+        <div
+          className="chip-row compact"
+          role="group"
+          aria-label="Class relationship stereotype"
+        >
+          {CLASS_STEREOTYPES.map((stereotype) => (
+            <button
+              key={stereotype}
+              type="button"
+              className={`chip ${labelFor("center") === stereotype ? "on" : ""}`}
+              onClick={() => {
+                onSetLabel("center", stereotype);
+                onSetLabelStyle("center", {
+                  ...(labelStyleFor("center") ?? {}),
+                  italic: true,
+                });
+              }}
+            >
+              {stereotype}
+            </button>
+          ))}
+        </div>
       ) : null}
+      <TextStyleControls
+        base={labelTextStyle}
+        value={labelStyleFor("center")}
+        objectColor={isCircuit}
+        onChange={(style) => onSetLabelStyle("center", style)}
+      />
     </>
   );
   const isSequence = edge.semantic.family === "sequence";
