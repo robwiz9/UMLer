@@ -60,6 +60,18 @@ const sameNodeFocus = (a: NodeFocus | null, b: NodeFocus | null): boolean => {
 };
 
 /** Move an endpoint marker's hit/ring centre out of the attached object. */
+const edgeTouchesWeakEntity = (
+  edge: SceneEdge,
+  scene: SceneDocument,
+): boolean =>
+  [edge.source, edge.target].some((attachment) => {
+    if (attachment.target !== "node") return false;
+    const node = scene.nodes[attachment.nodeId];
+    return node?.kind === "table" &&
+      node.tableKind === "entity" &&
+      node.header.weak === true;
+  });
+
 const outwardPoint = (origin: Point, toward: Point, distance: number): Point => {
   const dx = toward.x - origin.x;
   const dy = toward.y - origin.y;
@@ -5509,6 +5521,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               compact
               variant={scene.meta.diagramKind === "circuit" ? "circuit" : "default"}
               diagramKind={scene.meta.diagramKind}
+              erWeakEntity={edgeTouchesWeakEntity(selectedEdge, scene)}
               idPrefix="canvas"
               focusToken={lineFocusToken}
               labelTextStyle={scene.theme.edge.labelText}

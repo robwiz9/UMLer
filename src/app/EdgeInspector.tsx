@@ -13,6 +13,7 @@ interface EdgeInspectorProps {
   readonly compact?: boolean;
   readonly variant?: "default" | "circuit";
   readonly diagramKind?: DiagramKind;
+  readonly erWeakEntity?: boolean;
   readonly idPrefix?: string;
   readonly focusToken?: number;
   readonly labelTextStyle: TextStyle;
@@ -40,6 +41,9 @@ const PATTERN_LABELS: Record<StrokePattern, string> = {
 };
 const ROUTES: readonly EdgeRoutingMode[] = ["orthogonal", "straight"];
 const CLASS_STEREOTYPES = ["«use»", "«extends»", "«instantiate»"] as const;
+const USE_CASE_STEREOTYPES = ["«include»", "«extend»"] as const;
+const SEQUENCE_STEREOTYPES = ["«instantiate»", "«destroy»"] as const;
+const ER_STEREOTYPES = ["«identifies»"] as const;
 
 const LinePatternPreview = ({ pattern }: { readonly pattern: StrokePattern }) => (
   <svg viewBox="0 0 44 10" width="40" height="10" aria-hidden="true">
@@ -62,6 +66,7 @@ export const EdgeInspector = ({
   compact = false,
   variant = "default",
   diagramKind,
+  erWeakEntity = false,
   idPrefix = "inspector",
   focusToken = 0,
   labelTextStyle,
@@ -91,6 +96,22 @@ export const EdgeInspector = ({
   const labelStyleFor = (zone: EdgeLabelZone): TextStyleOverride | undefined =>
     edge.labels.find((label) => label.zone === zone)?.textStyle;
   const isCircuit = variant === "circuit" || edge.semantic.family === "circuit";
+  const stereotypes = diagramKind === "uml-class"
+    ? CLASS_STEREOTYPES
+    : diagramKind === "uml-use-case"
+      ? USE_CASE_STEREOTYPES
+      : diagramKind === "uml-sequence"
+        ? SEQUENCE_STEREOTYPES
+        : diagramKind === "er" && erWeakEntity
+          ? ER_STEREOTYPES
+          : [];
+  const applyStereotype = (stereotype: string): void => {
+    onSetLabel("center", stereotype);
+    onSetLabelStyle("center", {
+      ...(labelStyleFor("center") ?? {}),
+      italic: true,
+    });
+  };
   const centerField = (
     <>
       <div className="center-label-row">
@@ -120,24 +141,18 @@ export const EdgeInspector = ({
           </button>
         ) : null}
       </div>
-      {diagramKind === "uml-class" ? (
+      {stereotypes.length > 0 ? (
         <div
           className="chip-row compact"
           role="group"
-          aria-label="Class relationship stereotype"
+          aria-label="Relationship stereotype"
         >
-          {CLASS_STEREOTYPES.map((stereotype) => (
+          {stereotypes.map((stereotype) => (
             <button
               key={stereotype}
               type="button"
               className={`chip ${labelFor("center") === stereotype ? "on" : ""}`}
-              onClick={() => {
-                onSetLabel("center", stereotype);
-                onSetLabelStyle("center", {
-                  ...(labelStyleFor("center") ?? {}),
-                  italic: true,
-                });
-              }}
+              onClick={() => applyStereotype(stereotype)}
             >
               {stereotype}
             </button>
