@@ -677,16 +677,25 @@ const ShapeBody = ({
       <>
         {symbol}
         {skeleton || layout.text.text.length === 0 ? null : (
-          <text
-            x={labelFrame.x + labelFrame.width / 2}
-            y={labelFrame.y + labelFrame.height / 2}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            pointerEvents="none"
-            {...textStyle(layout.text)}
-          >
-            {layout.text.text}
-          </text>
+          <g pointerEvents="none">
+            <rect
+              x={labelFrame.x - 2}
+              y={labelFrame.y - 1.5}
+              width={labelFrame.width + 4}
+              height={labelFrame.height + 3}
+              rx={2}
+              fill={theme.shape.fill.color ?? theme.colors.canvas}
+            />
+            <text
+              x={labelFrame.x + labelFrame.width / 2}
+              y={labelFrame.y + labelFrame.height / 2}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              {...textStyle(layout.text)}
+            >
+              {layout.text.text}
+            </text>
+          </g>
         )}
       </>
     );
