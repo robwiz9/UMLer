@@ -3937,6 +3937,14 @@ export const App = () => {
     setLayoutNote("Routing point added.");
   }, [layout, scene]);
 
+  const handleDeleteEdge = useCallback((edgeId: string) => {
+    setScene((current) => deleteEdge(current, asEdgeId(edgeId)));
+    setSelectedEdgeId(null);
+    setSelectedEdgeIds((current) => current.filter((id) => id !== edgeId));
+    setNodeFocus(null);
+    setLayoutNote("Connector deleted.");
+  }, []);
+
   const handleRemoveEdgeWaypoint = useCallback((
     edgeId: string,
     waypointId: string,
@@ -4503,6 +4511,7 @@ export const App = () => {
           onAddEdgeWaypoint={handleAddEdgeWaypoint}
           onMoveEdgeWaypoint={handleMoveEdgeWaypoint}
           onRemoveEdgeWaypoint={handleRemoveEdgeWaypoint}
+          onDeleteEdge={handleDeleteEdge}
           onAddJunctionAtWire={handleAddJunctionAtWire}
           onBeginShiftDrag={beginShiftDrag}
           onCommitShiftDrag={commitShiftDrag}

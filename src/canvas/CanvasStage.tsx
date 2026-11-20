@@ -204,6 +204,7 @@ interface CanvasStageProps {
   readonly onPreviewRotation: (nodeId: string, rotation: number | null) => void;
   readonly onCommitRotation: (nodeId: string, rotation: number) => void;
   readonly onDeleteNode: (nodeId: string) => void;
+  readonly onDeleteEdge: (edgeId: string) => void;
   readonly onMergeJunction: (nodeId: string) => void;
   readonly onMoveNodeLabel: (nodeId: string, offset: Point) => void;
   readonly onViewChange: (camera: Camera, zoom: number) => void;
@@ -1242,6 +1243,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onPreviewRotation,
   onCommitRotation,
   onDeleteNode,
+  onDeleteEdge,
   onMergeJunction,
   onMoveNodeLabel,
   onViewChange,
@@ -5502,6 +5504,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               onSetRoutingMode={(mode) =>
                 onSetRoutingMode(selectedEdge.id, mode)}
               onReroute={() => onRerouteEdge(selectedEdge.id)}
+              onDelete={() => onDeleteEdge(selectedEdge.id)}
             />
           </div>
         </DraggablePanel>

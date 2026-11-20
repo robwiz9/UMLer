@@ -21,6 +21,7 @@ interface EdgeInspectorProps {
   readonly onSetStrokeWidth: (width: number) => void;
   readonly onSetRoutingMode: (mode: EdgeRoutingMode) => void;
   readonly onReroute: () => void;
+  readonly onDelete: () => void;
 }
 
 const zoneLabel: Record<EdgeLabelZone, string> = {
@@ -67,6 +68,7 @@ export const EdgeInspector = ({
   onSetStrokeWidth,
   onSetRoutingMode,
   onReroute,
+  onDelete,
 }: EdgeInspectorProps) => {
   const centerRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -186,6 +188,12 @@ export const EdgeInspector = ({
     </>
   );
 
+  const deleteButton = (
+    <button type="button" className="editor-add danger" onClick={onDelete}>
+      {isCircuit ? "Delete wire" : "Delete line"}
+    </button>
+  );
+
   if (isCircuit) {
     return (
       <div className="edge-inspector">
@@ -195,6 +203,7 @@ export const EdgeInspector = ({
           Wires have no arrowheads or line styles. Crossings get an omega bridge; a junction dot is
           created when a wire meets another wire.
         </p> */}
+        {deleteButton}
       </div>
     );
   }
@@ -204,6 +213,7 @@ export const EdgeInspector = ({
       <div className="edge-inspector">
         {centerField}
         {lineControls}
+        {deleteButton}
       </div>
     );
   }
@@ -277,6 +287,7 @@ export const EdgeInspector = ({
           ? " Sequence messages follow the straight time axis."
           : " Double-click the edge to rerun the obstacle-avoiding route."}
       </p>
+      {deleteButton}
     </div>
   );
 };
