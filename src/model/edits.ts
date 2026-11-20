@@ -820,21 +820,30 @@ export const addEdgeWaypoint = (
   scene: SceneDocument,
   edgeId: EdgeId,
   point: { readonly x: number; readonly y: number },
+  insertionIndex?: number,
 ): SceneDocument =>
-  updateEdge(scene, edgeId, (edge) => ({
-    ...edge,
-    routing: {
-      ...edge.routing,
-      waypoints: [
-        ...edge.routing.waypoints,
-        {
-          id: asWaypointId(newId("waypoint")),
-          point,
-          locked: true,
-        },
-      ],
-    },
-  }));
+  updateEdge(scene, edgeId, (edge) => {
+    const waypoints = [...edge.routing.waypoints];
+    const index = Math.max(
+      0,
+      Math.min(
+        waypoints.length,
+        insertionIndex ?? waypoints.length,
+      ),
+    );
+    waypoints.splice(index, 0, {
+      id: asWaypointId(newId("waypoint")),
+      point,
+      locked: true,
+    });
+    return {
+      ...edge,
+      routing: {
+        ...edge.routing,
+        waypoints,
+      },
+    };
+  });
 
 export const setEdgeWaypoint = (
   scene: SceneDocument,

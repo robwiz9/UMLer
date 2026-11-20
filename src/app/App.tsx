@@ -319,6 +319,42 @@ const darkNodeForDisplay = (node: SceneNode): SceneNode => {
   return node;
 };
 
+const distanceAlongPolyline = (
+  points: readonly Point[],
+  target: Point,
+): number => {
+  let travelled = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  let closestArc = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    if (start === undefined || end === undefined) continue;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSq = dx * dx + dy * dy;
+    const length = Math.sqrt(lengthSq);
+    if (length < 0.0001) continue;
+    const t = Math.min(
+      1,
+      Math.max(
+        0,
+        ((target.x - start.x) * dx + (target.y - start.y) * dy) / lengthSq,
+      ),
+    );
+    const distance = Math.hypot(
+      target.x - (start.x + dx * t),
+      target.y - (start.y + dy * t),
+    );
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestArc = travelled + length * t;
+    }
+    travelled += length;
+  }
+  return closestArc;
+};
+
 const recolorLayoutText = (layout: LayoutSnapshot): LayoutSnapshot => {
   const clone = structuredClone(layout) as LayoutSnapshot;
   const recolor = (value: unknown): void => {
@@ -3880,9 +3916,22 @@ export const App = () => {
   }, [measurer, scene, setSelectedEdgeId]);
 
   const handleAddEdgeWaypoint = useCallback((edgeId: string, point: Point) => {
-    setScene((current) => addEdgeWaypoint(current, asEdgeId(edgeId), point));
+    const edge = scene.edges[edgeId];
+    const edgeLayout = layout.edges[edgeId];
+    let insertionIndex: number | undefined;
+    if (edge !== undefined && edgeLayout !== undefined && edge.routing.waypoints.length > 0) {
+      const newDistance = distanceAlongPolyline(edgeLayout.points, point);
+      const index = edge.routing.waypoints.findIndex(
+        (waypoint) =>
+          distanceAlongPolyline(edgeLayout.points, waypoint.point) > newDistance,
+      );
+      insertionIndex = index === -1 ? edge.routing.waypoints.length : index;
+    }
+    setScene((current) =>
+      addEdgeWaypoint(current, asEdgeId(edgeId), point, insertionIndex),
+    );
     setLayoutNote("Routing point added.");
-  }, []);
+  }, [layout, scene]);
 
   const handleMoveEdgeWaypoint = useCallback((
     edgeId: string,
