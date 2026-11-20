@@ -1971,6 +1971,22 @@ button {
   border-color: #fca5a5;
 }
 
+.scene-rail-mobile-head {
+  display: none;
+}
+
+.panel-close-mobile {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+}
+
 .panel-add-button {
   display: flex;
   width: 100%;
@@ -5268,6 +5284,16 @@ button {
 
   .workspace.mobile-panel-open .scene-rail {
     padding: 10px;
+  }
+
+  .scene-rail-mobile-head {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: -2px;
+  }
+
+  .panel-add-button {
+    display: none;
   }
 
   .statusbar {

@@ -4388,6 +4388,17 @@ export const App = () => {
       >
         {panelVisible ? (
           <section className="scene-rail">
+            <div className="scene-rail-mobile-head">
+              <button
+                type="button"
+                className="panel-close-mobile"
+                onClick={() => setPanelVisible(false)}
+                aria-label="Close layout panel"
+                title="Close layout panel"
+              >
+                ×
+              </button>
+            </div>
             <button
               type="button"
               className="panel-add-button"
