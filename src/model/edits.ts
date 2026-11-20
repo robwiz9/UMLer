@@ -688,7 +688,21 @@ export const setEdgeLabelTextStyle = (
             textStyle,
           },
         ];
-    return { ...edge, labels };
+    // A connector's centre label is its visible name; its text colour is also
+    // the line colour so the relationship reads as one styled element.
+    return {
+      ...edge,
+      labels,
+      style: zone === "center"
+        ? {
+            ...edge.style,
+            stroke: {
+              ...edge.style.stroke,
+              color: textStyle?.color ?? edge.style.labelText.color,
+            },
+          }
+        : edge.style,
+    };
   });
 
 export const setMarker = (
