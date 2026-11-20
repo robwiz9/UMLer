@@ -1344,6 +1344,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const [draftEdge, setDraftEdge] = useState<DraftEdge | null>(null);
   const draftTargetRef = useRef<DrawTarget | null>(null);
   const edgePressRef = useRef<{ readonly edgeId: string; readonly time: number } | null>(null);
+  const waypointPressRef = useRef<{
+    readonly edgeId: string;
+    readonly waypointId: string;
+    readonly time: number;
+  } | null>(null);
   const pendingEdgeSplitRef = useRef<{
     readonly edgeId: string;
     readonly point: Point;
@@ -1975,6 +1980,23 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (event.button !== 0) return;
     const svg = svgRef.current;
     if (svg === null) return;
+    const now = performance.now();
+    const previousPress = waypointPressRef.current;
+    if (
+      previousPress !== null &&
+      previousPress.edgeId === edgeId &&
+      previousPress.waypointId === waypointId &&
+      now - previousPress.time <= LABEL_DOUBLE_PRESS_MS
+    ) {
+      waypointPressRef.current = null;
+      onRemoveEdgeWaypoint(edgeId, waypointId);
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    waypointPressRef.current = { edgeId, waypointId, time: now };
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setActiveEndpoint(null);
@@ -3389,6 +3411,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     }
 
     if (interaction.kind === "waypoint-drag") {
+      if (interaction.moved) waypointPressRef.current = null;
       interactionRef.current = null;
       setPanning(false);
       const pointerId = interaction.pointerId;
@@ -5211,14 +5234,6 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                       style={{ cursor: "grab" }}
                       onPointerDown={(event) =>
                         beginWaypointDrag(selectedEdgeLayout.edgeId, waypoint.id, event)}
-                      onDoubleClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onRemoveEdgeWaypoint(
-                          selectedEdgeLayout.edgeId,
-                          waypoint.id,
-                        );
-                      }}
                     />
                   ))
                 : null}
