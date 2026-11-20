@@ -606,6 +606,7 @@ const ShapeBody = ({
   skeleton,
   onTextDoubleClick,
   onPartClick,
+  labelDelta,
 }: {
   readonly layout: ShapeNodeLayout;
   readonly node: SceneNode;
@@ -613,6 +614,7 @@ const ShapeBody = ({
   readonly skeleton: boolean;
   readonly onTextDoubleClick?: (target: CanvasTextTarget) => void;
   readonly onPartClick?: (focus: NodeFocus) => void;
+  readonly labelDelta?: Point;
 }) => {
   const style = theme.shape;
   const { frame, text } = layout;
@@ -637,31 +639,57 @@ const ShapeBody = ({
 
   if (node.kind === "pseudostate") {
     const radius = Math.min(frame.width, frame.height) / 2;
-    switch (node.pseudostateKind) {
-      case "initial":
-        return <circle cx={center.x} cy={center.y} r={Math.max(3, radius * 0.55)} fill={theme.colors.ink} />;
-      case "final":
-        return (
-          <>
-            <circle cx={center.x} cy={center.y} r={radius} fill="white" stroke={theme.colors.ink} strokeWidth={1} />
-            <circle cx={center.x} cy={center.y} r={Math.max(2, radius * 0.58)} fill={theme.colors.ink} />
-          </>
-        );
-      case "choice":
-        return <polygon points={`${center.x},${frame.y} ${rectRight(frame)},${center.y} ${center.x},${rectBottom(frame)} ${frame.x},${center.y}`} {...common} />;
-      case "fork":
-      case "join":
-        return <rect x={frame.x} y={frame.y + frame.height * 0.4} width={frame.width} height={frame.height * 0.2} fill={theme.colors.ink} />;
-      case "terminate":
-        return (
-          <g stroke={theme.colors.ink} strokeWidth={1.4}>
-            <line x1={frame.x + 3} y1={frame.y + 3} x2={rectRight(frame) - 3} y2={rectBottom(frame) - 3} />
-            <line x1={frame.x + 3} y1={rectBottom(frame) - 3} x2={rectRight(frame) - 3} y2={frame.y + 3} />
-          </g>
-        );
-      default:
-        return <circle cx={center.x} cy={center.y} r={Math.max(3, radius * 0.5)} fill="white" stroke={theme.colors.ink} />;
-    }
+    const symbol = (() => {
+      switch (node.pseudostateKind) {
+        case "initial":
+          return <circle cx={center.x} cy={center.y} r={Math.max(3, radius * 0.55)} fill={theme.colors.ink} />;
+        case "final":
+          return (
+            <>
+              <circle cx={center.x} cy={center.y} r={radius} fill="white" stroke={theme.colors.ink} strokeWidth={1} />
+              <circle cx={center.x} cy={center.y} r={Math.max(2, radius * 0.58)} fill={theme.colors.ink} />
+            </>
+          );
+        case "choice":
+          return <polygon points={`${center.x},${frame.y} ${rectRight(frame)},${center.y} ${center.x},${rectBottom(frame)} ${frame.x},${center.y}`} {...common} />;
+        case "fork":
+        case "join":
+          return <rect x={frame.x} y={frame.y + frame.height * 0.4} width={frame.width} height={frame.height * 0.2} fill={theme.colors.ink} />;
+        case "terminate":
+          return (
+            <g stroke={theme.colors.ink} strokeWidth={1.4}>
+              <line x1={frame.x + 3} y1={frame.y + 3} x2={rectRight(frame) - 3} y2={rectBottom(frame) - 3} />
+              <line x1={frame.x + 3} y1={rectBottom(frame) - 3} x2={rectRight(frame) - 3} y2={frame.y + 3} />
+            </g>
+          );
+        default:
+          return <circle cx={center.x} cy={center.y} r={Math.max(3, radius * 0.5)} fill="white" stroke={theme.colors.ink} />;
+      }
+    })();
+    const labelFrame = labelDelta === undefined
+      ? layout.textFrame
+      : {
+          ...layout.textFrame,
+          x: layout.textFrame.x + labelDelta.x,
+          y: layout.textFrame.y + labelDelta.y,
+        };
+    return (
+      <>
+        {symbol}
+        {skeleton || layout.text.text.length === 0 ? null : (
+          <text
+            x={labelFrame.x + labelFrame.width / 2}
+            y={labelFrame.y + labelFrame.height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            pointerEvents="none"
+            {...textStyle(layout.text)}
+          >
+            {layout.text.text}
+          </text>
+        )}
+      </>
+    );
   }
 
   if (node.kind === "relationship") {
@@ -1011,7 +1039,7 @@ export const NodeSkeleton = ({
       ) : null;
       break;
     default:
-      body = <ShapeBody layout={layout} node={node} theme={theme} skeleton={skeleton} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />;
+      body = <ShapeBody layout={layout} node={node} theme={theme} skeleton={skeleton} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} labelDelta={labelDelta} />;
   }
 
   const hoverFrame: Rect | null = (() => {

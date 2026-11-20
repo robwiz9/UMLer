@@ -163,6 +163,8 @@ export type PseudostateKind =
 export interface PseudostateNode extends NodeBase {
   readonly kind: "pseudostate";
   readonly pseudostateKind: PseudostateKind;
+  /** Label centre relative to the pseudostate centre. */
+  readonly labelOffset?: Point;
   readonly style: ShapeNodeStyle;
 }
 

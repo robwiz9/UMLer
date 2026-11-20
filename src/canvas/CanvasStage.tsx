@@ -2118,7 +2118,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (
       svg === null ||
       node === undefined ||
-      (node.kind !== "circuitComponent" && node.kind !== "circuitJunction") ||
+      (node.kind !== "circuitComponent" &&
+        node.kind !== "circuitJunction" &&
+        node.kind !== "pseudostate") ||
       nodeLayout?.kind !== node.kind ||
       nodeLayout.labelFrame === undefined
     ) {
@@ -2148,7 +2150,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       x: frame.x + frame.width / 2,
       y: frame.y + frame.height / 2,
     };
-    const rawOffset = sub(labelCenter, nodeLayout.center);
+    const nodeCenter = "center" in nodeLayout
+      ? nodeLayout.center
+      : rectCenter(nodeLayout.frame);
+    const rawOffset = sub(labelCenter, nodeCenter);
     const rotation = node.kind === "circuitComponent" ? node.rotation : 0;
     const startOffset = rotation === 0
       ? rawOffset
@@ -4499,21 +4504,27 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         return edgeLayout === undefined ? [] : [{ id: edge.id, layout: edgeLayout }];
       })
     : terminalHitItems;
-  const nodeLabelHitItems = scene.meta.diagramKind === "circuit"
-    ? Object.values(layout.nodes).flatMap((nodeLayout) => {
-        const node = scene.nodes[nodeLayout.nodeId];
-        if (
-          node === undefined ||
-          (node.kind !== "circuitComponent" && node.kind !== "circuitJunction") ||
-          nodeLayout.kind !== node.kind ||
-          node.visible === false ||
-          nodeLayout.labelFrame === undefined
-        ) {
-          return [];
-        }
-        return [{ id: node.id, frame: nodeLayout.labelFrame }];
-      })
-    : [];
+  const nodeLabelHitItems =
+    scene.meta.diagramKind === "circuit" ||
+    scene.meta.diagramKind === "uml-state-machine"
+      ? Object.values(layout.nodes).flatMap((nodeLayout) => {
+          const node = scene.nodes[nodeLayout.nodeId];
+          const movable =
+            node?.kind === "circuitComponent" ||
+            node?.kind === "circuitJunction" ||
+            node?.kind === "pseudostate";
+          if (
+            node === undefined ||
+            !movable ||
+            nodeLayout.kind !== node.kind ||
+            node.visible === false ||
+            nodeLayout.labelFrame === undefined
+          ) {
+            return [];
+          }
+          return [{ id: node.id, frame: nodeLayout.labelFrame }];
+        })
+      : [];
   const branchIndicators = branchDistance > 0 && branchTargetIds.length > 0
     ? (() => {
         const selected = new Set(branchTargetIds);

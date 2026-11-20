@@ -504,8 +504,20 @@ const measureShape = (
     text = measurer.measure(node.name, textStyle, maxWidth);
     textFrame = rect(frame.x + padding, frame.y + padding, maxWidth, text.height);
   } else if (node.kind === "pseudostate") {
-    text = measurer.measure("", textStyle, maxWidth);
-    textFrame = rect(rectCenter(frame).x, rectCenter(frame).y, 0, 0);
+    // Pseudostate names are free labels around the symbol, so they need a
+    // wider measure than the tiny 18pt symbol frame.
+    text = measurer.measure(node.name, textStyle, Math.max(40, frame.width * 8));
+    const center = rectCenter(frame);
+    const labelCenter = {
+      x: center.x + (node.labelOffset?.x ?? 0),
+      y: center.y + (node.labelOffset?.y ?? frame.height / 2 + text.height / 2 + 4),
+    };
+    textFrame = rect(
+      labelCenter.x - text.width / 2,
+      labelCenter.y - text.height / 2,
+      text.width,
+      text.height,
+    );
   } else {
     text = measurer.measure(node.name, textStyle, maxWidth);
     textFrame = rect(
@@ -524,15 +536,21 @@ const measureShape = (
     addRectPerimeterPorts(ports, node.id, frame);
   }
 
+  const labelFrame =
+    node.kind === "actor" || (node.kind === "pseudostate" && node.name.length > 0)
+      ? textFrame
+      : undefined;
   return {
     nodeId: node.id,
     kind: node.kind,
     frame,
-    bounds: frame,
+    bounds: node.kind === "pseudostate" && labelFrame !== undefined
+      ? unionRects([frame, labelFrame]) ?? frame
+      : frame,
     ports: [...ports.values()].filter((port) => port.nodeId === node.id),
     textFrame,
     text,
-    labelFrame: node.kind === "actor" ? textFrame : undefined,
+    labelFrame,
   };
 };
 
