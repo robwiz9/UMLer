@@ -289,6 +289,47 @@ interface ToastAction {
 const CETZ_IMPORT_STATEMENT = `#import "@preview/cetz:${CETZ_EXPORT_VERSION}": canvas, draw`;
 
 const DARK_CANVAS = "#1e1e1e";
+const darkHeaderColor = (color: string | null | undefined): string | null | undefined => {
+  if (color === null || color === undefined || color === "transparent") {
+    return color;
+  }
+  const hex = /^#([0-9a-f]{3,8})$/i.exec(color.trim());
+  if (hex === null) return color;
+  const raw = hex[1];
+  if (raw === undefined) return color;
+  const expanded = raw.length === 3 || raw.length === 4
+    ? [...raw].map((digit) => `${digit}${digit}`).join("")
+    : raw;
+  if (expanded.length !== 6 && expanded.length !== 8) return color;
+  const r = Number.parseInt(expanded.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(expanded.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(expanded.slice(4, 6), 16) / 255;
+  const alpha = expanded.length === 8
+    ? Number.parseInt(expanded.slice(6, 8), 16) / 255
+    : 1;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  const delta = max - min;
+  const saturation = delta === 0
+    ? 0
+    : delta / (1 - Math.abs(2 * lightness - 1));
+  let hue = 0;
+  if (delta !== 0) {
+    if (max === r) hue = ((g - b) / delta) % 6;
+    else if (max === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+    hue = (hue * 60 + 360) % 360;
+  }
+  // Keep the authored hue/saturation but move every custom tint into a dark
+  // surface range, so pale pastel headers become readable dark variants.
+  const darkLightness = Math.min(32, Math.max(14, 100 - lightness * 100));
+  const darkSaturation = Math.min(70, saturation * 100);
+  return alpha < 1
+    ? `hsla(${hue}, ${darkSaturation}%, ${darkLightness}%, ${alpha})`
+    : `hsl(${hue}, ${darkSaturation}%, ${darkLightness}%)`;
+};
+
 const darkShapeStyle = (style: ShapeNodeStyle): ShapeNodeStyle => ({
   ...style,
   fill: { ...style.fill, color: "#252526" },
@@ -298,8 +339,22 @@ const darkShapeStyle = (style: ShapeNodeStyle): ShapeNodeStyle => ({
 
 const darkNodeForDisplay = (node: SceneNode): SceneNode => {
   if (node.kind === "table" || node.kind === "relationAttribute") {
+    const tableFields = node.kind === "table"
+      ? {
+          header: {
+            ...node.header,
+            backgroundColor: darkHeaderColor(node.header.backgroundColor),
+          },
+          sections: node.sections.map((section) => ({
+            ...section,
+            backgroundColor: darkHeaderColor(section.backgroundColor),
+          })),
+        }
+      : {};
     return {
       ...node,
+      ...tableFields,
+      backgroundColor: darkHeaderColor(node.backgroundColor),
       style: {
         ...node.style,
         fill: { ...node.style.fill, color: "#252526" },
@@ -922,12 +977,12 @@ export const App = () => {
   }, []);
 
   const activateSceneDocument = useCallback(
-    (next: SceneDocument) => {
+    (next: SceneDocument, fit = true) => {
       setActiveSceneId(next.id);
       resetHistory(next);
       clearTransientSelection();
       setLayoutNote(null);
-      setFitNonce((value) => value + 1);
+      if (fit) setFitNonce((value) => value + 1);
     },
     [clearTransientSelection, resetHistory],
   );
@@ -1170,6 +1225,7 @@ export const App = () => {
       target: GitHubTarget,
       remote: GitHubRemoteFile,
       project: ImportedProject,
+      fit = true,
     ) => {
       const active =
         project.scenes.find((item) => item.id === project.activeSceneId) ??
@@ -1183,7 +1239,7 @@ export const App = () => {
         ...collectProjectAssets(project.scenes),
         ...project.assets,
       });
-      activateSceneDocument(active);
+      activateSceneDocument(active, fit);
       setBaselineDigest(digest);
       setGithubBinding({
         ...target,
@@ -1205,6 +1261,7 @@ export const App = () => {
       projectScenes: readonly SceneDocument[],
       projectActiveSceneId: string,
       projectAssets: Readonly<Record<string, ImageAsset>>,
+      fit = true,
     ): void => {
       const active =
         projectScenes.find((item) => item.id === projectActiveSceneId) ??
@@ -1212,7 +1269,7 @@ export const App = () => {
       if (active === undefined) throw new Error("The merged project has no scenes.");
       setScenes([...projectScenes]);
       setAssetLibrary(pruneUnusedProjectAssets(projectScenes, projectAssets));
-      activateSceneDocument(active);
+      activateSceneDocument(active, fit);
     },
     [activateSceneDocument],
   );
@@ -1653,7 +1710,7 @@ export const App = () => {
       };
       const mergedDigest = projectDigest(merged.scenes, merged.activeSceneId);
       if (mergedDigest === remoteDigest) {
-        applyRemoteProject(target, remote, remoteProject);
+        applyRemoteProject(target, remote, remoteProject, mode !== "auto");
         await writePendingLocalSave({
           scenes: merged.scenes,
           activeSceneId: merged.activeSceneId,
@@ -1675,7 +1732,12 @@ export const App = () => {
           mode,
           true,
         );
-        adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+        adoptProjectLocally(
+          merged.scenes,
+          merged.activeSceneId,
+          mergedAssets,
+          mode !== "auto",
+        );
       } catch (error) {
         const message = describeGitHubError(error);
         if (mode === "auto") {
