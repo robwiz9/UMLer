@@ -40,10 +40,10 @@ const PATTERN_LABELS: Record<StrokePattern, string> = {
   dotted: "Dotted",
 };
 const ROUTES: readonly EdgeRoutingMode[] = ["orthogonal", "straight"];
-const CLASS_STEREOTYPES = ["«use»", "«extends»", "«instantiate»"] as const;
-const USE_CASE_STEREOTYPES = ["«include»", "«extend»"] as const;
-const SEQUENCE_STEREOTYPES = ["«instantiate»", "«destroy»"] as const;
-const ER_STEREOTYPES = ["«identifies»"] as const;
+const CLASS_STEREOTYPES = ["« use »", "« extends »", "« instantiate »"] as const;
+const USE_CASE_STEREOTYPES = ["« include »", "« extend »"] as const;
+const SEQUENCE_STEREOTYPES = ["« instantiate »", "« destroy »"] as const;
+const ER_STEREOTYPES = ["« identifies »"] as const;
 
 const LinePatternPreview = ({ pattern }: { readonly pattern: StrokePattern }) => (
   <svg viewBox="0 0 44 10" width="40" height="10" aria-hidden="true">
