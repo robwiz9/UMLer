@@ -359,9 +359,18 @@ export const CircuitSymbolPreview = ({
   const viewWidth = component.width + margin * 2;
   const viewHeight = component.height + margin * 2;
   const style: ShapeNodeStyle = {
-    fill: { color: "#ffffff" },
-    stroke: { color: "#334155", width: 1.1, pattern: "solid" },
-    text: { fontFamily: "sans-serif", fontSize: 9, color: "#334155", weight: 400 },
+    fill: { color: "var(--circuit-symbol-fill, #ffffff)" },
+    stroke: {
+      color: "var(--circuit-symbol-stroke, #334155)",
+      width: 1.1,
+      pattern: "solid",
+    },
+    text: {
+      fontFamily: "sans-serif",
+      fontSize: 9,
+      color: "var(--circuit-symbol-stroke, #334155)",
+      weight: 400,
+    },
     cornerRadius: 0,
     padding: 0,
   };

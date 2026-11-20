@@ -227,8 +227,7 @@ export const SceneDialog = ({
               </p>
             ) : null}
 
-            {mode === "new" || mode === "new-project" ? (
-              <>
+            {mode === "new" || mode === "new-project" || mode === "rename" ? (
               <label className="field-label">
               {mode === "new-project" ? "Starting scene name" : "Scene name"}
               <input
@@ -243,6 +242,10 @@ export const SceneDialog = ({
                 placeholder="Untitled diagram"
               />
             </label>
+            ) : null}
+
+            {mode === "new" || mode === "new-project" ? (
+              <>
                 <div className="dialog-section-label">Diagram type</div>
                 <div className="diagram-type-grid" role="group" aria-label="Diagram type">
                   {KIND_ORDER.map((kind) => (

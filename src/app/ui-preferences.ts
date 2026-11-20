@@ -5,6 +5,8 @@
  * workspace, not the diagram, and survive project switches and reloads.
  */
 
+export type ColorMode = "light" | "dark";
+
 export interface UiPreferences {
   readonly panelVisible: boolean;
   readonly codePanelVisible: boolean;
@@ -12,6 +14,7 @@ export interface UiPreferences {
   readonly snapEnabled: boolean;
   /** Freeze connector routing while an object is being dragged. */
   readonly lowPerformanceMode: boolean;
+  readonly colorMode: ColorMode;
 }
 
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
@@ -20,6 +23,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   gridVisible: true,
   snapEnabled: true,
   lowPerformanceMode: false,
+  colorMode: "light",
 };
 
 export const UI_PREFERENCES_KEY = "umler.ui.preferences";
@@ -47,6 +51,7 @@ export const parseUiPreferences = (raw: string | null): UiPreferences => {
         record.lowPerformanceMode,
         DEFAULT_UI_PREFERENCES.lowPerformanceMode,
       ),
+      colorMode: record.colorMode === "dark" ? "dark" : "light",
     };
   } catch {
     return DEFAULT_UI_PREFERENCES;

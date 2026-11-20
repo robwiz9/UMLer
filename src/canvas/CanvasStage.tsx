@@ -18,7 +18,7 @@ import type { EdgeAttachmentRef, PortAttachmentRef } from "../model/edge-create.
 import { childrenOfBoundary } from "../model/containment.ts";
 import { AddObjectMenu } from "./AddObjectMenu.tsx";
 import type { Camera } from "./camera.ts";
-import { fitBounds, zoomAtScreenPoint, type ViewportSize } from "./camera.ts";
+import { clampZoom, fitBounds, zoomAtScreenPoint, type ViewportSize } from "./camera.ts";
 import { Grid } from "./Grid.tsx";
 import { NodeSkeleton } from "./NodeSkeleton.tsx";
 import { EdgeLabelView, EdgeLayer, edgeLayerItem, edgeLinePoints, edgePathData } from "./Edges.tsx";
@@ -81,10 +81,17 @@ interface CanvasStageProps {
   readonly majorEvery: number;
   readonly snapEnabled: boolean;
   readonly showCompactAddButton: boolean;
+  readonly mobileMode: boolean;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
+  readonly canDeleteSelection: boolean;
+  readonly canCopySelection: boolean;
+  readonly canPaste: boolean;
+  readonly onDeleteSelection: () => void;
+  readonly onCopySelection: () => void;
+  readonly onPasteSelection: () => void;
   readonly imageAssets: Readonly<Record<string, ImageAsset>>;
   readonly onDropImageFiles: (files: readonly File[], world: Point) => void;
   readonly onAssignImageToNode: (nodeId: string, file: File) => Promise<void>;
@@ -123,6 +130,12 @@ interface CanvasStageProps {
   readonly onSetStrokeWidth: (edgeId: string, width: number) => void;
   readonly onSetRoutingMode: (edgeId: string, mode: EdgeRoutingMode) => void;
   readonly onRerouteEdge: (edgeId: string) => void;
+  readonly onAddEdgeWaypoint: (edgeId: string, point: Point) => void;
+  readonly onMoveEdgeWaypoint: (
+    edgeId: string,
+    waypointId: string,
+    point: Point,
+  ) => void;
   readonly onAddJunctionAtWire: (edgeId: string, point: Point) => void;
   readonly onBeginShiftDrag: (scene: SceneDocument) => void;
   readonly onCommitShiftDrag: (
@@ -328,6 +341,14 @@ type Interaction =
       readonly startScreen: Point;
       lastWorld: Point;
       pointerTravel: number;
+      moved: boolean;
+    }
+  | {
+      readonly kind: "waypoint-drag";
+      readonly pointerId: number;
+      readonly edgeId: string;
+      readonly waypointId: string;
+      lastWorld: Point;
       moved: boolean;
     }
   | {
@@ -1145,10 +1166,17 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   majorEvery,
   snapEnabled,
   showCompactAddButton,
+  mobileMode,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
+  canDeleteSelection,
+  canCopySelection,
+  canPaste,
+  onDeleteSelection,
+  onCopySelection,
+  onPasteSelection,
   imageAssets,
   onDropImageFiles,
   onAssignImageToNode,
@@ -1174,6 +1202,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onSetStrokeWidth,
   onSetRoutingMode,
   onRerouteEdge,
+  onAddEdgeWaypoint,
+  onMoveEdgeWaypoint,
   onAddJunctionAtWire,
   onBeginShiftDrag,
   onCommitShiftDrag,
@@ -1353,6 +1383,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     readonly time: number;
   } | null>(null);
   const panMovedRef = useRef(false);
+  const activeTouchPointersRef = useRef<Map<number, Point>>(new Map());
+  const pinchRef = useRef<{
+    readonly startDistance: number;
+    readonly startZoom: number;
+    readonly startCamera: Camera;
+    readonly startCenter: Point;
+    readonly startWorld: Point;
+  } | null>(null);
+  const longPressRef = useRef<{
+    readonly pointerId: number;
+    readonly timer: number;
+    readonly startScreen: Point;
+    readonly startWorld: Point;
+  } | null>(null);
   const [activationDraft, setActivationDraft] = useState<{
     readonly nodeId: string;
     readonly id: ActivationId;
@@ -1587,6 +1631,86 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       } catch {
         // Synthetic pointer events (tests) do not own a real pointer id.
       }
+    }
+  };
+
+  const clearLongPress = (): void => {
+    const pending = longPressRef.current;
+    if (pending !== null) window.clearTimeout(pending.timer);
+    longPressRef.current = null;
+  };
+
+  const startLongPress = (
+    pointerId: number,
+    startScreen: Point,
+    startWorld: Point,
+  ): void => {
+    clearLongPress();
+    const timer = window.setTimeout(() => {
+      longPressRef.current = null;
+      const interaction = interactionRef.current;
+      if (interaction?.kind !== "pan" || interaction.pointerId !== pointerId) return;
+      interactionRef.current = {
+        kind: "marquee",
+        pointerId,
+        startWorld,
+        currentWorld: startWorld,
+        additive: false,
+        baseIds: [],
+        moved: false,
+      };
+      setPanning(false);
+      setMarquee(null);
+      onSelectActivation(null);
+      setActivationDraft(null);
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      onClearNodeFocus();
+      onSelectEdge(null);
+      onSelectNode(null);
+    }, 360);
+    longPressRef.current = { pointerId, timer, startScreen, startWorld };
+  };
+
+  const handleTouchPointerDownCapture = (
+    event: React.PointerEvent<SVGSVGElement>,
+  ): void => {
+    if (!mobileMode || event.pointerType !== "touch") return;
+    const svg = svgRef.current;
+    if (svg === null) return;
+    activeTouchPointersRef.current.set(event.pointerId, pointFromEvent(event, svg));
+    if (activeTouchPointersRef.current.size < 2) return;
+
+    clearLongPress();
+    interactionRef.current = null;
+    setMarquee(null);
+    setDraftEdge(null);
+    setPanning(false);
+    const [first, second] = [...activeTouchPointersRef.current.values()];
+    if (first === undefined || second === undefined) return;
+    const center = {
+      x: (first.x + second.x) / 2,
+      y: (first.y + second.y) / 2,
+    };
+    pinchRef.current = {
+      startDistance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      startZoom: zoomRef.current,
+      startCamera: cameraRef.current,
+      startCenter: center,
+      startWorld: screenToWorld(center, cameraRef.current, zoomRef.current),
+    };
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleTouchPointerEndCapture = (
+    event: React.PointerEvent<SVGSVGElement>,
+  ): void => {
+    if (!mobileMode || event.pointerType !== "touch") return;
+    activeTouchPointersRef.current.delete(event.pointerId);
+    if (longPressRef.current?.pointerId === event.pointerId) clearLongPress();
+    if (pinchRef.current !== null && activeTouchPointersRef.current.size < 2) {
+      pinchRef.current = null;
     }
   };
 
@@ -1839,6 +1963,39 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     event.stopPropagation();
   };
 
+  const beginWaypointDrag = (
+    edgeId: string,
+    waypointId: string,
+    event: React.PointerEvent<SVGCircleElement>,
+  ): void => {
+    if (event.button !== 0) return;
+    const svg = svgRef.current;
+    if (svg === null) return;
+    const screen = pointFromEvent(event, svg);
+    const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    setActiveEndpoint(null);
+    setLinePopover(null);
+    setSequenceMovePreview(null);
+    setEdgeSlidePreview(null);
+    onSelectNode(null);
+    onSelectEdge(edgeId);
+    interactionRef.current = {
+      kind: "waypoint-drag",
+      pointerId: event.pointerId,
+      edgeId,
+      waypointId,
+      lastWorld: world,
+      moved: false,
+    };
+    try {
+      svg.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events cannot own capture.
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   const beginLabelDrag = (
     edgeId: string,
     labelId: string,
@@ -2067,6 +2224,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (svg === null) return;
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    if (mobileMode) {
+      // Touch/mouse drag on empty canvas pans. A held tap switches the same
+      // gesture into a marquee selection without lifting the pointer.
+      beginPan(event);
+      startLongPress(event.pointerId, screen, world);
+      return;
+    }
     onSelectActivation(null);
     setActivationDraft(null);
     setActiveEndpoint(null);
@@ -2414,6 +2578,24 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     setLinePopover(null);
     onSelectNode(null);
     onSelectEdge(edgeId);
+
+    const edge = scene.edges[edgeId];
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      scene.meta.diagramKind !== "circuit" &&
+      edge?.semantic.family !== "sequence"
+    ) {
+      const hit = closestPointOnPolyline(edgeLayout.points, world);
+      if (hit !== null) {
+        onAddEdgeWaypoint(edgeId, hit.point);
+        setActiveEndpoint(null);
+        setLinePopover(null);
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+    }
+
     const translate = scene.meta.diagramKind === "circuit"
       ? edgeTranslateSetup(edgeId)
       : null;
@@ -2463,7 +2645,6 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       event.preventDefault();
       return;
     }
-    const edge = scene.edges[edgeId];
     const slide = edge === undefined
       ? null
       : straightSlideInfo(edge, scene, edgeLayout.points, gridSize);
@@ -3203,6 +3384,16 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       return;
     }
 
+    if (interaction.kind === "waypoint-drag") {
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
     if (interaction.kind === "edge-press") {
       if (commit) {
         const edge = scene.edges[interaction.edgeId];
@@ -3435,6 +3626,48 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     lastPointerScreenRef.current = screen;
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setCursorWorld(world);
+
+    if (mobileMode && event.pointerType === "touch") {
+      activeTouchPointersRef.current.set(event.pointerId, screen);
+    }
+
+    const pinch = pinchRef.current;
+    if (pinch !== null) {
+      const [first, second] = [...activeTouchPointersRef.current.values()];
+      if (first !== undefined && second !== undefined) {
+        const center = {
+          x: (first.x + second.x) / 2,
+          y: (first.y + second.y) / 2,
+        };
+        const distance = Math.max(
+          1,
+          Math.hypot(second.x - first.x, second.y - first.y),
+        );
+        const nextZoom = clampZoom(pinch.startZoom * (distance / pinch.startDistance));
+        onViewChangeRef.current(
+          {
+            x: center.x - pinch.startWorld.x * nextZoom,
+            y: center.y - pinch.startWorld.y * nextZoom,
+          },
+          nextZoom,
+        );
+      }
+      event.preventDefault();
+      return;
+    }
+
+    const pendingLongPress = longPressRef.current;
+    if (
+      pendingLongPress !== null &&
+      pendingLongPress.pointerId === event.pointerId &&
+      Math.hypot(
+        screen.x - pendingLongPress.startScreen.x,
+        screen.y - pendingLongPress.startScreen.y,
+      ) > 6
+    ) {
+      clearLongPress();
+    }
+
     if (wireInsertNodeIdRef.current === null && insertTargetRef.current !== null) {
       insertTargetRef.current = null;
       setInsertTarget(null);
@@ -3580,6 +3813,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         world.y - interaction.startWorld.y,
       ) * zoomRef.current;
       interaction.moved = interaction.moved || interaction.pointerTravel > 3;
+      return;
+    }
+
+    if (interaction.kind === "waypoint-drag") {
+      const delta = Math.hypot(
+        world.x - interaction.lastWorld.x,
+        world.y - interaction.lastWorld.y,
+      ) * zoomRef.current;
+      interaction.lastWorld = world;
+      if (!interaction.moved && delta <= 1) return;
+      interaction.moved = true;
+      const snapped = snapEnabled
+        ? { x: snap(world.x, Math.max(1, gridSize)), y: snap(world.y, Math.max(1, gridSize)) }
+        : world;
+      onMoveEdgeWaypoint(interaction.edgeId, interaction.waypointId, snapped);
       return;
     }
 
@@ -4006,6 +4254,19 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       }
     }
     const interaction = interactionRef.current;
+    if (
+      mobileMode &&
+      interaction?.kind === "pan" &&
+      !panMovedRef.current
+    ) {
+      onSelectActivation(null);
+      setActivationDraft(null);
+      setActiveEndpoint(null);
+      setLinePopover(null);
+      onClearNodeFocus();
+      onSelectEdge(null);
+      onSelectNode(null);
+    }
     if (interaction?.kind === "marquee") {
       const svg = svgRef.current;
       if (svg !== null) {
@@ -4156,7 +4417,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         ? edge.labels.find((label) => label.zone === "center")?.textStyle?.color
         : undefined;
       const baseStroke = scene.meta.diagramKind === "circuit"
-        ? scene.theme.shape.stroke
+        ? scene.theme.edge.stroke
         : edge.style.stroke;
       return [
         edgeLayerItem(
@@ -4516,6 +4777,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         ref={svgRef}
         width="100%"
         height="100%"
+        onPointerDownCapture={handleTouchPointerDownCapture}
+        onPointerUpCapture={handleTouchPointerEndCapture}
+        onPointerCancelCapture={handleTouchPointerEndCapture}
         onPointerDown={handleStagePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -4554,7 +4818,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             edges={hitEdges}
             onSelect={handleEdgePointerDown}
             onReroute={onRerouteEdge}
-            allowContextReroute={scene.meta.diagramKind === "circuit"}
+            allowContextReroute={true}
             slideEdgeIds={slideEdgeIds}
           />
           <TerminalHitLayer
@@ -4925,6 +5189,27 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                   onDragStart={(event) => beginReattach(selectedEdgeLayout.edgeId, "target", event)}
                 />
               ) : null}
+              {scene.meta.diagramKind !== "circuit" &&
+              selectedEdge !== undefined &&
+              selectedEdge.semantic.family !== "sequence"
+                ? selectedEdge.routing.waypoints.map((waypoint) => (
+                    <circle
+                      key={waypoint.id}
+                      data-edge-waypoint={waypoint.id}
+                      className="edge-waypoint-handle"
+                      cx={waypoint.point.x}
+                      cy={waypoint.point.y}
+                      r={Math.max(4, 6 / zoom)}
+                      fill={scene.theme.colors.selection}
+                      fillOpacity={0.42}
+                      stroke={scene.theme.colors.selection}
+                      strokeWidth={1.2 / zoom}
+                      style={{ cursor: "grab" }}
+                      onPointerDown={(event) =>
+                        beginWaypointDrag(selectedEdgeLayout.edgeId, waypoint.id, event)}
+                    />
+                  ))
+                : null}
             </>
           ) : null}
           {edgeSlidePreview !== null &&
@@ -5106,6 +5391,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           left={focusMenuPosition.left}
           top={focusMenuPosition.top}
           bounds={viewport}
+          draggable={!mobileMode}
           resetKey={`${focusNode.id}:${nodeFocus.kind}:${
             nodeFocus.kind === "section"
               ? nodeFocus.sectionId
@@ -5149,6 +5435,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           left={terminalPlacement.left}
           top={terminalPlacement.top}
           bounds={viewport}
+          draggable={!mobileMode}
           resetKey={`${selectedEdge.id}:${activeEndpoint}`}
         >
           <EdgeEndpointPopover
@@ -5171,6 +5458,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           left={Math.max(10, Math.min(linePopover.x, Math.max(10, viewport.width - 320)))}
           top={Math.max(10, Math.min(linePopover.y, Math.max(10, viewport.height - 310)))}
           bounds={viewport}
+          draggable={!mobileMode}
           resetKey={`${linePopover.edgeId}:${linePopover.x}:${linePopover.y}`}
         >
           <div className="line-popover">
@@ -5230,6 +5518,48 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         >
           ↷
         </button>
+        {mobileMode ? (
+          <>
+            <button
+              type="button"
+              className="canvas-history-button canvas-action-button danger"
+              onClick={onDeleteSelection}
+              disabled={!canDeleteSelection}
+              title="Delete selection"
+              aria-label="Delete selection"
+            >
+              <svg className="canvas-action-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M3.5 4.5h9M6 4.5V3.2h4v1.3M4.8 4.5l.6 8h5.2l.6-8M6.7 6.5v4M9.3 6.5v4" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="canvas-history-button canvas-action-button"
+              onClick={onCopySelection}
+              disabled={!canCopySelection}
+              title="Copy selection"
+              aria-label="Copy selection"
+            >
+              <svg className="canvas-action-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <rect x="5.2" y="5.2" width="7.3" height="7.3" rx="1.2" />
+                <path d="M10.8 5.2V3.8c0-.6-.5-1.1-1.1-1.1H3.7c-.6 0-1.1.5-1.1 1.1v6c0 .6.5 1.1 1.1 1.1h1.5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="canvas-history-button canvas-action-button"
+              onClick={onPasteSelection}
+              disabled={!canPaste}
+              title="Paste"
+              aria-label="Paste"
+            >
+              <svg className="canvas-action-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M5.8 3.4h4.4v1.7H5.8z" />
+                <path d="M5.8 4.3H4.3v9h7.4v-9H10.2M6.3 8h3.4M6.3 10.5h3.4" />
+              </svg>
+            </button>
+          </>
+        ) : null}
       </div>
 
       {showCompactAddButton ? (
@@ -5273,6 +5603,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
             left={addMenu.left}
             top={addMenu.top}
             bounds={viewport}
+            draggable={!mobileMode}
             resetKey="add-object"
           >
             <AddObjectMenu

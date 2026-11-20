@@ -45,18 +45,46 @@ import {
   type ActionItem,
 } from "./ActionsPanel.tsx";
 import { ProjectImportDialog } from "./ProjectImportDialog.tsx";
+import { SaveFilePromptDialog } from "./SaveFilePromptDialog.tsx";
+import { CETZ_EXPORT_VERSION, serializeSceneToCetz } from "../export/cetz.ts";
+import { loadExportFileBinding } from "./export-file-storage.ts";
+import {
+  defaultExportSettingsForScene,
+  loadSceneExportSettings,
+} from "./typst-export-settings.ts";
+import {
+  ensureWritePermission,
+  loadSaveFileBaseline,
+  loadSaveFileHandle,
+  pickProjectOpenFile,
+  pickProjectSaveFile,
+  storeSaveFileBaseline,
+  storeSaveFileHandle,
+  supportsOpenFilePicker,
+  supportsSaveFilePicker,
+  writeProjectToHandle,
+  type LocalSaveBaseline,
+  type SaveFileHandle,
+} from "./file-system-access.ts";
 import { SceneDialog, type SceneDialogMode } from "./SceneDialog.tsx";
 import { ThemePanel } from "./ThemePanel.tsx";
 import { Toolbar } from "./Toolbar.tsx";
 import { downloadTextFile, readTextFile } from "./file-transfer.ts";
 import { loadStoredGitHubSession, storeGitHubSession } from "./github-session.ts";
 import { loadStoredProject, saveStoredProject } from "./project-storage.ts";
-import { loadUiPreferences, saveUiPreferences } from "./ui-preferences.ts";
+import {
+  loadUiPreferences,
+  saveUiPreferences,
+  type ColorMode,
+} from "./ui-preferences.ts";
 import {
   describeGitHubError,
   getLatestFileCommit,
   getProjectFile,
+  GitHubOAuthError,
   isGitHubConflict,
+  refreshGitHubSession,
+  setGitHubTokenRefresher,
   writeProjectFile,
   type GitHubRemoteFile,
   type GitHubSession,
@@ -83,7 +111,12 @@ import type {
 } from "../model/edges.ts";
 import { portKey } from "../model/edges.ts";
 import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
-import type { StrokePattern, TextStyleOverride, Theme } from "../model/styles.ts";
+import type {
+  ShapeNodeStyle,
+  StrokePattern,
+  TextStyleOverride,
+  Theme,
+} from "../model/styles.ts";
 import type { CanvasTextFocusRequest, CanvasTextTarget } from "../model/text-targets.ts";
 import type { NodeFocus } from "../model/node-focus.ts";
 import type { ImageAsset, CircuitJunctionNode, SceneNode, TableRow, TableSection, Visibility } from "../model/nodes.ts";
@@ -130,6 +163,7 @@ import type { EdgeAttachmentRef, EdgeTargetRef, PortAttachmentRef } from "../mod
 import { createEdgeForDiagram } from "../model/edge-create.ts";
 import {
   addActivation,
+  addEdgeWaypoint,
   addRow,
   addSection,
   commitAutoLayout,
@@ -152,6 +186,7 @@ import {
   setEdgeLabelOffset,
   setEdgePreferredPosition,
   setEdgeLabelTextStyle,
+  setEdgeWaypoint,
   setEndpointLabel,
   setMarker,
   setNodeImage,
@@ -243,12 +278,105 @@ const targetOf = (binding: GitHubBinding): GitHubTarget => ({
 
 type ImportTarget = "scene" | "project";
 type ToastTone = "info" | "error" | "warning" | "progress";
-type GitHubSaveMode = "manual" | "auto";
+type GitHubSaveMode = "manual" | "auto" | "shortcut";
 
 interface ToastAction {
   readonly label: string;
   readonly run: () => void;
 }
+
+const CETZ_IMPORT_STATEMENT = `#import "@preview/cetz:${CETZ_EXPORT_VERSION}": canvas, draw`;
+
+const DARK_CANVAS = "#1e1e1e";
+const darkShapeStyle = (style: ShapeNodeStyle): ShapeNodeStyle => ({
+  ...style,
+  fill: { ...style.fill, color: "#252526" },
+  stroke: { ...style.stroke, color: "#d4d4d4" },
+  text: { ...style.text, color: "#d4d4d4" },
+});
+
+const darkNodeForDisplay = (node: SceneNode): SceneNode => {
+  if (node.kind === "table" || node.kind === "relationAttribute") {
+    return {
+      ...node,
+      style: {
+        ...node.style,
+        fill: { ...node.style.fill, color: "#252526" },
+        stroke: { ...node.style.stroke, color: "#d4d4d4" },
+        text: { ...node.style.text, color: "#d4d4d4" },
+        headerFill: { ...node.style.headerFill, color: "#2d2d30" },
+        headerText: { ...node.style.headerText, color: "#ffffff" },
+        divider: { ...node.style.divider, color: "#3c3c3c" },
+      },
+    };
+  }
+  if ("style" in node && node.style !== undefined) {
+    return {
+      ...node,
+      style: darkShapeStyle(node.style as ShapeNodeStyle),
+    } as SceneNode;
+  }
+  return node;
+};
+
+const recolorLayoutText = (layout: LayoutSnapshot): LayoutSnapshot => {
+  const clone = structuredClone(layout) as LayoutSnapshot;
+  const recolor = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const entry of value) recolor(entry);
+      return;
+    }
+    if (typeof value !== "object" || value === null) return;
+    const record = value as Record<string, unknown>;
+    if (
+      typeof record.text === "string" &&
+      typeof record.style === "object" &&
+      record.style !== null &&
+      "color" in record.style
+    ) {
+      (record.style as { color: string }).color = "#d4d4d4";
+    }
+    for (const entry of Object.values(record)) recolor(entry);
+  };
+  recolor(clone);
+  return clone;
+};
+
+const DARK_THEME = (theme: SceneDocument["theme"]): SceneDocument["theme"] => ({
+  colors: {
+    ...theme.colors,
+    ink: "#cccccc",
+    muted: "#9d9d9d",
+    canvas: DARK_CANVAS,
+    grid: "#2a2d2e",
+    gridMajor: "#3c3c3c",
+    selection: "#0078d4",
+    port: "#4ec9b0",
+    portActive: "#4ec9b0",
+    warning: "#cca700",
+  },
+  table: {
+    ...theme.table,
+    fill: { ...theme.table.fill, color: "#252526" },
+    stroke: { ...theme.table.stroke, color: "#d4d4d4" },
+    text: { ...theme.table.text, color: "#d4d4d4" },
+    headerFill: { ...theme.table.headerFill, color: "#2d2d30" },
+    headerText: { ...theme.table.headerText, color: "#ffffff" },
+    divider: { ...theme.table.divider, color: "#3c3c3c" },
+  },
+  shape: {
+    ...theme.shape,
+    fill: { ...theme.shape.fill, color: "#252526" },
+    stroke: { ...theme.shape.stroke, color: "#d4d4d4" },
+    text: { ...theme.shape.text, color: "#d4d4d4" },
+  },
+  edge: {
+    ...theme.edge,
+    stroke: { ...theme.edge.stroke, color: "#d4d4d4" },
+    labelText: { ...theme.edge.labelText, color: "#d4d4d4" },
+    labelFill: { ...theme.edge.labelFill, color: DARK_CANVAS },
+  },
+});
 
 interface ToastOptions {
   readonly sticky?: boolean;
@@ -263,7 +391,23 @@ interface ToastMessage extends ToastOptions {
 interface PendingProjectImport {
   readonly project: ImportedProject;
   readonly fileName: string;
+  readonly fileHandle?: SaveFileHandle;
 }
+
+interface PendingSaveFilePrompt {
+  readonly handle: SaveFileHandle;
+  readonly fileName: string;
+  readonly baseline: LocalSaveBaseline;
+}
+
+type SaveFileRead =
+  | { readonly kind: "empty" }
+  | { readonly kind: "invalid"; readonly message: string }
+  | {
+      readonly kind: "project";
+      readonly project: ImportedProject;
+      readonly file: File;
+    };
 
 export const App = () => {
   const [initialProject] = useState(() => loadStoredProject());
@@ -292,6 +436,9 @@ export const App = () => {
   const [sceneDialog, setSceneDialog] = useState<SceneDialogMode | null>(null);
   const [pendingProjectImport, setPendingProjectImport] =
     useState<PendingProjectImport | null>(null);
+  const [pendingSaveFilePrompt, setPendingSaveFilePrompt] =
+    useState<PendingSaveFilePrompt | null>(null);
+  const [saveFileName, setSaveFileName] = useState<string | null>(null);
   const [githubSession, setGithubSession] = useState<GitHubSession | null>(() =>
     loadStoredGitHubSession(),
   );
@@ -344,6 +491,10 @@ export const App = () => {
   const [lowPerformanceMode, setLowPerformanceMode] = useState(
     initialUi.lowPerformanceMode,
   );
+  const [colorMode, setColorMode] = useState<ColorMode>(initialUi.colorMode);
+  const [compactLevel3, setCompactLevel3] = useState(
+    () => window.matchMedia("(max-width: 760px)").matches,
+  );
   const [fitNonce, setFitNonce] = useState(0);
   const [fontTick, setFontTick] = useState(0);
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
@@ -351,6 +502,9 @@ export const App = () => {
   const [nodeFocus, setNodeFocus] = useState<NodeFocus | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const clipboardRef = useRef<SceneClipboard | null>(loadSceneClipboard());
+  const [clipboardAvailable, setClipboardAvailable] = useState(
+    clipboardRef.current !== null,
+  );
   const importTargetRef = useRef<ImportTarget>("scene");
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
   const manualSaveRef = useRef<() => void>(() => {});
@@ -358,6 +512,11 @@ export const App = () => {
   const startupCheckRef = useRef<() => void>(() => {});
   const startupCheckedRef = useRef(false);
   const fullLayoutRef = useRef<LayoutSnapshot | null>(null);
+  const saveFileHandleRef = useRef<SaveFileHandle | null>(null);
+  const saveFileBaselineRef = useRef<LocalSaveBaseline | null>(null);
+  const pendingLocalSaveRef = useRef(false);
+  const githubSessionRef = useRef<GitHubSession | null>(githubSession);
+  githubSessionRef.current = githubSession;
 
   const measurer = useMemo(() => new CanvasTextMeasurer(), [fontTick]);
 
@@ -369,9 +528,24 @@ export const App = () => {
   useEffect(
     () => subscribeSceneClipboard((clipboard) => {
       clipboardRef.current = clipboard;
+      setClipboardAvailable(clipboard !== null);
     }),
     [],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const handle = await loadSaveFileHandle();
+      if (cancelled || handle === null) return;
+      saveFileHandleRef.current = handle;
+      saveFileBaselineRef.current = await loadSaveFileBaseline();
+      setSaveFileName(handle.name);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -399,6 +573,7 @@ export const App = () => {
       gridVisible,
       snapEnabled,
       lowPerformanceMode,
+      colorMode,
     });
   }, [
     panelVisible,
@@ -406,7 +581,12 @@ export const App = () => {
     gridVisible,
     snapEnabled,
     lowPerformanceMode,
+    colorMode,
   ]);
+
+  useEffect(() => {
+    document.documentElement.dataset.colorMode = colorMode;
+  }, [colorMode]);
 
   useEffect(() => {
     // Level 2 compacts the top bar; keep the canvas usable by collapsing the
@@ -417,6 +597,23 @@ export const App = () => {
     };
     collapse(query.matches);
     const listener = (event: MediaQueryListEvent): void => collapse(event.matches);
+    query.addEventListener("change", listener);
+    return () => query.removeEventListener("change", listener);
+  }, []);
+
+  useEffect(() => {
+    // Level 3 is the phone layout: panels replace the canvas, so start on the
+    // canvas and never leave both panels open.
+    const query = window.matchMedia("(max-width: 760px)");
+    const update = (matches: boolean): void => {
+      setCompactLevel3(matches);
+      if (matches) {
+        setPanelVisible(false);
+        setCodePanelVisible(false);
+      }
+    };
+    update(query.matches);
+    const listener = (event: MediaQueryListEvent): void => update(event.matches);
     query.addEventListener("change", listener);
     return () => query.removeEventListener("change", listener);
   }, []);
@@ -480,6 +677,35 @@ export const App = () => {
     () => withNodeRotations(withNodeFrames(scene, previewFrames), rotationPreview),
     [scene, previewFrames, rotationPreview],
   );
+  const displayScene = useMemo(() => {
+    if (colorMode === "light") return effectiveScene;
+    return {
+      ...effectiveScene,
+      canvas: { ...effectiveScene.canvas, background: DARK_CANVAS },
+      edges: Object.fromEntries(
+        Object.entries(effectiveScene.edges).map(([id, edge]) => [
+          id,
+          {
+            ...edge,
+            style: {
+              ...edge.style,
+              stroke: {
+                ...edge.style.stroke,
+                color: "#d4d4d4",
+              },
+            },
+          },
+        ]),
+      ),
+      theme: DARK_THEME(effectiveScene.theme),
+      nodes: Object.fromEntries(
+        Object.entries(effectiveScene.nodes).map(([id, node]) => [
+          id,
+          darkNodeForDisplay(node),
+        ]),
+      ),
+    };
+  }, [colorMode, effectiveScene]);
   const layout = useMemo(() => {
     const hasPreview =
       Object.keys(previewFrames).length > 0 || Object.keys(rotationPreview).length > 0;
@@ -562,6 +788,11 @@ export const App = () => {
     previewFrames,
     rotationPreview,
   ]);
+
+  const displayLayout = useMemo(
+    () => (colorMode === "dark" ? recolorLayoutText(layout) : layout),
+    [colorMode, layout],
+  );
   const exportAssets = useMemo(
     () => ({ ...scene.assets, ...assetLibrary }),
     [scene.assets, assetLibrary],
@@ -760,13 +991,13 @@ export const App = () => {
     }
   }, [scene, showToast]);
 
-  const handleExportProject = useCallback(() => {
+  const handleExportProject = useCallback((message?: string) => {
     try {
       downloadTextFile(
         projectFileName(),
         serializeProjectFile(currentScenes, scene.id, assetLibrary),
       );
-      showToast(`Project exported · ${currentScenes.length} scenes.`);
+      showToast(message ?? `Project exported · ${currentScenes.length} scenes.`);
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : "The project could not be exported.",
@@ -775,13 +1006,40 @@ export const App = () => {
     }
   }, [assetLibrary, currentScenes, scene.id, showToast]);
 
+  const beginProjectImport = useCallback(
+    (text: string, fileName: string, fileHandle?: SaveFileHandle): void => {
+      const project = deserializeProjectFile(text);
+      setPendingProjectImport({ project, fileName, fileHandle });
+    },
+    [],
+  );
+
   const requestImport = useCallback((target: ImportTarget) => {
     importTargetRef.current = target;
+    if (target === "project" && supportsOpenFilePicker()) {
+      void (async () => {
+        try {
+          const picked = await pickProjectOpenFile();
+          if (picked === null) return;
+          beginProjectImport(
+            await readTextFile(picked.file),
+            picked.file.name,
+            picked.handle,
+          );
+        } catch (error) {
+          showToast(
+            error instanceof Error ? error.message : "The project file could not be imported.",
+            "error",
+          );
+        }
+      })();
+      return;
+    }
     const input = fileInputRef.current;
     if (input === null) return;
     input.value = "";
     input.click();
-  }, []);
+  }, [beginProjectImport, showToast]);
 
   const handleFileInputChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
@@ -805,8 +1063,7 @@ export const App = () => {
           activateSceneDocument(copy);
           showToast(`Imported scene “${title}”.`);
         } else {
-          const project = deserializeProjectFile(text);
-          setPendingProjectImport({ project, fileName: file.name });
+          beginProjectImport(text, file.name);
         }
       } catch (error) {
         showToast(
@@ -815,7 +1072,7 @@ export const App = () => {
         );
       }
     },
-    [activateSceneDocument, currentScenes, showToast],
+    [activateSceneDocument, beginProjectImport, currentScenes, showToast],
   );
 
   const confirmProjectImport = useCallback(() => {
@@ -839,7 +1096,27 @@ export const App = () => {
       projectDigest(pendingProjectImport.project.scenes, active.id),
     );
     setGithubBinding(null);
+    const importedHandle = pendingProjectImport.fileHandle;
+    const importedFileName = pendingProjectImport.fileName;
     setPendingProjectImport(null);
+    saveFileHandleRef.current = null;
+    saveFileBaselineRef.current = null;
+    setSaveFileName(null);
+    void storeSaveFileHandle(null);
+    void storeSaveFileBaseline(null);
+    if (importedHandle !== undefined) {
+      setPendingSaveFilePrompt({
+        handle: importedHandle,
+        fileName: importedHandle.name || importedFileName,
+        baseline: {
+          digest: projectDigest(
+            pendingProjectImport.project.scenes,
+            pendingProjectImport.project.activeSceneId,
+          ),
+          sceneDigests: sceneDigestMap(pendingProjectImport.project.scenes),
+        },
+      });
+    }
     showToast(
       `Imported project · ${pendingProjectImport.project.scenes.length} scenes.`,
     );
@@ -901,6 +1178,345 @@ export const App = () => {
       activateSceneDocument(active);
     },
     [activateSceneDocument],
+  );
+
+  const baselineForProject = useCallback(
+    (project: ImportedProject): LocalSaveBaseline => ({
+      digest: projectDigest(project.scenes, project.activeSceneId),
+      sceneDigests: sceneDigestMap(project.scenes),
+    }),
+    [],
+  );
+
+  const readProjectFromHandle = useCallback(
+    async (handle: SaveFileHandle): Promise<SaveFileRead> => {
+      if (handle.getFile === undefined) return { kind: "empty" };
+      let file: File;
+      try {
+        file = await handle.getFile();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "NotFoundError") {
+          return { kind: "empty" };
+        }
+        return {
+          kind: "invalid",
+          message: error instanceof Error
+            ? error.message
+            : "The save file could not be read.",
+        };
+      }
+      let text: string;
+      try {
+        text = await file.text();
+      } catch (error) {
+        return {
+          kind: "invalid",
+          message: error instanceof Error
+            ? error.message
+            : "The save file could not be read.",
+        };
+      }
+      if (text.trim().length === 0) return { kind: "empty" };
+      try {
+        return { kind: "project", project: deserializeProjectFile(text), file };
+      } catch (error) {
+        return {
+          kind: "invalid",
+          message: error instanceof Error
+            ? error.message
+            : "The save file does not contain a valid project.",
+        };
+      }
+    },
+    [],
+  );
+
+  const adoptSaveFileHandle = useCallback(
+    async (
+      handle: SaveFileHandle,
+      baseline: LocalSaveBaseline | null,
+    ): Promise<boolean> => {
+      if (!(await ensureWritePermission(handle))) {
+        showToast("Write permission for the selected save file was denied.", "error");
+        return false;
+      }
+      saveFileHandleRef.current = handle;
+      saveFileBaselineRef.current = baseline;
+      setSaveFileName(handle.name);
+      await storeSaveFileHandle(handle);
+      await storeSaveFileBaseline(baseline);
+      return true;
+    },
+    [showToast],
+  );
+
+  const handlePickSaveFile = useCallback(async (): Promise<void> => {
+    try {
+      const handle = await pickProjectSaveFile(projectFileName());
+      if (handle === null) return;
+      const existing = await readProjectFromHandle(handle);
+      if (existing.kind === "invalid") {
+        showToast(`The selected save file is not a valid project: ${existing.message}`, "error");
+        return;
+      }
+      const baseline = existing.kind === "project"
+        ? baselineForProject(existing.project)
+        : null;
+      if (await adoptSaveFileHandle(handle, baseline)) {
+        showToast(`Save file set to ${handle.name}. Ctrl+S will write the project there.`);
+      }
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "The save file could not be selected.",
+        "error",
+      );
+    }
+  }, [adoptSaveFileHandle, baselineForProject, readProjectFromHandle, showToast]);
+
+  const useImportedSaveFile = useCallback(async (): Promise<void> => {
+    const prompt = pendingSaveFilePrompt;
+    setPendingSaveFilePrompt(null);
+    if (prompt === null) return;
+    if (await adoptSaveFileHandle(prompt.handle, prompt.baseline)) {
+      showToast(`Ctrl+S will save to ${prompt.handle.name}.`);
+    }
+  }, [adoptSaveFileHandle, pendingSaveFilePrompt, showToast]);
+
+  const skipImportedSaveFile = useCallback((): void => {
+    setPendingSaveFilePrompt(null);
+  }, []);
+
+  const writeLocalSnapshot = useCallback(
+    async (
+      snapshot: ProjectSnapshot,
+      handle: SaveFileHandle,
+      shortcut = false,
+    ): Promise<boolean> => {
+      try {
+        await writeProjectToHandle(
+          handle,
+          serializeProjectFile(
+            snapshot.scenes,
+            snapshot.activeSceneId,
+            snapshot.assets,
+          ),
+        );
+        const baseline: LocalSaveBaseline = {
+          digest: projectDigest(snapshot.scenes, snapshot.activeSceneId),
+          sceneDigests: sceneDigestMap(snapshot.scenes),
+        };
+        saveFileBaselineRef.current = baseline;
+        await storeSaveFileBaseline(baseline);
+        setBaselineDigest(baseline.digest);
+        showToast(
+          shortcut
+            ? `Ctrl+S · project saved to ${handle.name}.`
+            : `Project saved to ${handle.name}.`,
+        );
+        return true;
+      } catch (error) {
+        showToast(
+          error instanceof Error ? error.message : "The project could not be saved.",
+          "error",
+        );
+        return false;
+      }
+    },
+    [showToast],
+  );
+
+  const saveProjectToLocalFile = useCallback(
+    async (
+      snapshot: ProjectSnapshot,
+      handle: SaveFileHandle,
+      shortcut = false,
+    ): Promise<boolean> => {
+      const existing = await readProjectFromHandle(handle);
+      if (existing.kind === "invalid") {
+        showToast(
+          `The save file changed, but it is not a valid project: ${existing.message}`,
+          "error",
+        );
+        return false;
+      }
+
+      const localDigest = projectDigest(snapshot.scenes, snapshot.activeSceneId);
+      if (existing.kind === "empty") {
+        return writeLocalSnapshot(snapshot, handle, shortcut);
+      }
+
+      const remoteProject = existing.project;
+      const remoteDigest = projectDigest(
+        remoteProject.scenes,
+        remoteProject.activeSceneId,
+      );
+      if (remoteDigest === localDigest) {
+        const baseline = baselineForProject(remoteProject);
+        saveFileBaselineRef.current = baseline;
+        await storeSaveFileBaseline(baseline);
+        setBaselineDigest(localDigest);
+        showToast(
+          shortcut
+            ? `Ctrl+S · project is already saved to ${handle.name}.`
+            : `Project is already saved to ${handle.name}.`,
+        );
+        return true;
+      }
+
+      const baseline = saveFileBaselineRef.current;
+      // The file still contains the copy this tab last wrote: overwrite with
+      // the current local edits.
+      if (baseline !== null && remoteDigest === baseline.digest) {
+        return writeLocalSnapshot(snapshot, handle, shortcut);
+      }
+
+      // The file changed on disk since this tab last read it. Merge exactly
+      // like GitHub does; one-sided scene edits are automatic, overlapping
+      // scene edits go through the local/remote/keep-both picker.
+      const conflicts = conflictingScenes(
+        snapshot.scenes,
+        remoteProject.scenes,
+        baseline?.sceneDigests,
+      );
+      const autoChoices = mergeAutoChoices(
+        snapshot.scenes,
+        remoteProject.scenes,
+        baseline?.sceneDigests,
+      );
+      const mergedAssets = {
+        ...remoteProject.assets,
+        ...(snapshot.assets ?? {}),
+      };
+
+      if (conflicts.length === 0) {
+        const merged = mergeProjectScenes(
+          snapshot.scenes,
+          snapshot.activeSceneId,
+          remoteProject.scenes,
+          remoteProject.activeSceneId,
+          autoChoices,
+        );
+        adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+        return writeLocalSnapshot(
+          {
+            scenes: merged.scenes,
+            activeSceneId: merged.activeSceneId,
+            assets: mergedAssets,
+          },
+          handle,
+          shortcut,
+        );
+      }
+
+      const modified = existing.file.lastModified > 0
+        ? new Date(existing.file.lastModified).toISOString()
+        : new Date().toISOString();
+      askGitHub({
+        title: "Save file changed on disk",
+        message: `${conflicts.length} ${conflicts.length === 1 ? "scene has" : "scenes have"} changes in both the local project and ${handle.name}. Choose local, remote, or keep both for each scene.`,
+        detail: "Local file conflict",
+        options: [],
+        merge: {
+          conflicts,
+          localAuthor:
+            githubSession?.user.name?.trim() ||
+            githubSession?.user.login ||
+            "This tab",
+          localAssets: snapshot.assets ?? {},
+          remoteAssets: remoteProject.assets,
+          remoteCommit: {
+            sha: "disk",
+            message: "Save file changed on disk",
+            authorName: "Disk file",
+            authorEmail: "",
+            date: modified,
+            htmlUrl: "",
+          },
+          confirmLabel: "Merge and save file",
+          onConfirm: async (choices) => {
+            const merged = mergeProjectScenes(
+              snapshot.scenes,
+              snapshot.activeSceneId,
+              remoteProject.scenes,
+              remoteProject.activeSceneId,
+              { ...autoChoices, ...choices },
+            );
+            adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
+            const saved = await writeLocalSnapshot(
+              {
+                scenes: merged.scenes,
+                activeSceneId: merged.activeSceneId,
+                assets: mergedAssets,
+              },
+              handle,
+              shortcut,
+            );
+            if (!saved) {
+              throw new Error("The merged project could not be written to the save file.");
+            }
+            setGithubDecision(null);
+          },
+        },
+      });
+      return false;
+    },
+    [
+      adoptProjectLocally,
+      askGitHub,
+      baselineForProject,
+      githubSession,
+      readProjectFromHandle,
+      showToast,
+      writeLocalSnapshot,
+    ],
+  );
+
+  const writeAutomaticExport = useCallback(
+    async (notify = true, shortcut = false): Promise<void> => {
+    const binding = await loadExportFileBinding(scene.id);
+    if (binding === null || !binding.automatic) return;
+    const settings =
+      loadSceneExportSettings(scene.id) ?? defaultExportSettingsForScene(scene);
+    if (settings.scope !== "diagram") return;
+    try {
+      const result = serializeSceneToCetz({
+        scene,
+        layout,
+        settings,
+        selectedNodeIds: [],
+        selectedEdgeId: null,
+        assets: exportAssets,
+      });
+      await writeProjectToHandle(
+        binding.handle,
+        `${CETZ_IMPORT_STATEMENT}\n\n${result.code}`,
+      );
+      if (notify) {
+        showToast(
+          shortcut
+            ? `Ctrl+S · Typst export updated · ${binding.fileName}.`
+            : `Exported ${binding.fileName}.`,
+        );
+      }
+    } catch (error) {
+      showToast(
+        `Automatic export failed: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+        "error",
+      );
+    }
+  }, [exportAssets, layout, scene, showToast]);
+
+  const writePendingLocalSave = useCallback(
+    async (snapshot: ProjectSnapshot): Promise<void> => {
+      if (!pendingLocalSaveRef.current) return;
+      pendingLocalSaveRef.current = false;
+      const handle = saveFileHandleRef.current;
+      if (handle === null) return;
+      await saveProjectToLocalFile(snapshot, handle);
+    },
+    [saveProjectToLocalFile],
   );
 
   const commitSnapshotToGitHub = useCallback(
@@ -965,13 +1581,16 @@ export const App = () => {
         showToast(
           mode === "auto"
             ? `Auto-saved to GitHub · ${target.path}`
-            : `Saved to GitHub · ${target.owner}/${target.repo} · ${target.path}`,
+            : mode === "shortcut"
+              ? `Ctrl+S · project saved to GitHub · ${target.path}`
+              : `Saved to GitHub · ${target.owner}/${target.repo} · ${target.path}`,
         );
+        await writePendingLocalSave(snapshot);
       } finally {
         setGithubBusy(null);
       }
     },
-    [githubSession, showToast],
+    [githubSession, showToast, writePendingLocalSave],
   );
 
   const resolveSaveMerge = useCallback(
@@ -998,6 +1617,11 @@ export const App = () => {
       const mergedDigest = projectDigest(merged.scenes, merged.activeSceneId);
       if (mergedDigest === remoteDigest) {
         applyRemoteProject(target, remote, remoteProject);
+        await writePendingLocalSave({
+          scenes: merged.scenes,
+          activeSceneId: merged.activeSceneId,
+          assets: mergedAssets,
+        });
         return;
       }
       try {
@@ -1027,7 +1651,13 @@ export const App = () => {
         }
       }
     },
-    [adoptProjectLocally, applyRemoteProject, commitSnapshotToGitHub, showToast],
+    [
+      adoptProjectLocally,
+      applyRemoteProject,
+      commitSnapshotToGitHub,
+      showToast,
+      writePendingLocalSave,
+    ],
   );
 
   const resolveOpenMerge = useCallback(
@@ -1353,71 +1983,9 @@ export const App = () => {
           return;
         }
 
-        if (localDirty) {
-          const sameProject =
-            githubBinding !== null &&
-            githubBinding.owner === target.owner &&
-            githubBinding.repo === target.repo &&
-            githubBinding.branch === target.branch &&
-            githubBinding.path === target.path;
-          const baseline = sameProject ? githubBinding.sceneDigests : undefined;
-          const conflicts = conflictingScenes(
-            snapshot.scenes,
-            project.scenes,
-            baseline,
-          );
-          const autoChoices = mergeAutoChoices(
-            snapshot.scenes,
-            project.scenes,
-            baseline,
-          );
-          if (conflicts.length === 0) {
-            resolveOpenMerge(
-              target,
-              remote,
-              project,
-              snapshot,
-              remoteDigest,
-              autoChoices,
-            );
-            return;
-          }
-          let remoteCommit = remote.commit;
-          try {
-            remoteCommit =
-              (await getLatestFileCommit(githubSession.token, target)) ?? remoteCommit;
-          } catch {
-            // Attribution is optional; the conflict picker still works.
-          }
-          askGitHub({
-            title: "Scenes changed in both copies",
-            message: `The project at ${target.path} and your local project have changes on both sides in ${conflicts.length} ${conflicts.length === 1 ? "scene" : "scenes"}. Choose local, remote, or keep both for each scene.`,
-            detail: githubTargetLabel(target),
-            options: [],
-            merge: {
-              conflicts,
-              localAuthor:
-                githubSession?.user.name?.trim() ||
-                githubSession?.user.login ||
-                "Local editor",
-              localAssets: snapshot.assets ?? {},
-              remoteAssets: project.assets,
-              remoteCommit,
-              confirmLabel: "Open merged project",
-              onConfirm: (choices) =>
-                resolveOpenMerge(
-                  target,
-                  remote,
-                  project,
-                  snapshot,
-                  remoteDigest,
-                  { ...autoChoices, ...choices },
-                ),
-            },
-          });
-          return;
-        }
-
+        // Opening an existing GitHub file replaces the in-session project. It is
+        // a project open, not a merge; unsaved local edits are deliberately not
+        // combined with the picked remote file.
         applyRemoteProject(target, remote, project);
       } finally {
         setGithubBusy(null);
@@ -1431,37 +1999,45 @@ export const App = () => {
       createBlankRemoteProject,
       currentDigest,
       currentScenes,
-      githubBinding,
       githubBusy,
       githubSession,
       assetLibrary,
-      resolveOpenMerge,
       scene.id,
       showToast,
     ],
   );
 
   const saveToGitHub = useCallback(
-    async (mode: GitHubSaveMode = "manual"): Promise<void> => {
+    async (mode: GitHubSaveMode = "manual"): Promise<boolean> => {
       if (githubBinding === null) {
-        if (mode === "manual") {
+        pendingLocalSaveRef.current = false;
+        if (mode !== "auto") {
           setGithubDialogOpen(true);
           showToast("Open a GitHub project before saving.");
         }
-        return;
+        return false;
       }
       if (githubSession === null) {
-        if (mode === "manual") {
+        pendingLocalSaveRef.current = false;
+        if (mode !== "auto") {
           setGithubDialogOpen(true);
           showToast("Sign in to GitHub before saving.", "error");
         }
-        return;
+        return false;
       }
       if (currentDigest === githubBinding.syncedDigest) {
-        if (mode === "manual") showToast("Project is already synced.");
-        return;
+        if (mode !== "auto") showToast("Project is already synced.");
+        await writePendingLocalSave({
+          scenes: currentScenes,
+          activeSceneId: scene.id,
+          assets: assetLibrary,
+        });
+        return true;
       }
-      if (githubBusy !== null) return;
+      if (githubBusy !== null) {
+        pendingLocalSaveRef.current = false;
+        return false;
+      }
 
       const target = targetOf(githubBinding);
       const snapshot: ProjectSnapshot = {
@@ -1512,7 +2088,7 @@ export const App = () => {
                 ],
               });
             }
-            return;
+            return false;
           }
           await commitSnapshotToGitHub(
             target,
@@ -1522,12 +2098,12 @@ export const App = () => {
             "Save project from UMLer",
             mode,
           );
-          return;
+          return true;
         }
 
         if (compareRemoteFile(githubBinding.sha, remote.sha) !== "unchanged") {
           await presentSaveConflict(target, remote, snapshot, digest, mode);
-          return;
+          return false;
         }
 
         await commitSnapshotToGitHub(
@@ -1538,13 +2114,14 @@ export const App = () => {
           "Save project from UMLer",
           mode,
         );
+        return true;
       } catch (error) {
         if (isGitHubConflict(error)) {
           try {
             const latest = await getProjectFile(githubSession.token, target);
             if (latest !== null) {
               await presentSaveConflict(target, latest, snapshot, digest, mode);
-              return;
+              return false;
             }
           } catch (refreshError) {
             const message = describeGitHubError(refreshError);
@@ -1556,7 +2133,8 @@ export const App = () => {
             } else {
               showToast(message, "error");
             }
-            return;
+            pendingLocalSaveRef.current = false;
+            return false;
           }
         }
 
@@ -1569,6 +2147,8 @@ export const App = () => {
         } else {
           showToast(message, "error");
         }
+        pendingLocalSaveRef.current = false;
+        return false;
       } finally {
         setGithubBusy(null);
       }
@@ -1585,6 +2165,7 @@ export const App = () => {
       assetLibrary,
       scene.id,
       showToast,
+      writePendingLocalSave,
     ],
   );
 
@@ -1738,9 +2319,43 @@ export const App = () => {
   );
 
   const handleGitHubSession = useCallback((next: GitHubSession | null) => {
+    githubSessionRef.current = next;
     setGithubSession(next);
     storeGitHubSession(next);
   }, []);
+
+  useEffect(() => {
+    setGitHubTokenRefresher(async (rejectedToken) => {
+      const current = githubSessionRef.current;
+      if (current === null) return null;
+      if (current.token !== rejectedToken) return current.token;
+      if (current.refreshToken === undefined) return null;
+      try {
+        const refreshed = await refreshGitHubSession(current);
+        handleGitHubSession(refreshed);
+        showToast("GitHub sign-in renewed.");
+        return refreshed.token;
+      } catch (error) {
+        if (
+          error instanceof GitHubOAuthError &&
+          (error.code === "bad_refresh_token" ||
+            error.code === "expired_token" ||
+            error.code === "incorrect_client_credentials")
+        ) {
+          // Another tab may have rotated the shared refresh token first.
+          const latest = loadStoredGitHubSession();
+          if (latest !== null && latest.token !== rejectedToken) {
+            handleGitHubSession(latest);
+            return latest.token;
+          }
+          handleGitHubSession(null);
+          showToast("GitHub sign-in expired. Sign in again.", "warning");
+        }
+        return null;
+      }
+    });
+    return () => setGitHubTokenRefresher(null);
+  }, [handleGitHubSession, showToast]);
 
   const handleUndo = useCallback(() => {
     undo();
@@ -1776,16 +2391,62 @@ export const App = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleRedo, handleUndo]);
 
+  const handleSaveShortcut = useCallback(async (): Promise<void> => {
+    const snapshot: ProjectSnapshot = {
+      scenes: currentScenes,
+      activeSceneId: scene.id,
+      assets: assetLibrary,
+    };
+
+    if (githubBinding !== null && githubSession !== null) {
+      if (saveFileHandleRef.current !== null) pendingLocalSaveRef.current = true;
+      if (await saveToGitHub("shortcut")) await writeAutomaticExport(false);
+      return;
+    }
+
+    const fileSystemAvailable = supportsSaveFilePicker();
+    const handle = fileSystemAvailable ? saveFileHandleRef.current : null;
+    if (handle === null) {
+      // A selected export target is the closest thing to a save destination;
+      // do not also download the project in that case.
+      const exportBinding = fileSystemAvailable
+        ? await loadExportFileBinding(scene.id)
+        : null;
+      if (exportBinding !== null) {
+        await writeAutomaticExport(true, true);
+        return;
+      }
+      // Picking a save target is an explicit File-menu action; Ctrl+S without
+      // either target keeps the familiar export/download fallback.
+      handleExportProject("Ctrl+S · no save target selected · project downloaded.");
+      await writeAutomaticExport(false);
+      return;
+    }
+    if (await saveProjectToLocalFile(snapshot, handle, true)) {
+      await writeAutomaticExport(false);
+    }
+  }, [
+    assetLibrary,
+    currentScenes,
+    githubBinding,
+    githubSession,
+    handleExportProject,
+    saveProjectToLocalFile,
+    saveToGitHub,
+    scene.id,
+    writeAutomaticExport,
+  ]);
+
   useEffect(() => {
-    const handleSaveShortcut = (event: KeyboardEvent): void => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
       if (event.key.toLowerCase() !== "s") return;
       event.preventDefault();
-      void saveToGitHub();
+      void handleSaveShortcut();
     };
-    window.addEventListener("keydown", handleSaveShortcut);
-    return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, [saveToGitHub]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSaveShortcut]);
 
   const changeGridSize = useCallback((size: number) => {
     setScene((current) => ({
@@ -2390,6 +3051,73 @@ export const App = () => {
     setLayoutNote("Object and its connectors deleted.");
   }, [selectedNodeIds]);
 
+  const handleDeleteSelection = useCallback(() => {
+    if (selectedActivation !== null) {
+      setScene((current) =>
+        deleteActivation(
+          current,
+          asNodeId(selectedActivation.nodeId),
+          selectedActivation.activationId,
+        ),
+      );
+      setSelectedActivation(null);
+      setLayoutNote("Activation bar deleted.");
+      return;
+    }
+    if (selectedEdgeIds.length > 0) {
+      const edgeIds = selectedEdgeIds;
+      setScene((current) =>
+        edgeIds.reduce(
+          (next, edgeId) => deleteEdge(next, asEdgeId(edgeId)),
+          current,
+        ),
+      );
+      setSelectedEdgeIds([]);
+      setNodeFocus(null);
+      setLayoutNote(
+        edgeIds.length === 1 ? "Connector deleted." : `${edgeIds.length} connectors deleted.`,
+      );
+      return;
+    }
+    const nodeIds = selectedNodeIds.length > 0
+      ? selectedNodeIds
+      : selectedNodeId === null
+        ? []
+        : [selectedNodeId];
+    if (nodeIds.length === 0) return;
+    const singleId = nodeIds.length === 1 ? nodeIds[0] : undefined;
+    const single = singleId === undefined ? undefined : scene.nodes[singleId];
+    if (single?.kind === "circuitJunction") {
+      const merge = mergeCircuitJunctionResult(scene, single.id);
+      if (merge !== null) {
+        setScene(merge.scene);
+        selectNodes([], null);
+        setSelectedEdgeId(merge.edgeId);
+        setNodeFocus(null);
+        setLayoutNote("Junction removed; wires merged and the new wire selected.");
+        return;
+      }
+    }
+    setScene((current) =>
+      deleteNodes(current, nodeIds.map((nodeId) => asNodeId(nodeId))),
+    );
+    selectNodes([], null);
+    setSelectedEdgeId(null);
+    setNodeFocus(null);
+    setLayoutNote(
+      nodeIds.length === 1
+        ? "Object and its connectors deleted."
+        : `${nodeIds.length} objects and their connectors deleted.`,
+    );
+  }, [
+    scene,
+    selectNodes,
+    selectedActivation,
+    selectedEdgeIds,
+    selectedNodeId,
+    selectedNodeIds,
+  ]);
+
   const handleMergeJunction = useCallback((nodeId: string) => {
     setScene((current) => mergeCircuitJunction(current, asNodeId(nodeId)));
     setSelectedNodeId(null);
@@ -2418,6 +3146,7 @@ export const App = () => {
       return;
     }
     clipboardRef.current = payload;
+    setClipboardAvailable(true);
     const shared = storeSceneClipboard(payload);
     const connectors = payload.edges.length === 0
       ? ""
@@ -2443,6 +3172,7 @@ export const App = () => {
       return;
     }
     clipboardRef.current = payload;
+    setClipboardAvailable(true);
     const shared = storeSceneClipboard(payload);
     setScene((current) =>
       deleteNodes(current, cutIds.map((nodeId) => asNodeId(nodeId))),
@@ -2462,6 +3192,7 @@ export const App = () => {
       return;
     }
     clipboardRef.current = clipboard;
+    setClipboardAvailable(true);
     // Paste under the pointer when it is over the canvas; otherwise fall back
     // to the centre of the canvas viewport.
     const pastePoint: Point = canvasStageRef.current?.getPointerWorld() ?? {
@@ -3148,6 +3879,21 @@ export const App = () => {
     setLayoutNote("A* reroute requested.");
   }, [measurer, scene, setSelectedEdgeId]);
 
+  const handleAddEdgeWaypoint = useCallback((edgeId: string, point: Point) => {
+    setScene((current) => addEdgeWaypoint(current, asEdgeId(edgeId), point));
+    setLayoutNote("Routing point added.");
+  }, []);
+
+  const handleMoveEdgeWaypoint = useCallback((
+    edgeId: string,
+    waypointId: string,
+    point: Point,
+  ) => {
+    setScene((current) =>
+      setEdgeWaypoint(current, asEdgeId(edgeId), waypointId, point),
+    );
+  }, []);
+
   const handleAddJunctionAtWire = useCallback((edgeId: string, at: Point) => {
     const result = addCircuitJunctionToWire(scene, asEdgeId(edgeId), at);
     if (result === null) {
@@ -3481,10 +4227,37 @@ export const App = () => {
     [camera, viewport.height, viewport.width, zoom],
   );
 
+  const resetZoom = useCallback(() => {
+    const center = { x: viewport.width / 2, y: viewport.height / 2 };
+    const worldCenter = {
+      x: (center.x - camera.x) / zoom,
+      y: (center.y - camera.y) / zoom,
+    };
+    setCamera({
+      x: center.x - worldCenter.x,
+      y: center.y - worldCenter.y,
+    });
+    setZoom(1);
+  }, [camera, viewport.height, viewport.width, zoom]);
+
   const handleViewChange = useCallback((nextCamera: Camera, nextZoom: number) => {
     setCamera(nextCamera);
     setZoom(nextZoom);
   }, []);
+
+  const cycleColorMode = useCallback(() => {
+    setColorMode((current) => (current === "light" ? "dark" : "light"));
+  }, []);
+
+  const toggleLayoutPanel = useCallback(() => {
+    setPanelVisible((value) => !value);
+    if (compactLevel3) setCodePanelVisible(false);
+  }, [compactLevel3]);
+
+  const toggleCodePanel = useCallback(() => {
+    setCodePanelVisible((value) => !value);
+    if (compactLevel3) setPanelVisible(false);
+  }, [compactLevel3]);
 
   return (
     <div className="app-shell">
@@ -3495,9 +4268,9 @@ export const App = () => {
         canDeleteScene={scenes.length > 1}
         onSceneChange={loadScene}
         panelVisible={panelVisible}
-        onTogglePanel={() => setPanelVisible((value) => !value)}
+        onTogglePanel={toggleLayoutPanel}
         codePanelVisible={codePanelVisible}
-        onToggleCodePanel={() => setCodePanelVisible((value) => !value)}
+        onToggleCodePanel={toggleCodePanel}
         onExportScene={handleExportScene}
         onImportScene={() => requestImport("scene")}
         onExportProject={handleExportProject}
@@ -3512,6 +4285,9 @@ export const App = () => {
         canSaveToGitHub={githubBinding !== null && githubBusy === null}
         onPurgeUnusedImages={handlePurgeUnusedImages}
         unusedImageCount={unusedImageCount}
+        canPickSaveFile={supportsSaveFilePicker()}
+        saveFileName={saveFileName}
+        onPickSaveFile={() => void handlePickSaveFile()}
         zoom={zoom}
         gridVisible={gridVisible}
         snapEnabled={snapEnabled}
@@ -3519,9 +4295,12 @@ export const App = () => {
         onZoomIn={() => zoomBy(1.2)}
         onZoomOut={() => zoomBy(1 / 1.2)}
         onFit={() => setFitNonce((value) => value + 1)}
+        onResetZoom={resetZoom}
         onToggleGrid={() => setGridVisible((value) => !value)}
         onToggleSnap={() => setSnapEnabled((value) => !value)}
         onGridSizeChange={changeGridSize}
+        colorMode={colorMode}
+        onCycleColorMode={cycleColorMode}
       />
 
       <main
@@ -3529,6 +4308,9 @@ export const App = () => {
           "workspace",
           panelVisible ? "" : "panel-hidden",
           codePanelVisible ? "code-open" : "",
+          compactLevel3 && (panelVisible || codePanelVisible)
+            ? "mobile-panel-open"
+            : "",
         ]
           .filter((item) => item.length > 0)
           .join(" ")}
@@ -3602,8 +4384,8 @@ export const App = () => {
 
         <CanvasStage
           ref={canvasStageRef}
-          scene={effectiveScene}
-          layout={layout}
+          scene={displayScene}
+          layout={displayLayout}
           camera={camera}
           zoom={zoom}
           gridVisible={gridVisible}
@@ -3611,10 +4393,23 @@ export const App = () => {
           majorEvery={scene.canvas.grid.majorEvery}
           snapEnabled={snapEnabled}
           showCompactAddButton={!panelVisible}
+          mobileMode={compactLevel3}
           canUndo={canUndo}
           canRedo={canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
+          canDeleteSelection={
+            selectedNodeIds.length > 0 ||
+            selectedEdgeIds.length > 0 ||
+            selectedActivation !== null
+          }
+          canCopySelection={
+            selectedNodeIds.length > 0 || selectedEdgeIds.length > 0
+          }
+          canPaste={clipboardAvailable}
+          onDeleteSelection={handleDeleteSelection}
+          onCopySelection={handleCopySelection}
+          onPasteSelection={handlePasteSelection}
           imageAssets={assetLibrary}
           onDropImageFiles={(files, world) => {
             void handleDropImageFiles(files, world);
@@ -3642,6 +4437,8 @@ export const App = () => {
           onSetStrokeWidth={handleSetStrokeWidth}
           onSetRoutingMode={handleSetRoutingMode}
           onRerouteEdge={handleReroute}
+          onAddEdgeWaypoint={handleAddEdgeWaypoint}
+          onMoveEdgeWaypoint={handleMoveEdgeWaypoint}
           onAddJunctionAtWire={handleAddJunctionAtWire}
           onBeginShiftDrag={beginShiftDrag}
           onCommitShiftDrag={commitShiftDrag}
@@ -3702,17 +4499,20 @@ export const App = () => {
       </main>
 
       <footer className="statusbar">
-        <span>
-          <strong>{scene.meta.title}</strong> · {scene.meta.diagramKind}
+        <span className="status-scene">
+          <strong>{scene.meta.title}</strong>
+          <span className="status-kind"> · {scene.meta.diagramKind}</span>
         </span>
-        <span>
+        <span className="status-counts">
           revision {scene.revision} · {Object.keys(scene.nodes).length} nodes · {Object.keys(scene.edges).length} edges
         </span>
         <span className="status-project">
           {githubBinding === null ? (
             <>
               <span className={`status-dot ${projectDirty ? "dirty" : ""}`} />
-              Local project{projectDirty ? " · modified" : ""}
+              <span className="status-project-label">
+                Local project{projectDirty ? " · modified" : ""}
+              </span>
             </>
           ) : (
             <>
@@ -3762,6 +4562,14 @@ export const App = () => {
         />
       ) : null}
 
+      {pendingSaveFilePrompt !== null ? (
+        <SaveFilePromptDialog
+          fileName={pendingSaveFilePrompt.fileName}
+          onUse={() => void useImportedSaveFile()}
+          onSkip={skipImportedSaveFile}
+        />
+      ) : null}
+
       {githubDialogOpen ? (
         <GitHubProjectDialog
           session={githubSession}
@@ -3775,7 +4583,10 @@ export const App = () => {
       {githubDecision !== null ? (
         <GitHubDecisionDialog
           decision={githubDecision}
-          onDismiss={() => setGithubDecision(null)}
+          onDismiss={() => {
+            pendingLocalSaveRef.current = false;
+            setGithubDecision(null);
+          }}
           onChoose={chooseGitHubDecision}
         />
       ) : null}

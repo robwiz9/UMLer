@@ -150,10 +150,22 @@ assert(
 storeGitHubSession({
   token: "token",
   user: { login: "octocat", name: "Octo Cat", avatarUrl: "", htmlUrl: "" },
+  refreshToken: "refresh-token",
+  accessTokenExpiresAt: "2026-11-21T00:00:00.000Z",
+  refreshTokenExpiresAt: "2027-05-21T00:00:00.000Z",
 });
 const session = loadStoredGitHubSession();
 assert(session?.token === "token", "session token should restore across tabs");
 assert(session?.user.login === "octocat", "session user should restore");
+assert(session?.refreshToken === "refresh-token", "refresh token should restore");
+assert(
+  session?.accessTokenExpiresAt === "2026-11-21T00:00:00.000Z",
+  "access-token expiry should restore",
+);
+assert(
+  session?.refreshTokenExpiresAt === "2027-05-21T00:00:00.000Z",
+  "refresh-token expiry should restore",
+);
 assert(
   localStorage.getItem("umler.github.session") !== null,
   "the shared session should persist in local storage",
@@ -179,6 +191,7 @@ saveUiPreferences({
   gridVisible: false,
   snapEnabled: false,
   lowPerformanceMode: true,
+  colorMode: "dark",
 });
 assert(loadUiPreferences().panelVisible === false, "layout panel visibility should restore");
 assert(loadUiPreferences().codePanelVisible === true, "Typst panel visibility should restore");
@@ -187,6 +200,10 @@ assert(loadUiPreferences().snapEnabled === false, "snap setting should restore")
 assert(
   loadUiPreferences().lowPerformanceMode === true,
   "low performance mode should restore",
+);
+assert(
+  loadUiPreferences().colorMode === "dark",
+  "color mode should restore",
 );
 assert(
   parseUiPreferences('{"panelVisible":"yes","gridVisible":true}').panelVisible === true,

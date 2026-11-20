@@ -54,6 +54,15 @@ export const loadStoredGitHubSession = (): GitHubSession | null => {
         htmlUrl:
           typeof payload.user.htmlUrl === "string" ? payload.user.htmlUrl : "",
       },
+      ...(typeof payload.refreshToken === "string" && payload.refreshToken.length > 0
+        ? { refreshToken: payload.refreshToken }
+        : {}),
+      ...(typeof payload.accessTokenExpiresAt === "string"
+        ? { accessTokenExpiresAt: payload.accessTokenExpiresAt }
+        : {}),
+      ...(typeof payload.refreshTokenExpiresAt === "string"
+        ? { refreshTokenExpiresAt: payload.refreshTokenExpiresAt }
+        : {}),
     };
   } catch {
     return null;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { DiagramKind, SceneDocument } from "../model/scene.ts";
 import { DIAGRAM_KIND_LABELS } from "../model/scene.ts";
 import { AppMenuBar } from "./AppMenuBar.tsx";
+import type { ColorMode } from "./ui-preferences.ts";
 
 interface ToolbarProps {
   readonly scene: SceneDocument;
@@ -27,6 +28,9 @@ interface ToolbarProps {
   readonly canSaveToGitHub: boolean;
   readonly onPurgeUnusedImages: () => void;
   readonly unusedImageCount: number;
+  readonly canPickSaveFile: boolean;
+  readonly saveFileName: string | null;
+  readonly onPickSaveFile: () => void;
   readonly zoom: number;
   readonly gridVisible: boolean;
   readonly snapEnabled: boolean;
@@ -34,10 +38,30 @@ interface ToolbarProps {
   readonly onZoomIn: () => void;
   readonly onZoomOut: () => void;
   readonly onFit: () => void;
+  readonly onResetZoom: () => void;
   readonly onToggleGrid: () => void;
   readonly onToggleSnap: () => void;
   readonly onGridSizeChange: (size: number) => void;
+  readonly colorMode: ColorMode;
+  readonly onCycleColorMode: () => void;
 }
+
+const ColorModeIcon = ({ mode }: { readonly mode: ColorMode }) => (
+  <svg className="color-mode-icon" viewBox="0 0 18 18" aria-hidden="true">
+    {mode === "light" ? (
+      <>
+        <circle cx="9" cy="9" r="3.1" fill="currentColor" />
+        <path d="M9 1.8v2M9 14.2v2M1.8 9h2M14.2 9h2M3.8 3.8l1.4 1.4M12.8 12.8l1.4 1.4M14.2 3.8l-1.4 1.4M5.2 12.8l-1.4 1.4" />
+      </>
+    ) : (
+      <path
+        d="M13.8 11.9A6.2 6.2 0 0 1 6.1 4.2 6.2 6.2 0 1 0 13.8 11.9Z"
+        fill="currentColor"
+        stroke="none"
+      />
+    )}
+  </svg>
+);
 
 export const Toolbar = ({
   scene,
@@ -63,6 +87,9 @@ export const Toolbar = ({
   canSaveToGitHub,
   onPurgeUnusedImages,
   unusedImageCount,
+  canPickSaveFile,
+  saveFileName,
+  onPickSaveFile,
   zoom,
   gridVisible,
   snapEnabled,
@@ -70,9 +97,12 @@ export const Toolbar = ({
   onZoomIn,
   onZoomOut,
   onFit,
+  onResetZoom,
   onToggleGrid,
   onToggleSnap,
   onGridSizeChange,
+  colorMode,
+  onCycleColorMode,
 }: ToolbarProps) => {
   const [compactOpen, setCompactOpen] = useState(false);
   const compactRef = useRef<HTMLDivElement | null>(null);
@@ -119,6 +149,9 @@ export const Toolbar = ({
       onSaveToGitHub={onSaveToGitHub}
       onPurgeUnusedImages={onPurgeUnusedImages}
       unusedImageCount={unusedImageCount}
+      canPickSaveFile={canPickSaveFile}
+      saveFileName={saveFileName}
+      onPickSaveFile={onPickSaveFile}
     />
 
     <div className="topbar-group scene-picker">
@@ -251,7 +284,10 @@ export const Toolbar = ({
             role="menuitemcheckbox"
             aria-checked={panelVisible}
             className={panelVisible ? "on" : ""}
-            onClick={onTogglePanel}
+            onClick={() => {
+              onTogglePanel();
+              setCompactOpen(false);
+            }}
           >
             <span className="toolbar-menu-icon" aria-hidden="true">◧</span>
             <span>Layout panel</span>
@@ -262,12 +298,68 @@ export const Toolbar = ({
             role="menuitemcheckbox"
             aria-checked={codePanelVisible}
             className={codePanelVisible ? "on" : ""}
-            onClick={onToggleCodePanel}
+            onClick={() => {
+              onToggleCodePanel();
+              setCompactOpen(false);
+            }}
           >
             <span className="toolbar-menu-icon" aria-hidden="true">{"</>"}</span>
             <span>Typst panel</span>
             <span className="toolbar-menu-check">{codePanelVisible ? "✓" : ""}</span>
           </button>
+          <div className="toolbar-level3-only">
+            <div className="toolbar-menu-divider" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onZoomOut();
+                setCompactOpen(false);
+              }}
+            >
+              <span className="toolbar-menu-icon" aria-hidden="true">−</span>
+              <span>Zoom out</span>
+              <span className="toolbar-menu-check" />
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onZoomIn();
+                setCompactOpen(false);
+              }}
+            >
+              <span className="toolbar-menu-icon" aria-hidden="true">+</span>
+              <span>Zoom in</span>
+              <span className="toolbar-menu-check">{Math.round(zoom * 100)}%</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onResetZoom();
+                setCompactOpen(false);
+              }}
+            >
+              <span className="toolbar-menu-icon" aria-hidden="true">1:1</span>
+              <span>Reset zoom</span>
+              <span className="toolbar-menu-check">100%</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onCycleColorMode();
+                setCompactOpen(false);
+              }}
+            >
+              <span className="toolbar-menu-icon" aria-hidden="true">
+                <ColorModeIcon mode={colorMode} />
+              </span>
+              <span>{colorMode === "light" ? "Dark mode" : "Light mode"}</span>
+              <span className="toolbar-menu-check" />
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -282,6 +374,15 @@ export const Toolbar = ({
       </button>
       <button type="button" className="fit-button" onClick={onFit}>
         Fit
+      </button>
+      <button
+        type="button"
+        className={`icon-button color-mode-button ${colorMode}`}
+        onClick={onCycleColorMode}
+        title={colorMode === "light" ? "Theme: White · switch to Dark" : "Theme: Dark · switch to White"}
+        aria-label={`Color theme: ${colorMode}. Switch to ${colorMode === "light" ? "Dark" : "White"}`}
+      >
+        <ColorModeIcon mode={colorMode} />
       </button>
     </div>
   </header>

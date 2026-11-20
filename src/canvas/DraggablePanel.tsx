@@ -12,6 +12,7 @@ interface DraggablePanelProps {
   readonly bounds: { readonly width: number; readonly height: number };
   readonly className: string;
   readonly resetKey: string;
+  readonly draggable?: boolean;
   readonly children: ReactNode;
 }
 
@@ -37,6 +38,7 @@ export const DraggablePanel = ({
   bounds,
   className,
   resetKey,
+  draggable = true,
   children,
 }: DraggablePanelProps) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -49,7 +51,7 @@ export const DraggablePanel = ({
   }, [left, top, resetKey]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
-    if (event.button !== 0) return;
+    if (!draggable || event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest(".popover-head") === null) return;

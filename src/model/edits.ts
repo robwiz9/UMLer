@@ -28,7 +28,7 @@ import type {
   EdgeRoutingMode,
   SceneEdge,
 } from "./edges.ts";
-import { asActivationId, asLabelId, asRowId, asSectionId, newId, type ActivationId, type EdgeId, type LabelId, type NodeId, type RowId, type SectionId } from "./ids.ts";
+import { asActivationId, asLabelId, asRowId, asSectionId, asWaypointId, newId, type ActivationId, type EdgeId, type LabelId, type NodeId, type RowId, type SectionId } from "./ids.ts";
 import type { EdgeEnd, EndpointMarker } from "./markers.ts";
 import type { StrokePattern, TextStyleOverride, Theme } from "./styles.ts";
 
@@ -815,6 +815,42 @@ export const setRoutingMode = (
           ...edge,
           routing: { ...edge.routing, mode },
         });
+
+export const addEdgeWaypoint = (
+  scene: SceneDocument,
+  edgeId: EdgeId,
+  point: { readonly x: number; readonly y: number },
+): SceneDocument =>
+  updateEdge(scene, edgeId, (edge) => ({
+    ...edge,
+    routing: {
+      ...edge.routing,
+      waypoints: [
+        ...edge.routing.waypoints,
+        {
+          id: asWaypointId(newId("waypoint")),
+          point,
+          locked: true,
+        },
+      ],
+    },
+  }));
+
+export const setEdgeWaypoint = (
+  scene: SceneDocument,
+  edgeId: EdgeId,
+  waypointId: string,
+  point: { readonly x: number; readonly y: number },
+): SceneDocument =>
+  updateEdge(scene, edgeId, (edge) => ({
+    ...edge,
+    routing: {
+      ...edge.routing,
+      waypoints: edge.routing.waypoints.map((waypoint) =>
+        waypoint.id === waypointId ? { ...waypoint, point, locked: true } : waypoint,
+      ),
+    },
+  }));
 
 export const rerouteEdge = (scene: SceneDocument, edgeId: EdgeId): SceneDocument =>
   updateEdge(scene, edgeId, (edge) =>

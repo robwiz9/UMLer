@@ -71,10 +71,13 @@
   --panel-alt: #f4f1ea;
   --canvas: #fbfaf7;
   --accent: #2563eb;
+  --accent-hover: #225bd6;
   --teal: #0f766e;
   --amber: #b45309;
   --shadow: 0 1px 2px rgba(31, 41, 51, 0.06), 0 12px 30px rgba(31, 41, 51, 0.06);
   --ui-font: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --circuit-symbol-fill: #ffffff;
+  --circuit-symbol-stroke: #334155;
   color-scheme: light;
 }
 
@@ -297,16 +300,22 @@ button {
 }
 
 .toolbar-menu-icon {
-  width: 18px;
+  width: 22px;
+  min-width: 22px;
   flex: 0 0 auto;
   color: var(--muted);
   text-align: center;
+  white-space: nowrap;
 }
 
 .toolbar-menu-check {
   margin-left: auto;
   color: var(--accent);
   font-size: 11px;
+}
+
+.toolbar-level3-only {
+  display: none;
 }
 
 .toolbar-menu-divider {
@@ -1929,7 +1938,7 @@ button {
 }
 
 .panel-add-button:hover {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .panel-add-button .add-glyph {
@@ -1975,7 +1984,62 @@ button {
 .canvas-history-button:disabled {
   background: rgba(255, 255, 255, 0.42);
   color: var(--muted);
+  cursor: default;
   opacity: 0.5;
+}
+
+.canvas-history-button .canvas-action-icon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.05;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.canvas-history-button.canvas-action-button:not(:disabled) {
+  background: rgba(255, 255, 255, 0.72);
+  color: #2563eb;
+  opacity: 1;
+}
+
+.canvas-history-button.canvas-action-button:not(:disabled):hover {
+  background: #eff6ff;
+}
+
+.canvas-history-button.danger:not(:disabled) {
+  border-color: #dc2626;
+  background: rgba(255, 255, 255, 0.72);
+  color: #dc2626;
+  opacity: 1;
+}
+
+.canvas-history-button.danger:not(:disabled):hover {
+  background: #fef2f2;
+}
+
+.canvas-history-button.canvas-action-button {
+  border: 1px solid transparent;
+}
+
+:root[data-color-mode="dark"] .canvas-history-button.canvas-action-button:not(:disabled) {
+  background: #252526;
+  color: #4daafc;
+}
+
+:root[data-color-mode="dark"] .canvas-history-button.canvas-action-button:not(:disabled):hover {
+  background: #04395e;
+}
+
+:root[data-color-mode="dark"] .canvas-history-button.danger:not(:disabled) {
+  border-color: #f48771;
+  background: #252526;
+  color: #f48771;
+}
+
+:root[data-color-mode="dark"] .canvas-history-button.danger:not(:disabled):hover {
+  background: #3a1d1d;
 }
 
 .canvas-add-compact {
@@ -2176,10 +2240,14 @@ button {
 }
 
 .menu-shortcut {
+  max-width: 130px;
+  overflow: hidden;
   color: #9a948b;
   font-size: 9.5px;
   font-weight: 500;
   letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .menu-divider {
@@ -2370,8 +2438,18 @@ button {
 }
 
 .gh-sign-in {
+  display: inline-flex;
   width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   margin: 10px 0 4px;
+}
+
+.gh-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
 }
 
 .gh-device {
@@ -3864,9 +3942,9 @@ button {
   gap: 5px;
   height: 26px;
   padding: 0 9px;
-  border: 1px solid #1e40af;
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #1d4ed8;
+  background: var(--accent);
   color: #ffffff;
   font-size: 11px;
   font-weight: 600;
@@ -3878,7 +3956,18 @@ button {
 }
 
 .code-download-button:hover {
-  background: #1e40af;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.code-download-button.secondary {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.code-download-button.secondary:hover {
+  background: var(--panel-alt);
 }
 
 .code-download-button.saved {
@@ -3895,6 +3984,64 @@ button {
   justify-content: center;
   width: 100%;
   height: 32px;
+}
+
+.code-export-file-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.code-export-file-row .code-download-wide {
+  flex: 1;
+}
+
+.code-export-pick {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.code-export-pick:hover {
+  background: var(--panel-alt);
+  color: var(--ink);
+}
+
+.code-export-pick .code-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.code-auto-export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 7px 0;
+  color: var(--ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.code-auto-export input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.code-auto-export em {
+  color: var(--muted);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 400;
 }
 
 .code-export-hint {
@@ -4344,6 +4491,11 @@ button {
   text-align: left;
 }
 
+.oauth-settings-button{
+  margin-left: 1em;
+}
+
+
 .circuit-annotation-row:hover {
   border-color: #bfdbfe;
   background: #f6faff;
@@ -4466,6 +4618,479 @@ button {
   line-height: 1;
 }
 
+.color-mode-button {
+  padding: 0;
+}
+
+.color-mode-icon {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Three-state color mode -------------------------------------------------- */
+:root[data-color-mode="semi-dark"],
+:root[data-color-mode="dark"] {
+  --ink: #cccccc;
+  --muted: #9d9d9d;
+  --line: #3c3c3c;
+  --paper: #1f1f1f;
+  --panel: #252526;
+  --panel-alt: #181818;
+  --canvas: #1f1f1f;
+  --accent: #0078d4;
+  --teal: #4ec9b0;
+  --amber: #cca700;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 30px rgba(0, 0, 0, 0.3);
+  --circuit-symbol-fill: #252526;
+  --circuit-symbol-stroke: #d4d4d4;
+  color-scheme: dark;
+}
+
+:root[data-color-mode="semi-dark"] body,
+:root[data-color-mode="dark"] body {
+  background: var(--panel-alt);
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .topbar,
+:root[data-color-mode="dark"] .topbar {
+  background: rgba(31, 31, 31, 0.97);
+  border-bottom-color: #2b2b2b;
+}
+
+:root[data-color-mode="semi-dark"] .brand-mark,
+:root[data-color-mode="dark"] .brand-mark {
+  background: #0078d4;
+  color: #ffffff;
+}
+
+:root[data-color-mode="semi-dark"] .statusbar,
+:root[data-color-mode="dark"] .statusbar {
+  background: #181818;
+  border-top-color: #2b2b2b;
+}
+
+:root[data-color-mode="semi-dark"] :is(
+  .menu-dropdown,
+  .toolbar-compact-menu,
+  .dialog,
+  .node-focus-menu,
+  .line-popover,
+  .endpoint-popover,
+  .add-object-menu,
+  .gh-device-code,
+  .gh-location,
+  .gh-new-folder input,
+  .gh-new-folder button,
+  .code-panel,
+  .panel,
+  .scene-preview,
+  .app-toast
+),
+:root[data-color-mode="dark"] :is(
+  .menu-dropdown,
+  .toolbar-compact-menu,
+  .dialog,
+  .node-focus-menu,
+  .line-popover,
+  .endpoint-popover,
+  .add-object-menu,
+  .gh-device-code,
+  .gh-location,
+  .gh-new-folder input,
+  .gh-new-folder button,
+  .code-panel,
+  .panel,
+  .scene-preview,
+  .app-toast
+) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+:root[data-color-mode="semi-dark"] :is(.menu-dropdown button:hover:not(:disabled), .toolbar-compact-menu button:hover),
+:root[data-color-mode="dark"] :is(.menu-dropdown button:hover:not(:disabled), .toolbar-compact-menu button:hover) {
+  background: #2a2d2e;
+}
+
+:root[data-color-mode="semi-dark"] :is(.menu-dropdown button:disabled, .toolbar-compact-menu button:disabled),
+:root[data-color-mode="dark"] :is(.menu-dropdown button:disabled, .toolbar-compact-menu button:disabled) {
+  opacity: 0.5;
+}
+
+:root[data-color-mode="semi-dark"] :is(input, select, textarea),
+:root[data-color-mode="dark"] :is(input, select, textarea) {
+  border-color: var(--line);
+  background: #1e1e1e;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] :is(
+  .chip,
+  .tool-toggle,
+  .fit-button,
+  .icon-button,
+  .dialog-button,
+  .status-save,
+  .theme-reset,
+  .preset-button,
+  .row-move-button,
+  .weak-toggle,
+  .terminal-button,
+  .circuit-recent-chip,
+  .menu-trigger:hover,
+  .menu-trigger.on
+),
+:root[data-color-mode="dark"] :is(
+  .chip,
+  .tool-toggle,
+  .fit-button,
+  .icon-button,
+  .dialog-button,
+  .status-save,
+  .theme-reset,
+  .preset-button,
+  .row-move-button,
+  .weak-toggle,
+  .terminal-button,
+  .circuit-recent-chip,
+  .menu-trigger:hover,
+  .menu-trigger.on
+) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] :is(.weak-toggle.on, .terminal-button.on),
+:root[data-color-mode="dark"] :is(.weak-toggle.on, .terminal-button.on) {
+  border-color: #0078d4;
+  background: #04395e;
+  color: #ffffff;
+}
+
+:root[data-color-mode="semi-dark"] :is(.chip.on, .tool-toggle.on),
+:root[data-color-mode="dark"] :is(.chip.on, .tool-toggle.on) {
+  border-color: #0078d4;
+  background: #04395e;
+  color: #ffffff;
+}
+
+:root[data-color-mode="semi-dark"] .dialog-button.primary,
+:root[data-color-mode="dark"] .dialog-button.primary,
+:root[data-color-mode="semi-dark"] .primary-action,
+:root[data-color-mode="dark"] .primary-action {
+  border-color: #0078d4;
+  background: #0078d4;
+  color: #ffffff;
+}
+
+:root[data-color-mode="semi-dark"] .primary-action:hover,
+:root[data-color-mode="dark"] .primary-action:hover {
+  background: #026ec1;
+}
+
+:root[data-color-mode="semi-dark"] .kind-chip,
+:root[data-color-mode="dark"] .kind-chip {
+  background: #04395e;
+  color: #ffffff;
+}
+
+:root[data-color-mode="dark"] .toolbar-compact-trigger.on {
+  border-color: #0078d4;
+  background: #04395e;
+  color: #ffffff;
+}
+
+:root[data-color-mode="dark"] .scene-picker select {
+  background-color: #252526;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23cccccc' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+:root[data-color-mode="semi-dark"] :is(.add-object-item, .circuit-table-row),
+:root[data-color-mode="dark"] :is(.add-object-item, .circuit-table-row) {
+  border-color: transparent;
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] :is(.add-object-item:hover, .circuit-table-row:hover, .circuit-table-row:focus-visible),
+:root[data-color-mode="dark"] :is(.add-object-item:hover, .circuit-table-row:hover, .circuit-table-row:focus-visible) {
+  border-color: #0078d4;
+  background: #04395e;
+}
+
+:root[data-color-mode="semi-dark"] :is(
+  .add-object-icon,
+  .circuit-table-symbol,
+  .circuit-preview-card,
+  .circuit-search
+),
+:root[data-color-mode="dark"] :is(
+  .add-object-icon,
+  .circuit-table-symbol,
+  .circuit-preview-card,
+  .circuit-search
+) {
+  border-color: var(--line);
+  background: #1e1e1e;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .circuit-preview-card span,
+:root[data-color-mode="dark"] .circuit-preview-card span {
+  color: var(--muted);
+}
+
+:root[data-color-mode="semi-dark"] :is(.diagram-type-button, .start-mode),
+:root[data-color-mode="dark"] :is(.diagram-type-button, .start-mode) {
+  border-color: var(--line);
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] :is(.diagram-type-button:hover, .start-mode:hover),
+:root[data-color-mode="dark"] :is(.diagram-type-button:hover, .start-mode:hover) {
+  border-color: #0078d4;
+  background: #2a2d2e;
+}
+
+:root[data-color-mode="semi-dark"] :is(.diagram-type-button.on, .start-mode.on),
+:root[data-color-mode="dark"] :is(.diagram-type-button.on, .start-mode.on) {
+  border-color: #0078d4;
+  background: #04395e;
+  color: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-color-mode="semi-dark"] .code-panel-head,
+:root[data-color-mode="dark"] .code-panel-head {
+  background-color: #1e1e1e;
+  background: fixed;
+  border-bottom-color: var(--line);
+  box-shadow: none;
+}
+
+:root[data-color-mode="semi-dark"] :is(
+  .code-collapse-button,
+  .code-page-options button,
+  .code-expand-button,
+  .code-preview-zoom,
+  .code-page-options button.active,
+  .code-segmented button.active
+),
+:root[data-color-mode="dark"] :is(
+  .code-collapse-button,
+  .code-page-options button,
+  .code-expand-button,
+  .code-preview-zoom,
+  .code-page-options button.active,
+  .code-segmented button.active
+) {
+  border-color: var(--line);
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .code-page-options button.active,
+:root[data-color-mode="dark"] .code-page-options button.active,
+:root[data-color-mode="semi-dark"] .code-segmented button.active,
+:root[data-color-mode="dark"] .code-segmented button.active {
+  background: #2d2d30;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+:root[data-color-mode="semi-dark"] :is(.code-segmented, .code-page-options, .code-mode-switch),
+:root[data-color-mode="dark"] :is(.code-segmented, .code-page-options, .code-mode-switch) {
+  border-color: var(--line);
+  background: #1e1e1e;
+}
+
+:root[data-color-mode="semi-dark"] :is(.code-segmented button.active, .code-page-options button.active),
+:root[data-color-mode="dark"] :is(.code-segmented button.active, .code-page-options button.active) {
+  background: #2d2d30;
+  color: #ffffff;
+}
+
+:root[data-color-mode="semi-dark"] :is(.code-import-card, .code-block, .image-asset-picker, .image-drop-zone, .scene-item.active, .rail-note, .pill, .canvas-hud-bottom, .canvas-add-compact, .canvas-history-button),
+:root[data-color-mode="dark"] :is(.code-import-card, .code-block, .image-asset-picker, .image-drop-zone, .scene-item.active, .rail-note, .pill, .canvas-hud-bottom, .canvas-add-compact, .canvas-history-button) {
+  border-color: var(--line);
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .scene-item:hover,
+:root[data-color-mode="dark"] .scene-item:hover {
+  background: #2a2d2e;
+}
+
+:root[data-color-mode="semi-dark"] .gh-merge-card,
+:root[data-color-mode="dark"] .gh-merge-card {
+  border-color: var(--line);
+  background: #252526;
+}
+
+:root[data-color-mode="semi-dark"] .gh-merge-card.on,
+:root[data-color-mode="dark"] .gh-merge-card.on {
+  border-color: #0078d4;
+  background: #04395e;
+}
+
+:root[data-color-mode="dark"] :is(
+  .gh-account,
+  .gh-location,
+  .gh-breadcrumb,
+  .gh-dir-list,
+  .gh-path,
+  .gh-detail,
+  .gh-file-status,
+  .gh-device,
+  .gh-merge-summary,
+  .gh-merge-commit
+) {
+  border-color: var(--line);
+  background: #1e1e1e;
+  color: var(--ink);
+}
+
+:root[data-color-mode="dark"] .gh-merge-row {
+  border-top-color: var(--line);
+}
+
+:root[data-color-mode="dark"] .gh-merge-card.on .gh-merge-choice-indicator {
+  border-color: #0078d4;
+  background: #252526;
+}
+
+:root[data-color-mode="dark"] .gh-device-code {
+  border-color: #0078d4;
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="dark"] :is(.gh-crumb:hover, .gh-crumb.on, .gh-dir:hover, .gh-project-file.on) {
+  background: #04395e;
+  color: #4daafc;
+}
+
+:root[data-color-mode="dark"] .gh-token-form {
+  border-top-color: var(--line);
+}
+
+:root[data-color-mode="dark"] .gh-note-warn {
+  border-color: #cca700;
+  background: #2d2a00;
+  color: #e2c08d;
+}
+
+:root[data-color-mode="dark"] .gh-error {
+  border-color: #7a2e2e;
+  background: #3a1d1d;
+  color: #f48771;
+}
+
+:root[data-color-mode="dark"] .gh-file-status.existing {
+  background: #123b2a;
+  color: #73c991;
+}
+
+:root[data-color-mode="dark"] .gh-file-status.new {
+  background: #04395e;
+  color: #9cdcfe;
+}
+
+:root[data-color-mode="dark"] .gh-file-status.invalid,
+:root[data-color-mode="dark"] .gh-file-status.error {
+  background: #3a1d1d;
+  color: #f48771;
+}
+
+:root[data-color-mode="semi-dark"] .code-download-button.secondary,
+:root[data-color-mode="dark"] .code-download-button.secondary,
+:root[data-color-mode="semi-dark"] .code-export-pick,
+:root[data-color-mode="dark"] .code-export-pick,
+:root[data-color-mode="semi-dark"] :is(.code-copy-button, .code-import-copy, .code-number-field),
+:root[data-color-mode="dark"] :is(.code-copy-button, .code-import-copy, .code-number-field) {
+  border-color: var(--line);
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .code-number-field input,
+:root[data-color-mode="dark"] .code-number-field input {
+  background: transparent;
+  color: var(--ink);
+}
+
+/* :root[data-color-mode="semi-dark"] .code-copy-overlay,
+:root[data-color-mode="dark"] .code-copy-overlay {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+} */
+
+/* Flat VS Code-like menus: large translucent shadows alias badly on dark. */
+:root[data-color-mode="semi-dark"] :is(
+  .menu-dropdown,
+  .toolbar-compact-menu,
+  .node-focus-menu,
+  .line-popover,
+  .endpoint-popover,
+  .add-object-menu,
+  .dialog,
+  .app-toast
+),
+:root[data-color-mode="dark"] :is(
+  .menu-dropdown,
+  .toolbar-compact-menu,
+  .node-focus-menu,
+  .line-popover,
+  .endpoint-popover,
+  .add-object-menu,
+  .dialog,
+  .app-toast
+) {
+  box-shadow: none;
+}
+
+:root[data-color-mode="semi-dark"] .gh-decision-actions,
+:root[data-color-mode="dark"] .gh-decision-actions,
+:root[data-color-mode="semi-dark"] .gh-picker .dialog-actions,
+:root[data-color-mode="dark"] .gh-picker .dialog-actions {
+  background: var(--panel);
+}
+
+:root[data-color-mode="dark"] .canvas-stage {
+  border-color: var(--line);
+  background: #1f1f1f;
+  /* box-shadow: var(--shadow); */
+}
+
+:root[data-color-mode="dark"] :is(.code-preview-page, .code-preview-modal-svg) {
+  border-color: var(--line);
+  background: #1e1e1e;
+}
+
+:root[data-color-mode="dark"] .code-preview-modal-inner {
+  background: #252526;
+  color: var(--ink);
+}
+
+:root[data-color-mode="dark"] .code-preview-modal-head {
+  border-bottom-color: var(--line);
+}
+
+:root[data-color-mode="dark"] :is(.code-preview-svg svg, .code-preview-modal-svg svg) {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
 /* Responsive top bar: Level 1 keeps icon-only toggles, Level 2 moves the
    toggles into the compact menu and removes the brand. */
 @media (max-width: 1320px) {
@@ -4519,5 +5144,131 @@ button {
 
   .zoom-group {
     gap: 4px;
+  }
+}
+
+/* Level 3: phone layout. The canvas is edge-to-edge, and either side panel
+   takes over the workspace instead of sharing it with the canvas. */
+@media (max-width: 760px) {
+  .topbar {
+    gap: 6px;
+    padding: 0 6px;
+  }
+
+  .scene-picker select {
+    min-width: 0;
+    width: min(38vw, 150px);
+    max-width: 150px;
+  }
+
+  .zoom-group {
+    display: none;
+  }
+
+  .toolbar-level3-only {
+    display: block;
+  }
+
+  .toolbar-compact-menu {
+    right: 0;
+    left: auto;
+    max-height: calc(100vh - 60px);
+    overflow: auto;
+  }
+
+  .workspace,
+  .workspace.panel-hidden,
+  .workspace.code-open,
+  .workspace.panel-hidden.code-open {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+    gap: 0;
+  }
+
+  .workspace.mobile-panel-open {
+    display: block;
+  }
+
+  .workspace.mobile-panel-open .canvas-stage {
+    display: none;
+  }
+
+  .canvas-stage {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .workspace.mobile-panel-open .scene-rail,
+  .workspace.mobile-panel-open .code-panel {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .workspace.mobile-panel-open .scene-rail {
+    padding: 10px;
+  }
+
+  .statusbar {
+    gap: 7px;
+    padding: 0 10px;
+  }
+
+  .status-kind,
+  .status-counts,
+  .status-project-label,
+  .status-path,
+  .status-save {
+    display: none;
+  }
+
+  .canvas-hud-bottom {
+    display: none;
+  }
+
+  /* Object menus become bottom sheets on phones. */
+  .add-object-position,
+  .node-focus-position,
+  .line-popover-position,
+  .endpoint-popover-position {
+    position: absolute !important;
+    top: auto !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100%;
+  }
+
+  .add-object-menu,
+  .circuit-add-menu,
+  .node-focus-menu,
+  .line-popover,
+  .endpoint-popover {
+    width: 100% !important;
+    max-height: min(62vh, calc(100vh - 150px));
+    border-radius: 12px 12px 0 0;
+  }
+
+  .node-focus-position .node-focus-menu,
+  .line-popover-position .line-popover,
+  .endpoint-popover-position .endpoint-popover {
+    max-height: min(62vh, calc(100vh - 160px));
+  }
+
+  .node-focus-position .popover-head,
+  .line-popover-position .popover-head,
+  .endpoint-popover-position .popover-head,
+  .add-object-position .popover-head,
+  .add-object-position .dialog-head {
+    cursor: default;
+  }
+
+  .node-focus-position .popover-head:active,
+  .line-popover-position .popover-head:active,
+  .endpoint-popover-position .popover-head:active,
+  .add-object-position .popover-head:active {
+    cursor: default;
   }
 }

@@ -41,12 +41,25 @@ The **File** menu’s scene/project file actions are:
   project. A new scene id is allocated and a duplicate title gets the same ` (2)`, ` (3)`, … suffix as
   duplication. The imported scene becomes active.
 - **Export project…** downloads `umler-project.umler` with every scene and the active scene id.
+- **Pick save file…** (Chromium File System Access API) chooses a writable project file and remembers the
+  handle in IndexedDB. `Ctrl/Cmd+S` writes the project there. After importing a project from a picked file, a
+  dialog offers to use that file as the save target (default **Use as save file**).
 - **Open from GitHub…** browses repository folders, lists existing `.umler` projects for direct selection,
-  and can target a new folder. The folder is created implicitly when the `.umler` project file is saved.
+  and can target a new folder. Picking an existing remote file replaces the current in-session project without
+  merging scenes. The folder is created implicitly when the `.umler` project file is saved.
 - **Import project…** validates all scenes, asks for confirmation, replaces the in-session project with the
   file’s scenes and restores its active scene. It is a project open, not a merge.
 - **Purge unused images** removes uploaded image assets that no image node references from the browser library;
   it is disabled when nothing is unused.
+
+`Ctrl/Cmd+S` with a selected save file writes the local project. In GitHub mode (bound and signed in) it first
+runs the normal pull/merge/push save and only then writes the local file. Without a selected save file, the
+shortcut exports/downloads the project; choosing **Pick save file…** is what enables direct writes.
+
+Before writing, UMLer re-reads the save file. If another tab changed it since this tab last saved, disjoint scene
+edits are merged automatically; scenes changed in both copies open the same local/remote/keep-both picker used
+for GitHub conflicts. The last written scene digests are stored with the handle, so this three-way merge also
+works after a reload.
 
 Both formats carry a top-level `format`/`version` envelope. Scene imports also accept a bare
 `umler.scene/1` document, which keeps the existing `examples/*.json` files usable. Import runs
@@ -65,6 +78,12 @@ endpoints do not send CORS headers. No client secret is needed or stored. Create
 **Device flow**, and either set `GITHUB_OAUTH_CLIENT_ID` in `.env.local` or paste the public client id once in
 the dialog’s **Set up GitHub OAuth** field (stored in this browser). A personal access token with `repo` scope
 is available as a fallback and is kept in memory only.
+
+If the OAuth app issues expiring access tokens, the device-flow response also contains a six-month refresh token.
+The app stores it with the session and automatically exchanges it when GitHub returns 401, then retries the
+original API call. Refresh-token rotation is shared through localStorage, so a second tab that raced the refresh
+adopts the newer token instead of signing out. A `bad_refresh_token` means the refresh token itself expired or
+was revoked; only then is another sign-in required.
 
 The picker selects a repository, branch, folder and project file name. **New branch…** creates a branch from
 the selected base branch and switches the picker to it, so a project opened from there keeps its saves on that
@@ -472,9 +491,12 @@ avoids the equal-cost “staircase” routes A* can produce when several grid li
 `routing.avoidObstacles === true`. If A* fails validation, the endpoint-aware orthogonal preview is used as a
 fallback; the edge is never deleted or hidden.
 
-Double-clicking an edge sets orthogonal routing + obstacle avoidance and reruns the route. The line popover
-and inspector both have a **Re-route with A\*** button. Neither action changes a sequence message: its layout is
-forced to straight time-axis routing.
+**Ctrl/Cmd-clicking an edge** (except circuit wires and sequence messages) inserts a semi-transparent manual
+routing point on the line. The point can be dragged; the route passes through it as an orthogonal constraint,
+and automatic perimeter attachment picks the source/target border facing the closest manual point. The point
+is editor-only and is not emitted by the Typst/CeTZ renderer. **Right-clicking an edge** reruns its
+orthogonal route (the line popover and inspector also have a **Re-route with A\*** button). Neither action changes
+a sequence message: its layout is forced to straight time-axis routing.
 
 Frames and lifelines are not routing obstacles: frames are containers and lifelines are structural axes in the
 skeleton.

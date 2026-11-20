@@ -14,6 +14,29 @@ const API_ROOT = "https://api.github.com";
 const OAUTH_ROOT = "/api/github/oauth";
 const API_VERSION = "2022-11-28";
 
+type GitHubTokenRefresher = (rejectedToken: string) => Promise<string | null>;
+let tokenRefresher: GitHubTokenRefresher | null = null;
+let refreshInFlight: Promise<string | null> | null = null;
+let refreshForToken: string | null = null;
+
+/** Registered by the app so API calls can recover from an expired token. */
+export const setGitHubTokenRefresher = (
+  refresher: GitHubTokenRefresher | null,
+): void => {
+  tokenRefresher = refresher;
+};
+
+const refreshRejectedToken = async (token: string): Promise<string | null> => {
+  if (tokenRefresher === null) return null;
+  if (refreshInFlight !== null && refreshForToken === token) return refreshInFlight;
+  refreshForToken = token;
+  refreshInFlight = tokenRefresher(token).finally(() => {
+    refreshInFlight = null;
+    refreshForToken = null;
+  });
+  return refreshInFlight;
+};
+
 export interface GitHubUser {
   readonly login: string;
   readonly name: string | null;
@@ -24,6 +47,10 @@ export interface GitHubUser {
 export interface GitHubSession {
   readonly token: string;
   readonly user: GitHubUser;
+  /** Present when the OAuth app issues expiring access tokens. */
+  readonly refreshToken?: string;
+  readonly accessTokenExpiresAt?: string;
+  readonly refreshTokenExpiresAt?: string;
 }
 
 export interface GitHubRepo {
@@ -102,7 +129,13 @@ export interface GitHubDeviceAuthorization {
 export type DevicePollResult =
   | { readonly status: "pending" }
   | { readonly status: "slow_down" }
-  | { readonly status: "authorized"; readonly token: string };
+  | {
+      readonly status: "authorized";
+      readonly token: string;
+      readonly refreshToken?: string;
+      readonly accessTokenExpiresAt?: string;
+      readonly refreshTokenExpiresAt?: string;
+    };
 
 export class GitHubApiError extends Error {
   readonly status: number;
@@ -153,6 +186,31 @@ const readDocumentationUrl = (data: unknown): string | undefined => {
   return data.documentation_url;
 };
 
+const fetchWithAuthRetry = async (
+  url: string,
+  token: string,
+  init?: RequestInit,
+): Promise<Response> => {
+  const requestFor = (nextToken: string): Promise<Response> =>
+    fetch(url, {
+      ...init,
+      cache: "no-store",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${nextToken}`,
+        "X-GitHub-Api-Version": API_VERSION,
+        ...init?.headers,
+      },
+      signal: init?.signal ?? AbortSignal.timeout(20_000),
+    });
+  const response = await requestFor(token);
+  if (response.status !== 401) return response;
+  const refreshed = await refreshRejectedToken(token);
+  return refreshed !== null && refreshed !== token
+    ? requestFor(refreshed)
+    : response;
+};
+
 const apiRequest = async (
   token: string,
   path: string,
@@ -160,20 +218,7 @@ const apiRequest = async (
 ): Promise<{ data: unknown; headers: Headers }> => {
   let response: Response;
   try {
-    response = await fetch(`${API_ROOT}${path}`, {
-      ...init,
-      // Conflict resolution must observe the latest remote blob SHA. A cached
-      // Contents API response would make an explicit overwrite keep supplying
-      // the same stale SHA and fail repeatedly.
-      cache: "no-store",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": API_VERSION,
-        ...init?.headers,
-      },
-      signal: init?.signal ?? AbortSignal.timeout(20_000),
-    });
+    response = await fetchWithAuthRetry(`${API_ROOT}${path}`, token, init);
   } catch (error) {
     if (error instanceof DOMException && error.name === "TimeoutError") {
       throw new GitHubApiError(
@@ -456,7 +501,11 @@ export const pollDeviceAuthorization = async (
     grant_type: "urn:ietf:params:oauth:grant-type:device_code",
   });
   if (typeof data.access_token === "string" && data.access_token.length > 0) {
-    return { status: "authorized", token: data.access_token };
+    return {
+      status: "authorized",
+      token: data.access_token,
+      ...tokenMetadata(data),
+    };
   }
   if (data.error === "authorization_pending") return { status: "pending" };
   if (data.error === "slow_down") return { status: "slow_down" };
@@ -465,7 +514,35 @@ export const pollDeviceAuthorization = async (
   throw new GitHubOAuthError("GitHub did not return an access token.", "bad_response");
 };
 
-export const loadSessionFromToken = async (token: string): Promise<GitHubSession> => {
+const expiryFromSeconds = (value: unknown): string | undefined =>
+  typeof value === "number" && Number.isFinite(value) && value > 0
+    ? new Date(Date.now() + value * 1000).toISOString()
+    : undefined;
+
+const tokenMetadata = (
+  data: UnknownRecord,
+): Pick<
+  GitHubSession,
+  "refreshToken" | "accessTokenExpiresAt" | "refreshTokenExpiresAt"
+> => ({
+  ...(typeof data.refresh_token === "string" && data.refresh_token.length > 0
+    ? { refreshToken: data.refresh_token }
+    : {}),
+  ...(expiryFromSeconds(data.expires_in) === undefined
+    ? {}
+    : { accessTokenExpiresAt: expiryFromSeconds(data.expires_in) }),
+  ...(expiryFromSeconds(data.refresh_token_expires_in) === undefined
+    ? {}
+    : { refreshTokenExpiresAt: expiryFromSeconds(data.refresh_token_expires_in) }),
+});
+
+export const loadSessionFromToken = async (
+  token: string,
+  metadata: Pick<
+    GitHubSession,
+    "refreshToken" | "accessTokenExpiresAt" | "refreshTokenExpiresAt"
+  > = {},
+): Promise<GitHubSession> => {
   const trimmed = token.trim();
   if (trimmed.length === 0) throw new Error("Enter a GitHub access token.");
   const { data } = await apiRequest(trimmed, "/user");
@@ -480,7 +557,35 @@ export const loadSessionFromToken = async (token: string): Promise<GitHubSession
       avatarUrl: typeof data.avatar_url === "string" ? data.avatar_url : "",
       htmlUrl: typeof data.html_url === "string" ? data.html_url : "",
     },
+    ...metadata,
   };
+};
+
+/**
+ * Exchanges the long-lived refresh token from the device flow for a new
+ * eight-hour access token. Device-flow tokens do not require a client secret.
+ */
+export const refreshGitHubSession = async (
+  session: GitHubSession,
+): Promise<GitHubSession> => {
+  if (session.refreshToken === undefined || session.refreshToken.length === 0) {
+    throw new GitHubOAuthError("This GitHub session cannot be refreshed.", "no_refresh_token");
+  }
+  const config = await loadGitHubOAuthConfig();
+  if (config.clientId.length === 0) {
+    throw new GitHubOAuthError("GitHub OAuth is not configured.", "not_configured");
+  }
+  const data = await oauthPost("/access-token", {
+    client_id: config.clientId,
+    grant_type: "refresh_token",
+    refresh_token: session.refreshToken,
+  });
+  if (typeof data.access_token === "string" && data.access_token.length > 0) {
+    return loadSessionFromToken(data.access_token, tokenMetadata(data));
+  }
+  const oauthError = readOAuthError(data);
+  if (oauthError !== null) throw oauthError;
+  throw new GitHubOAuthError("GitHub did not return a refreshed token.", "bad_response");
 };
 
 export const listRepositories = async (token: string): Promise<GitHubRepo[]> => {
@@ -560,17 +665,10 @@ export const listDirectoryContents = async (
     : `/${contentPath(target.path)}`;
   let response: Response;
   try {
-    response = await fetch(
+    response = await fetchWithAuthRetry(
       `${API_ROOT}${repoPath(target)}/contents${suffix}?ref=${encodeURIComponent(target.branch)}`,
-      {
-        cache: "no-store",
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "X-GitHub-Api-Version": API_VERSION,
-        },
-        signal: AbortSignal.timeout(20_000),
-      },
+      token,
+      { signal: AbortSignal.timeout(20_000) },
     );
   } catch {
     throw new GitHubApiError("GitHub could not be reached.", 0);
@@ -605,13 +703,7 @@ export const getProjectFile = async (
   const fileUrl = `${API_ROOT}${repoPath(target)}/contents/${contentPath(target.path)}?ref=${encodeURIComponent(target.branch)}`;
   let response: Response;
   try {
-    response = await fetch(fileUrl, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": API_VERSION,
-      },
+    response = await fetchWithAuthRetry(fileUrl, token, {
       signal: AbortSignal.timeout(20_000),
     });
   } catch {
@@ -658,13 +750,8 @@ export const getProjectFile = async (
   // projects with embedded images still open.
   let rawResponse: Response;
   try {
-    rawResponse = await fetch(fileUrl, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/vnd.github.raw",
-        Authorization: `Bearer ${token}`,
-        "X-GitHub-Api-Version": API_VERSION,
-      },
+    rawResponse = await fetchWithAuthRetry(fileUrl, token, {
+      headers: { Accept: "application/vnd.github.raw" },
       signal: AbortSignal.timeout(30_000),
     });
   } catch {

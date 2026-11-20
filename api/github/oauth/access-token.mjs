@@ -57,6 +57,9 @@ export default async function handler(request, response) {
   const body = await readBody(request);
   const clientId = (body.get("client_id") ?? "").trim() || readClientIdFromEnv();
   const deviceCode = (body.get("device_code") ?? "").trim();
+  const grantType = (body.get("grant_type") ?? "").trim();
+  const refreshToken = (body.get("refresh_token") ?? "").trim();
+  const isRefresh = grantType === "refresh_token";
 
   if (!clientId) {
     response.status(500).json({
@@ -73,10 +76,16 @@ export default async function handler(request, response) {
     });
     return;
   }
-  if (deviceCode.length === 0 || deviceCode.length > 512) {
+  if (
+    isRefresh
+      ? refreshToken.length === 0 || refreshToken.length > 2048
+      : deviceCode.length === 0 || deviceCode.length > 512
+  ) {
     response.status(400).json({
       error: "invalid_request",
-      error_description: "The device code is missing or invalid.",
+      error_description: isRefresh
+        ? "The refresh token is missing or invalid."
+        : "The device code is missing or invalid.",
     });
     return;
   }
@@ -89,11 +98,19 @@ export default async function handler(request, response) {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": "UMLer",
       },
-      body: new URLSearchParams({
-        client_id: clientId,
-        device_code: deviceCode,
-        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-      }),
+      body: new URLSearchParams(
+        isRefresh
+          ? {
+              client_id: clientId,
+              grant_type: "refresh_token",
+              refresh_token: refreshToken,
+            }
+          : {
+              client_id: clientId,
+              device_code: deviceCode,
+              grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            },
+      ),
       signal: AbortSignal.timeout(15_000),
     });
     const text = await upstream.text();

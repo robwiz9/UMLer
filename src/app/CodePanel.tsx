@@ -23,6 +23,18 @@ import {
 } from "../export/page.ts";
 import type { PreviewImage } from "../export/typst-preview.ts";
 import { downloadTextFile } from "./file-transfer.ts";
+import {
+  ensureWritePermission,
+  pickTypstExportFile,
+  supportsSaveFilePicker,
+  writeProjectToHandle,
+} from "./file-system-access.ts";
+import {
+  loadExportFileBinding,
+  storeExportFileBinding,
+  type ExportFileBinding,
+} from "./export-file-storage.ts";
+import { saveSceneExportSettings } from "./typst-export-settings.ts";
 import { useTypstPreview } from "./use-typst-preview.ts";
 
 const IMPORT_STATEMENT = `#import "@preview/cetz:${CETZ_EXPORT_VERSION}": canvas, draw`;
@@ -109,6 +121,20 @@ const DownloadIcon = () => (
   <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
     <path d="M9 2.5v8.5M5.8 8l3.2 3.2L12.2 8" />
     <path d="M3 13.2v1.3A1.5 1.5 0 0 0 4.5 16h9a1.5 1.5 0 0 0 1.5-1.5v-1.3" />
+  </svg>
+);
+
+const PickFileIcon = () => (
+  <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
+    <path d="M2.5 5.2h5l1.5 2h6.5v6.3a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5Z" />
+    <path d="M2.5 5.2V3.7A1.2 1.2 0 0 1 3.7 2.5h3l1.5 2" />
+  </svg>
+);
+
+const SaveFileIcon = () => (
+  <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
+    <path d="M3 2.5h8.5L15 6v9.5H3Z" />
+    <path d="M6 2.5v4h5v-4M6 15.5v-4h6v4" />
   </svg>
 );
 
@@ -214,6 +240,9 @@ export const CodePanel = ({
   const [importState, setImportState] = useState<"idle" | "copied" | "error">("idle");
   const [fileState, setFileState] = useState<"idle" | "copied" | "error">("idle");
   const [downloadState, setDownloadState] = useState<"idle" | "saved" | "error">("idle");
+  const [exportFileState, setExportFileState] = useState<"idle" | "saved" | "error">("idle");
+  const [exportBinding, setExportBinding] = useState<ExportFileBinding | null>(null);
+  const [automaticExport, setAutomaticExport] = useState(false);
   const [codeMode, setCodeMode] = useState<"export" | "source">("export");
   const [objectsCollapsed, setObjectsCollapsed] = useState(false);
   const [placementCollapsed, setPlacementCollapsed] = useState(false);
@@ -226,8 +255,11 @@ export const CodePanel = ({
   const importTimer = useRef<number | null>(null);
   const fileTimer = useRef<number | null>(null);
   const downloadTimer = useRef<number | null>(null);
+  const exportFileTimer = useRef<number | null>(null);
+  const persistedSettingsScene = useRef<string | null>(null);
 
   const selectionCount = selectedNodeIds.length + selectedEdgeIds.length;
+  const exportFilesSupported = supportsSaveFilePicker();
 
   useEffect(() => {
     setDiagramId(defaultDiagramId(scene.meta.title));
@@ -235,6 +267,20 @@ export const CodePanel = ({
     setScope("diagram");
     setCodeMode("export");
   }, [scene.id, scene.meta.title]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setExportBinding(null);
+    setAutomaticExport(false);
+    void loadExportFileBinding(scene.id).then((binding) => {
+      if (cancelled || binding === null) return;
+      setExportBinding(binding);
+      setAutomaticExport(binding.automatic);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [scene.id]);
 
   useEffect(() => {
     if (scope === "selection" && selectionCount === 0) setScope("diagram");
@@ -271,6 +317,7 @@ export const CodePanel = ({
       if (importTimer.current !== null) window.clearTimeout(importTimer.current);
       if (fileTimer.current !== null) window.clearTimeout(fileTimer.current);
       if (downloadTimer.current !== null) window.clearTimeout(downloadTimer.current);
+      if (exportFileTimer.current !== null) window.clearTimeout(exportFileTimer.current);
     },
     [],
   );
@@ -297,6 +344,20 @@ export const CodePanel = ({
     }),
     [page, zoom, scope, align, border, label, diagramId, resourceFolder],
   );
+
+  useEffect(() => {
+    // Skip the first render after a scene change so the old scene's settings
+    // are not written under the new scene id before its own state settles.
+    if (persistedSettingsScene.current === null) {
+      persistedSettingsScene.current = scene.id;
+      return;
+    }
+    if (persistedSettingsScene.current !== scene.id) {
+      persistedSettingsScene.current = scene.id;
+      return;
+    }
+    saveSceneExportSettings(scene.id, settings);
+  }, [scene.id, settings]);
 
   const result = useMemo(
     () =>
@@ -419,6 +480,55 @@ export const CodePanel = ({
     downloadTimer.current = window.setTimeout(() => setDownloadState("idle"), 1800);
   };
 
+  const flashExportFileState = (state: "saved" | "error"): void => {
+    setExportFileState(state);
+    if (exportFileTimer.current !== null) window.clearTimeout(exportFileTimer.current);
+    exportFileTimer.current = window.setTimeout(() => setExportFileState("idle"), 1800);
+  };
+
+  const chooseExportFile = async (): Promise<void> => {
+    try {
+      const handle = await pickTypstExportFile(fileName);
+      if (handle === null) return;
+      if (!(await ensureWritePermission(handle))) {
+        flashExportFileState("error");
+        return;
+      }
+      const binding: ExportFileBinding = {
+        handle,
+        automatic: automaticExport,
+        fileName: handle.name,
+      };
+      setExportBinding(binding);
+      await storeExportFileBinding(scene.id, binding);
+      saveSceneExportSettings(scene.id, settings);
+    } catch {
+      flashExportFileState("error");
+    }
+  };
+
+  const saveExportFile = async (): Promise<void> => {
+    if (exportBinding === null) return;
+    try {
+      await writeProjectToHandle(
+        exportBinding.handle,
+        `${IMPORT_STATEMENT}\n\n${result.code}`,
+      );
+      flashExportFileState("saved");
+    } catch {
+      flashExportFileState("error");
+    }
+  };
+
+  const changeAutomaticExport = (enabled: boolean): void => {
+    setAutomaticExport(enabled);
+    if (exportBinding === null) return;
+    const binding = { ...exportBinding, automatic: enabled };
+    setExportBinding(binding);
+    void storeExportFileBinding(scene.id, binding);
+    saveSceneExportSettings(scene.id, settings);
+  };
+
   const ready = preview.status === "ready" && preview.svg !== undefined;
   const previewStatus =
     preview.status === "error"
@@ -500,146 +610,146 @@ export const CodePanel = ({
             />
             {!placementCollapsed ? (
               <>
-            <div className="code-page-options" role="group" aria-label="Document size">
-              {PAGE_OPTIONS.map((option) => (
-                <button
-                  key={option.preset}
-                  type="button"
-                  className={page.preset === option.preset ? "active" : ""}
-                  onClick={() => setPreset(option.preset)}
-                  aria-pressed={page.preset === option.preset}
-                >
-                  <PageIcon kind={option.icon} />
-                  <span>{option.label}</span>
-                </button>
-              ))}
-            </div>
-            {page.preset === "custom" ? (
-              <div className="code-dimension-row">
-                <label className="code-inline-field">
-                  <span>Width</span>
-                  <input
-                    id="code-page-width"
-                    name="code-page-width"
-                    type="number"
-                    min={10}
-                    step={1}
-                    value={page.customWidth}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      if (Number.isFinite(value) && value > 0) {
-                        setPage({ ...page, customWidth: value });
-                      }
-                    }}
-                  />
-                </label>
-                
-                <span className="code-times">×</span>
-                <label className="code-inline-field">
-                  <span>Height</span>
-                  <input
-                    id="code-page-height"
-                    name="code-page-height"
-                    type="number"
-                    min={10}
-                    step={1}
-                    value={page.customHeight}
-                    onChange={(event) => {
-                      const value = Number(event.target.value);
-                      if (Number.isFinite(value) && value > 0) {
-                        setPage({ ...page, customHeight: value });
-                      }
-                    }}
-                  />
-                </label>
-                <label className="code-inline-field code-unit-field">
-                  <span className="sr-only">Page unit</span>
-                  <select
-                    id="code-page-unit"
-                    name="code-page-unit"
-                    value={page.unit}
-                    onChange={(event) => changeUnit(event.target.value as PageUnit)}
-                  >
-                    <option value="mm">mm</option>
-                    <option value="pt">pt</option>
-                  </select>
-                </label>
-              </div>
-            ) : null}
-            {/* </section>
+                <div className="code-page-options" role="group" aria-label="Document size">
+                  {PAGE_OPTIONS.map((option) => (
+                    <button
+                      key={option.preset}
+                      type="button"
+                      className={page.preset === option.preset ? "active" : ""}
+                      onClick={() => setPreset(option.preset)}
+                      aria-pressed={page.preset === option.preset}
+                    >
+                      <PageIcon kind={option.icon} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {page.preset === "custom" ? (
+                  <div className="code-dimension-row">
+                    <label className="code-inline-field">
+                      <span>Width</span>
+                      <input
+                        id="code-page-width"
+                        name="code-page-width"
+                        type="number"
+                        min={10}
+                        step={1}
+                        value={page.customWidth}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (Number.isFinite(value) && value > 0) {
+                            setPage({ ...page, customWidth: value });
+                          }
+                        }}
+                      />
+                    </label>
+
+                    <span className="code-times">×</span>
+                    <label className="code-inline-field">
+                      <span>Height</span>
+                      <input
+                        id="code-page-height"
+                        name="code-page-height"
+                        type="number"
+                        min={10}
+                        step={1}
+                        value={page.customHeight}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (Number.isFinite(value) && value > 0) {
+                            setPage({ ...page, customHeight: value });
+                          }
+                        }}
+                      />
+                    </label>
+                    <label className="code-inline-field code-unit-field">
+                      <span className="sr-only">Page unit</span>
+                      <select
+                        id="code-page-unit"
+                        name="code-page-unit"
+                        value={page.unit}
+                        onChange={(event) => changeUnit(event.target.value as PageUnit)}
+                      >
+                        <option value="mm">mm</option>
+                        <option value="pt">pt</option>
+                      </select>
+                    </label>
+                  </div>
+                ) : null}
+                {/* </section>
 
         <section className="code-section"> */}
-            {/* <div className="code-section-title">Placement</div> */}
-            <div className="code-field">
-              <span>Diagram zoom</span>
-              <label className="code-number-field">
-                <input
-                  id="code-diagram-zoom-value"
-                  name="code-diagram-zoom-value"
-                  type="number"
-                  min={10}
-                  max={300}
-                  step={1}
-                  value={zoomDraft}
-                  onChange={(event) => setZoomDraft(event.target.value)}
-                  onBlur={commitZoom}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      commitZoom();
-                    } else if (event.key === "Escape") {
-                      setZoomDraft(String(Math.round(zoom * 100)));
-                    }
-                  }}
-                  aria-label="Diagram zoom percentage"
-                />
-                <span>%</span>
-              </label>
-            </div>
-            <div className="code-align-row">
-              <div className="code-segmented" role="group" aria-label="Horizontal alignment">
-                {ALIGN_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={align === option.value ? "active" : ""}
-                    onClick={() => setAlign(option.value)}
-                  >
-                    <AlignIcon align={option.value} />
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="code-field">
-              <span>Page margins ({page.unit})</span>
-              <div className="code-section-title"></div>
-              <div className="code-margin-grid">
-                {MARGIN_SIDES.map((side) => (
-                  <label className="code-margin-field" key={side}>
-                    <span>{MARGIN_LABELS[side]}</span>
+                {/* <div className="code-section-title">Placement</div> */}
+                <div className="code-field">
+                  <span>Diagram zoom</span>
+                  <label className="code-number-field">
                     <input
-                      id={`code-margin-${side}`}
-                      name={`code-margin-${side}`}
+                      id="code-diagram-zoom-value"
+                      name="code-diagram-zoom-value"
                       type="number"
-                      min={0}
+                      min={10}
+                      max={300}
                       step={1}
-                      value={page.margins[side]}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isFinite(value) && value >= 0) {
-                          setPage({
-                            ...page,
-                            margins: { ...page.margins, [side]: value },
-                          });
+                      value={zoomDraft}
+                      onChange={(event) => setZoomDraft(event.target.value)}
+                      onBlur={commitZoom}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          commitZoom();
+                        } else if (event.key === "Escape") {
+                          setZoomDraft(String(Math.round(zoom * 100)));
                         }
                       }}
+                      aria-label="Diagram zoom percentage"
                     />
+                    <span>%</span>
                   </label>
-                ))}
-              </div>
-            </label>
+                </div>
+                <div className="code-align-row">
+                  <div className="code-segmented" role="group" aria-label="Horizontal alignment">
+                    {ALIGN_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={align === option.value ? "active" : ""}
+                        onClick={() => setAlign(option.value)}
+                      >
+                        <AlignIcon align={option.value} />
+                        <span>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <label className="code-field">
+                  <span>Page margins ({page.unit})</span>
+                  <div className="code-section-title"></div>
+                  <div className="code-margin-grid">
+                    {MARGIN_SIDES.map((side) => (
+                      <label className="code-margin-field" key={side}>
+                        <span>{MARGIN_LABELS[side]}</span>
+                        <input
+                          id={`code-margin-${side}`}
+                          name={`code-margin-${side}`}
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={page.margins[side]}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            if (Number.isFinite(value) && value >= 0) {
+                              setPage({
+                                ...page,
+                                margins: { ...page.margins, [side]: value },
+                              });
+                            }
+                          }}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </label>
               </>
             ) : null}
           </section>
@@ -725,75 +835,75 @@ export const CodePanel = ({
             />
             {!referenceCollapsed ? (
               <>
-            <label className="code-field">
-              <span>Label text</span>
-              <span className="code-input-with-action">
-                <input
-                  id="code-label"
-                  name="code-label"
-                  type="text"
-                  value={label}
-                  onChange={(event) => setLabel(event.target.value)}
-                  placeholder="No label"
-                />
-                {label.length > 0 ? (
-                  <button
-                    type="button"
-                    className="code-input-action"
-                    onClick={() => setLabel("")}
-                    onMouseDown={(event) => event.preventDefault()}
-                    aria-label="Clear label"
-                    title="Clear label"
-                  >
-                    <ClearIcon />
-                  </button>
+                <label className="code-field">
+                  <span>Label text</span>
+                  <span className="code-input-with-action">
+                    <input
+                      id="code-label"
+                      name="code-label"
+                      type="text"
+                      value={label}
+                      onChange={(event) => setLabel(event.target.value)}
+                      placeholder="No label"
+                    />
+                    {label.length > 0 ? (
+                      <button
+                        type="button"
+                        className="code-input-action"
+                        onClick={() => setLabel("")}
+                        onMouseDown={(event) => event.preventDefault()}
+                        aria-label="Clear label"
+                        title="Clear label"
+                      >
+                        <ClearIcon />
+                      </button>
+                    ) : null}
+                  </span>
+                </label>
+                <label className="code-field">
+                  <span>Diagram ID</span>
+                  <input
+                    id="code-diagram-id"
+                    name="code-diagram-id"
+                    type="text"
+                    value={diagramId}
+                    onChange={(event) => setDiagramId(event.target.value)}
+                    spellCheck={false}
+                    placeholder="fig-scene-name"
+                  />
+                </label>
+                <p className="code-hint code-mono-hint">
+                  Reference diagram with <code>@{(result.label)}</code>
+                </p>
+                <label className="code-field">
+                  <span>Resources folder</span>
+                  <input
+                    id="code-resource-folder"
+                    name="code-resource-folder"
+                    type="text"
+                    value={resourceFolder}
+                    onChange={(event) => setResourceFolder(event.target.value)}
+                    spellCheck={false}
+                    placeholder="assets"
+                  />
+                </label>
+                <p className="code-hint">
+                  Place used images in the folder:
+                  <code>{resourceFolder.length > 0 ? resourceFolder.replace(/\/+$/, "") : "."}/file.ext</code>
+                </p>
+                {result.images.length > 0 ? (
+                  <div className="code-resource-list">
+                    <div className="code-section-title">Referenced files</div>
+                    <ul>
+                      {result.images.map((image) => (
+                        <li key={`${image.nodeId}:${image.path}`}>
+                          <code>{image.path}</code>
+                          {image.missing ? <span>missing</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
-              </span>
-            </label>
-            <label className="code-field">
-              <span>Diagram ID</span>
-              <input
-                id="code-diagram-id"
-                name="code-diagram-id"
-                type="text"
-                value={diagramId}
-                onChange={(event) => setDiagramId(event.target.value)}
-                spellCheck={false}
-                placeholder="fig-scene-name"
-              />
-            </label>
-            <p className="code-hint code-mono-hint">
-              Reference diagram with <code>@{(result.label)}</code>
-            </p>
-            <label className="code-field">
-              <span>Resources folder</span>
-              <input
-                id="code-resource-folder"
-                name="code-resource-folder"
-                type="text"
-                value={resourceFolder}
-                onChange={(event) => setResourceFolder(event.target.value)}
-                spellCheck={false}
-                placeholder="assets"
-              />
-            </label>
-            <p className="code-hint">
-              Place used images in the folder:
-              <code>{resourceFolder.length > 0 ? resourceFolder.replace(/\/+$/, "") : "."}/file.ext</code>
-            </p>
-            {result.images.length > 0 ? (
-              <div className="code-resource-list">
-                <div className="code-section-title">Referenced files</div>
-                <ul>
-                  {result.images.map((image) => (
-                    <li key={`${image.nodeId}:${image.path}`}>
-                      <code>{image.path}</code>
-                      {image.missing ? <span>missing</span> : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
               </>
             ) : null}
           </section>
@@ -850,7 +960,7 @@ export const CodePanel = ({
                 {preview.status === "error" ? (
                   <pre className="code-preview-error">{preview.error ?? "Unknown Typst error"}</pre>
                 ) : null}
-                
+
                 <div className="code-summary">
                   <div className="code-summary-line">
                     <span>
@@ -894,12 +1004,12 @@ export const CodePanel = ({
               <div className="code-section-title">Typst Code</div>
             </div>
             {missingPreviewImages.length > 0 ? (
-                  <p className="code-hint code-warning-hint">
-                    {missingPreviewImages.length} image
-                    {missingPreviewImages.length === 1 ? "" : "s"} lack bytes in this session; the
-                    preview shows a placeholder while the exported path stays correct.
-                  </p>
-                ) : null}
+              <p className="code-hint code-warning-hint">
+                {missingPreviewImages.length} image
+                {missingPreviewImages.length === 1 ? "" : "s"} lack bytes in this session; the
+                preview shows a placeholder while the exported path stays correct.
+              </p>
+            ) : null}
             <div
               className="code-segmented code-mode-switch"
               role="group"
@@ -926,25 +1036,118 @@ export const CodePanel = ({
             {codeMode === "export" ? (
               <>
                 <p className="code-hint code-export-hint">
-                  <strong>Recommended.</strong> Download the standalone{" "}
-                  <code>.typ</code> file, then include it where the diagram
-                  should appear.
+                  {exportFilesSupported ? (
+                    exportBinding !== null ? (
+                      automaticExport && scope === "diagram" ? (
+                        <>Automatic export writes this scene to{" "}
+                          <code>{exportBinding.fileName}</code> on <kbd>Ctrl</kbd>+<kbd>S</kbd>.</>
+                      ) : (
+                        <>Writing to <code>{exportBinding.fileName}</code>. Enable automatic
+                          export to write it on <kbd>Ctrl</kbd>+<kbd>S</kbd>.</>
+                      )
+                    ) : (
+                      <><strong>Recommended.</strong> Pick a <code>.typ</code> file to
+                        write exports directly. You can still download it instead.</>
+                    )
+                  ) : (
+                    <><strong>Recommended.</strong> Download the standalone{" "}
+                      <code>.typ</code> file, then include it where the diagram
+                      should appear.</>
+                  )}
                 </p>
-                <button
-                  type="button"
-                  className={`code-download-button code-download-wide ${downloadState}`}
-                  onClick={downloadCode}
-                  title={`Download ${fileName}`}
-                >
-                  <DownloadIcon />
-                  <span>
-                    {downloadState === "saved"
-                      ? "Downloaded"
-                      : downloadState === "error"
-                        ? "Download failed"
-                        : `Download ${fileName}`}
-                  </span>
-                </button>
+                {exportFilesSupported ? (
+                  <>                    
+                  {scope === "diagram" ? (
+                    <label
+                      className={`code-auto-export ${automaticExport ? "on" : ""}`}
+                      title={
+                        exportBinding === null
+                          ? "Pick an export file first"
+                          : "Write this scene's .typ file whenever Ctrl+S saves"
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={automaticExport}
+                        disabled={exportBinding === null}
+                        onChange={(event) => changeAutomaticExport(event.target.checked)}
+                      />
+                      <span>Automatic export</span>
+                      {exportBinding === null ? <em>Pick an export file first</em> : null}
+                    </label>
+                  ) : null}
+                    {exportBinding !== null ? (
+                      <div className="code-export-file-row">
+                        <button
+                          type="button"
+                          className={`code-download-button code-download-wide ${exportFileState}`}
+                          onClick={() => void saveExportFile()}
+                          title={`Save ${exportBinding.fileName}`}
+                        >
+                          <SaveFileIcon />
+                          <span>
+                            {exportFileState === "saved"
+                              ? "Saved"
+                              : exportFileState === "error"
+                                ? "Save failed"
+                                : "Save to file"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="code-export-pick"
+                          onClick={() => void chooseExportFile()}
+                          title="Choose another export file"
+                          aria-label="Choose another export file"
+                        >
+                          <PickFileIcon />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="code-download-button code-download-wide"
+                        onClick={() => void chooseExportFile()}
+                        title={`Pick an export file for ${fileName}`}
+                      >
+                        <PickFileIcon />
+                        <span>Pick export file</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className={`code-download-button code-download-wide secondary ${downloadState}`}
+                      onClick={downloadCode}
+                      title={`Download ${fileName}`}
+                    >
+                      <DownloadIcon />
+                      <span>
+                        {downloadState === "saved"
+                          ? "Downloaded"
+                          : downloadState === "error"
+                            ? "Download failed"
+                            : `Download ${fileName}`}
+                      </span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className={`code-download-button code-download-wide ${downloadState}`}
+                    onClick={downloadCode}
+                    title={`Download ${fileName}`}
+                  >
+                    <DownloadIcon />
+                    <span>
+                      {downloadState === "saved"
+                        ? "Downloaded"
+                        : downloadState === "error"
+                          ? "Download failed"
+                          : `Download ${fileName}`}
+                    </span>
+                  </button>
+                )}
                 <div className="code-import-card">
                   <div className="code-import-head">
                     <code>{fileCommand}</code>
@@ -983,7 +1186,7 @@ export const CodePanel = ({
                     </button>
                   </div>
                   <span>Import CeTZ package, then paste the source below into
-                  the document.</span>
+                    the document.</span>
                 </div>
                 <div className="code-block-wrap">
                   <button

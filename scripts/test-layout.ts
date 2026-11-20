@@ -15,7 +15,7 @@ import {
   type SceneDocument,
 } from "../src/model/scene.ts";
 import { DEFAULT_THEME, MONO_FONT } from "../src/model/styles.ts";
-import { rect } from "../src/model/geometry.ts";
+import { rect, rectCenter, rectRight } from "../src/model/geometry.ts";
 import { asActivationId, asEdgeId, asNodeId, asRowId } from "../src/model/ids.ts";
 import { NO_MARKER } from "../src/model/edges.ts";
 import {
@@ -29,6 +29,7 @@ import { createEdgeForDiagram } from "../src/model/edge-create.ts";
 import { createObjectFromTemplate } from "../src/model/object-catalog.ts";
 import {
   addActivation,
+  addEdgeWaypoint,
   addRow,
   addSection,
   commitAutoLayout,
@@ -41,6 +42,7 @@ import {
   setEdgeAttachment,
   setEdgeLabelTextStyle,
   setEdgePreferredPosition,
+  setEdgeWaypoint,
   setEndpointLabel,
   setSceneTheme,
   setSectionVisibility,
@@ -51,6 +53,81 @@ import type { Point, Rect } from "../src/model/geometry.ts";
 
 const measurer = new FixedTextMeasurer();
 const layout = buildLayoutSnapshot(ER_COMMERCE, measurer);
+
+const malformedLabelEdge = ER_COMMERCE.edges[asEdgeId("edge_places")];
+assert.ok(malformedLabelEdge !== undefined);
+const malformedLabel = malformedLabelEdge.labels[0];
+assert.ok(malformedLabel !== undefined);
+const malformedLabelScene: SceneDocument = {
+  ...ER_COMMERCE,
+  edges: {
+    ...ER_COMMERCE.edges,
+    [malformedLabelEdge.id]: {
+      ...malformedLabelEdge,
+      labels: [{ ...malformedLabel, text: undefined as unknown as string }],
+    },
+  },
+};
+assert.doesNotThrow(
+  () => buildLayoutSnapshot(malformedLabelScene, measurer),
+  "an imported edge label without text should not crash layout",
+);
+
+const waypointEdgeId = asEdgeId("edge_places");
+const manualWaypoint = { x: 330, y: 190 };
+const waypointScene = addEdgeWaypoint(ER_COMMERCE, waypointEdgeId, manualWaypoint);
+const waypointLayout = buildLayoutSnapshot(waypointScene, measurer);
+assert.equal(
+  waypointLayout.edges[waypointEdgeId]?.routedBy,
+  "polyline",
+  "a manual waypoint should take over the orthogonal route",
+);
+assert.ok(
+  waypointLayout.edges[waypointEdgeId]?.points.some(
+    (entry) =>
+      Math.abs(entry.x - manualWaypoint.x) < 0.01 &&
+      Math.abs(entry.y - manualWaypoint.y) < 0.01,
+  ),
+  "the routed line should pass through its manual waypoint",
+);
+const addedWaypoint = waypointScene.edges[waypointEdgeId]?.routing.waypoints[0];
+assert.ok(addedWaypoint !== undefined);
+const movedWaypoint = { x: 300, y: 200 };
+const movedWaypointScene = setEdgeWaypoint(
+  waypointScene,
+  waypointEdgeId,
+  addedWaypoint.id,
+  movedWaypoint,
+);
+const movedWaypointLayout = buildLayoutSnapshot(movedWaypointScene, measurer);
+assert.ok(
+  movedWaypointLayout.edges[waypointEdgeId]?.points.some(
+    (entry) =>
+      Math.abs(entry.x - movedWaypoint.x) < 0.01 &&
+      Math.abs(entry.y - movedWaypoint.y) < 0.01,
+  ),
+  "moving the waypoint should move the routed line",
+);
+
+const ordersFrame = layout.nodes[asNodeId("orders")]?.frame;
+assert.ok(ordersFrame !== undefined);
+const rightWaypoint = {
+  x: rectRight(ordersFrame) + 45,
+  y: rectCenter(ordersFrame).y,
+};
+const sideTargetScene = addEdgeWaypoint(
+  ER_COMMERCE,
+  waypointEdgeId,
+  rightWaypoint,
+);
+const sideTargetPoints = buildLayoutSnapshot(sideTargetScene, measurer)
+  .edges[waypointEdgeId]?.points;
+const sideTargetEnd = sideTargetPoints?.[sideTargetPoints.length - 1];
+assert.ok(sideTargetEnd !== undefined);
+assert.ok(
+  Math.abs(sideTargetEnd.x - rectRight(ordersFrame)) < 0.01,
+  "a waypoint to the right should re-target the connector to the right border",
+);
 
 const emptyTableBase = ER_COMMERCE.nodes.customers;
 assert.ok(

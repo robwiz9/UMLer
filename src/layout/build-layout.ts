@@ -973,6 +973,21 @@ const adjustPerimeterAttachments = (
     targetDynamic && edge.target.target === "node" && edge.target.port.kind === "perimeter"
       ? edge.target.port.side
       : null;
+  const waypoints = edge.routing.waypoints;
+  const closestWaypoint = (reference: Point): Point | undefined =>
+    waypoints.reduce<Point | undefined>((best, waypoint) => {
+      if (best === undefined) return waypoint.point;
+      const bestDistance = Math.hypot(best.x - reference.x, best.y - reference.y);
+      const nextDistance = Math.hypot(
+        waypoint.point.x - reference.x,
+        waypoint.point.y - reference.y,
+      );
+      return nextDistance < bestDistance ? waypoint.point : best;
+    }, undefined);
+  const sourceWaypoint = closestWaypoint(source.point);
+  const targetWaypoint = closestWaypoint(target.point);
+  const sourceReference = sourceWaypoint ?? target.point;
+  const targetReference = targetWaypoint ?? source.point;
   const horizontalFacing =
     (sourceSide === "east" && targetSide === "west") ||
     (sourceSide === "west" && targetSide === "east");
@@ -980,6 +995,7 @@ const adjustPerimeterAttachments = (
     (sourceSide === "south" && targetSide === "north") ||
     (sourceSide === "north" && targetSide === "south");
   if (
+    waypoints.length === 0 &&
     sourceFrame !== undefined &&
     targetFrame !== undefined &&
     (horizontalFacing || verticalFacing)
@@ -1073,7 +1089,7 @@ const adjustPerimeterAttachments = (
     ? (["north", "east", "south", "west"] as const).flatMap((side) =>
         perimeterCandidates(
           sourceFrame,
-          target.point,
+          sourceReference,
           gridSize,
           side,
           usedAnchorsByNode(used, sourceNodeId as string),
@@ -1084,7 +1100,7 @@ const adjustPerimeterAttachments = (
     ? (["north", "east", "south", "west"] as const).flatMap((side) =>
         perimeterCandidates(
           targetFrame,
-          source.point,
+          targetReference,
           gridSize,
           side,
           usedAnchorsByNode(used, targetNodeId as string),
@@ -1105,13 +1121,18 @@ const adjustPerimeterAttachments = (
     const sourceStub = add(sourceCandidate.point, scale(sourceCandidate.normal, stubLength));
     for (const targetCandidate of targetCandidates) {
       const targetStub = add(targetCandidate.point, scale(targetCandidate.normal, stubLength));
-      const distance = Math.abs(sourceStub.x - targetStub.x) + Math.abs(sourceStub.y - targetStub.y);
+      const distance = waypoints.length === 0
+        ? Math.abs(sourceStub.x - targetStub.x) + Math.abs(sourceStub.y - targetStub.y)
+        : Math.abs(sourceStub.x - sourceReference.x) +
+          Math.abs(sourceStub.y - sourceReference.y) +
+          Math.abs(targetReference.x - targetStub.x) +
+          Math.abs(targetReference.y - targetStub.y);
       const sourceToward =
-        (targetCandidate.point.x - sourceCandidate.point.x) * sourceCandidate.normal.x +
-        (targetCandidate.point.y - sourceCandidate.point.y) * sourceCandidate.normal.y;
+        (sourceReference.x - sourceCandidate.point.x) * sourceCandidate.normal.x +
+        (sourceReference.y - sourceCandidate.point.y) * sourceCandidate.normal.y;
       const targetToward =
-        (sourceCandidate.point.x - targetCandidate.point.x) * targetCandidate.normal.x +
-        (sourceCandidate.point.y - targetCandidate.point.y) * targetCandidate.normal.y;
+        (targetReference.x - targetCandidate.point.x) * targetCandidate.normal.x +
+        (targetReference.y - targetCandidate.point.y) * targetCandidate.normal.y;
       const sourceHorizontal = directionIsHorizontal(sourceCandidate.normal);
       const targetHorizontal = directionIsHorizontal(targetCandidate.normal);
       const bendCost =
@@ -1402,6 +1423,40 @@ const orthogonalRoute = (
   ) ?? simplified;
 };
 
+const routeThroughWaypoints = (
+  source: AttachmentResolution,
+  target: AttachmentResolution,
+  routing: SceneEdge["routing"],
+  waypoints: readonly Point[],
+): readonly Point[] => {
+  const stub = Math.max(0, routing.stubLength);
+  const s = add(source.point, scale(source.normal, stub));
+  const t = add(target.point, scale(target.normal, stub));
+  const points: Point[] = [source.point, s];
+  let cursor = s;
+  for (const waypoint of waypoints) {
+    // Keep manual points as orthogonal constraints: if the point is not
+    // already on the current row/column, insert one elbow before it.
+    if (
+      Math.abs(cursor.x - waypoint.x) > EPSILON &&
+      Math.abs(cursor.y - waypoint.y) > EPSILON
+    ) {
+      points.push(point(waypoint.x, cursor.y));
+    }
+    points.push(waypoint);
+    cursor = waypoint;
+  }
+  if (Math.abs(cursor.x - t.x) > EPSILON && Math.abs(cursor.y - t.y) > EPSILON) {
+    points.push(
+      directionIsHorizontal(target.normal)
+        ? point(t.x, cursor.y)
+        : point(cursor.x, t.y),
+    );
+  }
+  points.push(t, target.point);
+  return simplifyPoints(points);
+};
+
 const routeEdge = (
   edge: SceneEdge,
   source: AttachmentResolution,
@@ -1416,6 +1471,17 @@ const routeEdge = (
     return {
       points: simplifyPoints([source.point, target.point]),
       routedBy: "straight",
+    };
+  }
+  if (edge.routing.waypoints.length > 0) {
+    return {
+      points: routeThroughWaypoints(
+        source,
+        target,
+        edge.routing,
+        edge.routing.waypoints.map((waypoint) => waypoint.point),
+      ),
+      routedBy: "polyline",
     };
   }
   if (edge.routing.mode === "straight" || edge.routing.mode === "bezier") {
@@ -1574,9 +1640,13 @@ const measureLabel = (
     : pointOnPolyline(edgePoints, label.anchor.t);
   const anchor = anchorHit.point;
   const style = resolveTextStyle(scene.theme.edge.labelText, label.textStyle);
+  // Imported/older projects can contain a label record without `text` (for
+  // example after a style-only label edit). Treat it as an empty label instead
+  // of crashing the whole scene render.
+  const labelText = typeof label.text === "string" ? label.text : "";
   const text = scene.meta.diagramKind === "circuit"
-    ? measureRichText(label.text, style, measurer, label.maxWidth)
-    : measurer.measure(label.text, style, label.maxWidth);
+    ? measureRichText(labelText, style, measurer, label.maxWidth)
+    : measurer.measure(labelText, style, label.maxWidth);
   const padding = scene.theme.edge.labelPadding;
   const width = text.width + padding * 2;
   const height = text.height + padding * 2;
@@ -1769,7 +1839,10 @@ const computeEdge = (
   const points = routed.points;
   const markerObstacles = markerLabelObstacles(edge, points);
   const lineObstacles = lineLabelObstacles(points);
-  const labels = edge.labels.map((label) => {
+  const labels = edge.labels.flatMap((label) => {
+    // Older/imported files may contain a label record without text; omit it
+    // from the rendered layout rather than creating an invisible label box.
+    if (typeof label.text !== "string") return [];
     const measured = measureLabel(
       label,
       points,
@@ -1778,7 +1851,7 @@ const computeEdge = (
       [...labelObstacles, ...lineObstacles, ...markerObstacles, ...placedLabelFrames],
     );
     placedLabelFrames.push(measured.frame);
-    return measured;
+    return [measured];
   });
   const edgeBounds = unionRects([
     rectOfPoints(points),

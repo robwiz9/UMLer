@@ -136,6 +136,40 @@ check(
 );
 check(JSON.parse(response.body).error === "authorization_pending", "token relay passes pending state");
 
+// Refresh-token validation and forwarding.
+response = makeResponse();
+await tokenHandler(
+  request("POST", `client_id=${validClientId}&grant_type=refresh_token`),
+  response,
+);
+check(response.statusCode === 400, "refresh relay requires a refresh token");
+
+captured = null;
+globalThis.fetch = async (url, init) => {
+  captured = { url, init };
+  return new Response(
+    JSON.stringify({
+      access_token: "gho_refreshed",
+      expires_in: 28800,
+      refresh_token: "ghr_next",
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+};
+response = makeResponse();
+await tokenHandler(
+  request(
+    "POST",
+    `client_id=${validClientId}&grant_type=refresh_token&refresh_token=ghr_current`,
+  ),
+  response,
+);
+const refreshBody = captured?.init?.body?.toString() ?? "";
+check(captured?.url === "https://github.com/login/oauth/access_token", "refresh relay calls GitHub");
+check(refreshBody.includes("grant_type=refresh_token"), "refresh relay sends the refresh grant");
+check(refreshBody.includes("refresh_token=ghr_current"), "refresh relay forwards the refresh token");
+check(JSON.parse(response.body).access_token === "gho_refreshed", "refresh relay passes through the token");
+
 globalThis.fetch = originalFetch;
 delete process.env.GITHUB_OAUTH_CLIENT_ID;
 

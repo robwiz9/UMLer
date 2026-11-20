@@ -121,9 +121,10 @@ chooser opens.
   label, trailing cross to clear), a sanitized diagram id for `@fig-…` references, a resources-folder field
   plus a list of referenced images, a whole-diagram vs. selection scope, a Placement size/scale card above
   the label, a **collapsible** rendered preview with an Expand modal that zooms, compile diagnostics, and
-  two mutually exclusive output modes: **Export .typ File** (default; download plus a copyable
+  two mutually exclusive output modes: **Export .typ File** (default; pick a writable `.typ` file on Chromium
+  for direct **Save to file** and per-scene **Automatic export** on Ctrl+S, or download plus a copyable
   `#include` instruction) and **View Source Code** (manual-paste import, copy action and code block). The
-  downloaded file prepends the versioned CeTZ import so it can be included directly.
+  written/downloaded file prepends the versioned CeTZ import so it can be included directly.
 - **Page fitting never stretches implicitly.** At 100% a small diagram keeps its natural size; it is only
   reduced (aspect ratio preserved) when it would not fit the page. An explicit zoom above 100% is honoured
   until the page limit. Selection export keeps absolute object sizes; only the origin moves. Border padding

@@ -1,7 +1,11 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app/App.tsx";
+import { loadUiPreferences } from "./app/ui-preferences.ts";
 import "./styles.css";
+
+const initialPreferences = loadUiPreferences();
+document.documentElement.dataset.colorMode = initialPreferences.colorMode;
 
 /**
  * A deploy can replace the entry bundle while an open tab still holds the old

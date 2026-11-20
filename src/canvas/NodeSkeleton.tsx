@@ -427,7 +427,7 @@ const ActorBody = ({
         cx={centerX}
         cy={headCenterY}
         r={headRadius}
-        fill="white"
+        fill={theme.shape.fill.color ?? "white"}
         stroke={stroke.color}
         strokeWidth={stroke.width}
       />
@@ -490,7 +490,7 @@ const LifelineBody = ({
         y={head.y}
         width={head.width}
         height={head.height}
-        fill="white"
+        fill={style.fill.color ?? "white"}
         stroke={style.stroke.color}
         strokeWidth={style.stroke.width}
       />
@@ -556,7 +556,7 @@ const LifelineBody = ({
               y={top}
               width={activation.frame.width}
               height={height}
-              fill="white"
+              fill={style.fill.color ?? "white"}
               stroke={style.stroke.color}
               strokeWidth={0.7}
               style={{ cursor: "move" }}
@@ -845,6 +845,13 @@ const ImageBody = ({
   const { imageFrame } = layout;
   const preserveAspectRatio =
     fit === "cover" ? "xMidYMid slice" : fit === "fill" ? "none" : "xMidYMid meet";
+  // Never hand a local file:// URL to an SVG image: Firefox blocks it with a
+  // page-security error. Project assets are data URLs; anything else shows the
+  // existing placeholder instead.
+  const assetHref = asset?.dataUrl !== undefined &&
+    /^(data:|blob:|https?:)/i.test(asset.dataUrl)
+    ? asset.dataUrl
+    : undefined;
   return (
     <>
       <rect
@@ -854,9 +861,9 @@ const ImageBody = ({
         height={imageFrame.height}
         fill="#f0ede5"
       />
-      {asset?.dataUrl !== undefined ? (
+      {assetHref !== undefined ? (
         <image
-          href={asset.dataUrl}
+          href={assetHref}
           x={imageFrame.x}
           y={imageFrame.y}
           width={imageFrame.width}

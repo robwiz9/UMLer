@@ -16,6 +16,9 @@ interface AppMenuBarProps {
   readonly onSaveToGitHub: () => void;
   readonly onPurgeUnusedImages: () => void;
   readonly unusedImageCount: number;
+  readonly canPickSaveFile: boolean;
+  readonly saveFileName: string | null;
+  readonly onPickSaveFile: () => void;
 }
 
 type MenuName = "file" | "scene";
@@ -36,6 +39,9 @@ export const AppMenuBar = ({
   onSaveToGitHub,
   onPurgeUnusedImages,
   unusedImageCount,
+  canPickSaveFile,
+  saveFileName,
+  onPickSaveFile,
 }: AppMenuBarProps) => {
   const [open, setOpen] = useState<MenuName | null>(null);
   const rootRef = useRef<HTMLElement | null>(null);
@@ -112,6 +118,16 @@ export const AppMenuBar = ({
             <button type="button" role="menuitem" onClick={() => choose(onExportProject)}>
               Export project…
             </button>
+            {canPickSaveFile ? (
+              <button type="button" role="menuitem" onClick={() => choose(onPickSaveFile)}>
+                Pick save file…
+                {saveFileName !== null ? (
+                  <span className="menu-shortcut" title={saveFileName}>
+                    {saveFileName}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
             <button type="button" role="menuitem" onClick={() => choose(onImportProject)}>
               Import project…
             </button>
