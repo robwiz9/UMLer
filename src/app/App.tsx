@@ -181,6 +181,7 @@ import {
   moveSequenceEdge,
   patchLayout,
   patchNode,
+  removeEdgeWaypoint,
   rerouteEdge,
   setEdgeAttachment,
   setEdgeLabelOffset,
@@ -3933,6 +3934,16 @@ export const App = () => {
     setLayoutNote("Routing point added.");
   }, [layout, scene]);
 
+  const handleRemoveEdgeWaypoint = useCallback((
+    edgeId: string,
+    waypointId: string,
+  ) => {
+    setScene((current) =>
+      removeEdgeWaypoint(current, asEdgeId(edgeId), waypointId),
+    );
+    setLayoutNote("Routing point removed.");
+  }, []);
+
   const handleMoveEdgeWaypoint = useCallback((
     edgeId: string,
     waypointId: string,
@@ -4488,6 +4499,7 @@ export const App = () => {
           onRerouteEdge={handleReroute}
           onAddEdgeWaypoint={handleAddEdgeWaypoint}
           onMoveEdgeWaypoint={handleMoveEdgeWaypoint}
+          onRemoveEdgeWaypoint={handleRemoveEdgeWaypoint}
           onAddJunctionAtWire={handleAddJunctionAtWire}
           onBeginShiftDrag={beginShiftDrag}
           onCommitShiftDrag={commitShiftDrag}

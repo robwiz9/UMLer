@@ -131,6 +131,7 @@ interface CanvasStageProps {
   readonly onSetRoutingMode: (edgeId: string, mode: EdgeRoutingMode) => void;
   readonly onRerouteEdge: (edgeId: string) => void;
   readonly onAddEdgeWaypoint: (edgeId: string, point: Point) => void;
+  readonly onRemoveEdgeWaypoint: (edgeId: string, waypointId: string) => void;
   readonly onMoveEdgeWaypoint: (
     edgeId: string,
     waypointId: string,
@@ -1203,6 +1204,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onSetRoutingMode,
   onRerouteEdge,
   onAddEdgeWaypoint,
+  onRemoveEdgeWaypoint,
   onMoveEdgeWaypoint,
   onAddJunctionAtWire,
   onBeginShiftDrag,
@@ -5207,6 +5209,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                       style={{ cursor: "grab" }}
                       onPointerDown={(event) =>
                         beginWaypointDrag(selectedEdgeLayout.edgeId, waypoint.id, event)}
+                      onDoubleClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onRemoveEdgeWaypoint(
+                          selectedEdgeLayout.edgeId,
+                          waypoint.id,
+                        );
+                      }}
                     />
                   ))
                 : null}

@@ -845,6 +845,21 @@ export const addEdgeWaypoint = (
     };
   });
 
+export const removeEdgeWaypoint = (
+  scene: SceneDocument,
+  edgeId: EdgeId,
+  waypointId: string,
+): SceneDocument =>
+  updateEdge(scene, edgeId, (edge) => ({
+    ...edge,
+    routing: {
+      ...edge.routing,
+      waypoints: edge.routing.waypoints.filter(
+        (waypoint) => waypoint.id !== waypointId,
+      ),
+    },
+  }));
+
 export const setEdgeWaypoint = (
   scene: SceneDocument,
   edgeId: EdgeId,
