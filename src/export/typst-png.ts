@@ -134,7 +134,6 @@ export const renderTypstPng = async (
   svg: string,
   options: TypstPngOptions,
 ): Promise<Blob> => {
-  const scale = 2;
   const image = await loadSvg(svg);
   let size: { width: number; height: number };
   try {
@@ -145,6 +144,11 @@ export const renderTypstPng = async (
     );
     size = { width: image.naturalWidth, height: image.naturalHeight };
   }
+  // Rasterize for print-quality output (300 DPI) and never let a small canvas
+  // produce a thumbnail: the longest edge is at least 1600 px.
+  const dpiScale = 300 / 72;
+  const minEdgeScale = 1600 / Math.max(1, size.width, size.height);
+  const scale = Math.max(dpiScale, minEdgeScale);
   const pageWidth = Math.max(1, Math.round(size.width * scale));
   const pageHeight = Math.max(1, Math.round(size.height * scale));
 
