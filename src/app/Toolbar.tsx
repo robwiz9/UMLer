@@ -309,45 +309,46 @@ export const Toolbar = ({
           </button>
           <div className="toolbar-level3-only">
             <div className="toolbar-menu-divider" />
+            <div className="toolbar-zoom-row" role="group" aria-label="Zoom">
+              <span className="toolbar-menu-icon" aria-hidden="true">
+                <svg className="toolbar-zoom-icon" viewBox="0 0 16 16">
+                  <circle cx="7" cy="7" r="4.3" />
+                  <path d="M10.2 10.2 14 14" />
+                </svg>
+              </span>
+              <span>Zoom</span>
+              <span className="toolbar-zoom-spacer" />
+              <button
+                type="button"
+                className="toolbar-zoom-step"
+                onClick={onZoomOut}
+                aria-label="Zoom out"
+                title="Zoom out"
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="toolbar-zoom-value"
+                onClick={onResetZoom}
+                title="Reset zoom to 100%"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                className="toolbar-zoom-step"
+                onClick={onZoomIn}
+                aria-label="Zoom in"
+                title="Zoom in"
+              >
+                +
+              </button>
+            </div>
             <button
               type="button"
               role="menuitem"
-              onClick={() => {
-                onZoomOut();
-                setCompactOpen(false);
-              }}
-            >
-              <span className="toolbar-menu-icon" aria-hidden="true">−</span>
-              <span>Zoom out</span>
-              <span className="toolbar-menu-check" />
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onZoomIn();
-                setCompactOpen(false);
-              }}
-            >
-              <span className="toolbar-menu-icon" aria-hidden="true">+</span>
-              <span>Zoom in</span>
-              <span className="toolbar-menu-check">{Math.round(zoom * 100)}%</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onResetZoom();
-                setCompactOpen(false);
-              }}
-            >
-              <span className="toolbar-menu-icon" aria-hidden="true">1:1</span>
-              <span>Reset zoom</span>
-              <span className="toolbar-menu-check">100%</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
+              className="toolbar-theme-row"
               onClick={() => {
                 onCycleColorMode();
                 setCompactOpen(false);
