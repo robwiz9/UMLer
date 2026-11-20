@@ -3430,6 +3430,17 @@ button {
   padding-left: 3px;
 }
 
+.code-number-field > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin-left: 8px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.35;
+  stroke-linecap: round;
+}
+
 .code-input-with-action {
   position: relative;
   display: flex;
@@ -3537,24 +3548,88 @@ button {
   font-weight: 600;
 }
 
-.code-margin-field input {
+.code-icon-input {
+  display: flex;
   width: 100%;
+  min-width: 0;
   height: 28px;
-  padding: 0 4px;
+  align-items: center;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 5px;
   background: #ffffff;
+}
+
+.code-icon-input > svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  margin-left: 6px;
+  pointer-events: none;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.code-icon-input > input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  flex: 1 1 auto;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
   color: var(--ink);
   font-size: 11.5px;
   font-weight: 600;
-  text-align: center;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.code-icon-input > input:focus {
+  outline: none;
+}
+
+.code-icon-input:focus-within {
+  outline: 2px solid #bfdbfe;
+  outline-offset: 1px;
+  border-color: #93c5fd;
+}
+
+.code-margin-field input {
+  width: 100%;
+  height: 26px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 
 .code-margin-field input:focus {
-  outline: 2px solid #bfdbfe;
-  outline-offset: 1px;
-  border-color: #93c5fd;
+  outline: none;
+}
+
+.code-margin-field .code-icon-input > input {
+  height: 26px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.code-margin-field .code-icon-input > input:focus {
+  outline: none;
+  border: 0;
 }
 
 .code-checkbox {
@@ -3607,6 +3682,27 @@ button {
   outline: 2px solid #bfdbfe;
   outline-offset: 1px;
   border-color: #93c5fd;
+}
+
+.code-border-field .code-icon-input {
+  height: 30px;
+}
+
+.code-border-field .code-icon-input > input[type="number"] {
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.code-border-field .code-icon-input > input[type="number"]:focus {
+  outline: none;
+  border: 0;
+}
+
+.code-border-field .code-icon-input:has(input:disabled) {
+  opacity: 0.45;
 }
 
 .code-border-color input[type="color"] {
@@ -4001,6 +4097,13 @@ button {
 
 .code-block-wrap .code-block {
   /* padding-top: 42px; */
+}
+
+.code-file-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 8px;
 }
 
 .code-download-button {
@@ -5093,9 +5196,17 @@ button {
 }
 
 :root[data-color-mode="semi-dark"] .code-number-field input,
-:root[data-color-mode="dark"] .code-number-field input {
+:root[data-color-mode="dark"] .code-number-field input,
+:root[data-color-mode="semi-dark"] .code-icon-input > input,
+:root[data-color-mode="dark"] .code-icon-input > input {
   background: transparent;
   color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .code-icon-input,
+:root[data-color-mode="dark"] .code-icon-input {
+  border-color: var(--line);
+  background: #1e1e1e;
 }
 
 /* :root[data-color-mode="semi-dark"] .code-copy-overlay,

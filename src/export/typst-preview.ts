@@ -135,22 +135,43 @@ const ensureInitialized = (): Promise<void> => {
   return runtime.initialization;
 };
 
+const prepareSource = async (
+  source: string,
+  images: readonly PreviewImage[],
+): Promise<void> => {
+  await ensureInitialized();
+  await $typst.resetShadow();
+  await $typst.addSource("/main.typ", source);
+  for (const image of images) {
+    const decoded = image.dataUrl === undefined ? null : decodeDataUrl(image.dataUrl);
+    const path = image.path.startsWith("/") ? image.path : `/${image.path}`;
+    await $typst.mapShadow(path, decoded ?? placeholderBytes(path));
+  }
+};
+
 /** Compiles one preview at a time; the shared typst.ts instance is stateful. */
 export const renderTypstPreview = async (
   source: string,
   images: readonly PreviewImage[],
 ): Promise<TypstPreviewResult> => {
   const run = runtime.queue.then(async () => {
-    await ensureInitialized();
-    await $typst.resetShadow();
-    await $typst.addSource("/main.typ", source);
-    for (const image of images) {
-      const decoded = image.dataUrl === undefined ? null : decodeDataUrl(image.dataUrl);
-      const path = image.path.startsWith("/") ? image.path : `/${image.path}`;
-      await $typst.mapShadow(path, decoded ?? placeholderBytes(path));
-    }
+    await prepareSource(source, images);
     const svg = await $typst.svg({ mainFilePath: "/main.typ", root: "/" });
     return { svg };
+  });
+  runtime.queue = run.catch(() => undefined);
+  return run;
+};
+
+export const renderTypstPdf = async (
+  source: string,
+  images: readonly PreviewImage[],
+): Promise<Uint8Array> => {
+  const run = runtime.queue.then(async () => {
+    await prepareSource(source, images);
+    const pdf = await $typst.pdf({ mainFilePath: "/main.typ", root: "/" });
+    if (pdf === undefined) throw new Error("Typst did not return a PDF.");
+    return pdf;
   });
   runtime.queue = run.catch(() => undefined);
   return run;

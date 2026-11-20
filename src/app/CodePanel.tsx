@@ -22,7 +22,8 @@ import {
   type PageUnit,
 } from "../export/page.ts";
 import type { PreviewImage } from "../export/typst-preview.ts";
-import { downloadTextFile } from "./file-transfer.ts";
+import { cleanTypstSvg, renderTypstPng } from "../export/typst-png.ts";
+import { downloadBinaryFile, downloadBlob, downloadTextFile } from "./file-transfer.ts";
 import {
   ensureWritePermission,
   pickTypstExportFile,
@@ -135,6 +136,59 @@ const SaveFileIcon = () => (
   <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
     <path d="M3 2.5h8.5L15 6v9.5H3Z" />
     <path d="M6 2.5v4h5v-4M6 15.5v-4h6v4" />
+  </svg>
+);
+
+const ExportFileIcon = ({ kind }: { readonly kind: "pdf" | "png" | "svg" }) => (
+  <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
+    {kind === "pdf" ? (
+      <>
+        <path d="M4 2.5h6l3 3v10H4Z" />
+        <path d="M10 2.5v3h3M6.5 8.5h4M6.5 11h4" />
+      </>
+    ) : kind === "png" ? (
+      <>
+        <rect x="2.8" y="3.5" width="12.4" height="11" rx="1.4" />
+        <circle cx="6.1" cy="7" r="1.1" />
+        <path d="M3.2 12.8l3.2-3.2 2.4 2.4 1.9-1.9 3.9 3.9" />
+      </>
+    ) : (
+      <>
+        <path d="M3 14.5C6 8 9 14 15 4.5" />
+        <rect x="1.8" y="13.3" width="2.4" height="2.4" />
+        <rect x="13.8" y="3.3" width="2.4" height="2.4" />
+      </>
+    )}
+  </svg>
+);
+
+const MagnifierIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="7" cy="7" r="4.3" />
+    <path d="M10.2 10.2 14 14" />
+  </svg>
+);
+
+const DirectionIcon = ({ side }: { readonly side: "top" | "right" | "bottom" | "left" }) => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    {side === "top" ? <path d="M8 14V2M4 6l4-4 4 4" /> : null}
+    {side === "right" ? <path d="M2 8h12M10 4l4 4-4 4" /> : null}
+    {side === "bottom" ? <path d="M8 2v12M4 10l4 4 4-4" /> : null}
+    {side === "left" ? <path d="M14 8H2M6 4 2 8l4 4" /> : null}
+  </svg>
+);
+
+const BorderWidthIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2 4.5h12M2 8h12M2 11.5h12" />
+    <path d="M2 8h12" strokeWidth="2.8" />
+  </svg>
+);
+
+const PaddingIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.2" />
+    <rect x="5.2" y="5.2" width="5.6" height="5.6" rx="0.7" strokeDasharray="1.9 1.4" />
   </svg>
 );
 
@@ -251,6 +305,9 @@ export const CodePanel = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewCollapsed, setPreviewCollapsed] = useState(true);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [transparentPng, setTransparentPng] = useState(false);
+  const [fileExportBusy, setFileExportBusy] = useState<"pdf" | "png" | "svg" | null>(null);
+  const [fileExportError, setFileExportError] = useState<string | null>(null);
   const copyTimer = useRef<number | null>(null);
   const importTimer = useRef<number | null>(null);
   const fileTimer = useRef<number | null>(null);
@@ -540,6 +597,78 @@ export const CodePanel = ({
         : ready
           ? `${preview.durationMs ?? 0} ms`
           : "Waiting";
+  const fileExportBase =
+    result.label.trim().replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-") ||
+    "uml-diagram";
+
+  const currentExportSvg = async (): Promise<string> => {
+    const mounted = ready
+      ? document.querySelector<SVGSVGElement>(
+          ".code-panel .code-preview-svg svg",
+        )
+      : null;
+    if (mounted !== null) {
+      return new XMLSerializer().serializeToString(mounted);
+    }
+    const { renderTypstPreview } = await import("../export/typst-preview.ts");
+    return (await renderTypstPreview(result.previewCode, previewImages)).svg;
+  };
+
+  const savePdf = async (): Promise<void> => {
+    if (fileExportBusy !== null) return;
+    setFileExportBusy("pdf");
+    setFileExportError(null);
+    try {
+      const { renderTypstPdf } = await import("../export/typst-preview.ts");
+      const pdf = await renderTypstPdf(result.previewCode, previewImages);
+      downloadBinaryFile(`${fileExportBase}.pdf`, pdf, "application/pdf");
+    } catch (error) {
+      setFileExportError(
+        error instanceof Error ? error.message : "The PDF could not be exported.",
+      );
+    } finally {
+      setFileExportBusy(null);
+    }
+  };
+
+  const savePng = async (): Promise<void> => {
+    if (fileExportBusy !== null) return;
+    setFileExportBusy("png");
+    setFileExportError(null);
+    try {
+      const png = await renderTypstPng(await currentExportSvg(), {
+        page,
+        transparent: transparentPng,
+      });
+      downloadBlob(`${fileExportBase}.png`, png);
+    } catch (error) {
+      setFileExportError(
+        error instanceof Error ? error.message : "The PNG could not be exported.",
+      );
+    } finally {
+      setFileExportBusy(null);
+    }
+  };
+
+  const saveSvg = async (): Promise<void> => {
+    if (fileExportBusy !== null) return;
+    setFileExportBusy("svg");
+    setFileExportError(null);
+    try {
+      const svg = cleanTypstSvg(await currentExportSvg());
+      downloadTextFile(
+        `${fileExportBase}.svg`,
+        svg,
+        "image/svg+xml;charset=utf-8",
+      );
+    } catch (error) {
+      setFileExportError(
+        error instanceof Error ? error.message : "The SVG could not be exported.",
+      );
+    } finally {
+      setFileExportBusy(null);
+    }
+  };
 
   return (
     <>
@@ -683,6 +812,7 @@ export const CodePanel = ({
                 <div className="code-field">
                   <span>Diagram zoom</span>
                   <label className="code-number-field">
+                    <MagnifierIcon />
                     <input
                       id="code-diagram-zoom-value"
                       name="code-diagram-zoom-value"
@@ -729,23 +859,26 @@ export const CodePanel = ({
                     {MARGIN_SIDES.map((side) => (
                       <label className="code-margin-field" key={side}>
                         <span>{MARGIN_LABELS[side]}</span>
-                        <input
-                          id={`code-margin-${side}`}
-                          name={`code-margin-${side}`}
-                          type="number"
-                          min={0}
-                          step={1}
-                          value={page.margins[side]}
-                          onChange={(event) => {
-                            const value = Number(event.target.value);
-                            if (Number.isFinite(value) && value >= 0) {
-                              setPage({
-                                ...page,
-                                margins: { ...page.margins, [side]: value },
-                              });
-                            }
-                          }}
-                        />
+                        <span className="code-icon-input">
+                          <DirectionIcon side={side} />
+                          <input
+                            id={`code-margin-${side}`}
+                            name={`code-margin-${side}`}
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={page.margins[side]}
+                            onChange={(event) => {
+                              const value = Number(event.target.value);
+                              if (Number.isFinite(value) && value >= 0) {
+                                setPage({
+                                  ...page,
+                                  margins: { ...page.margins, [side]: value },
+                                });
+                              }
+                            }}
+                          />
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -788,39 +921,45 @@ export const CodePanel = ({
                   </label>
                   <label className="code-border-field">
                     <span>Width (pt)</span>
-                    <input
-                      id="code-border-width"
-                      name="code-border-width"
-                      type="number"
-                      min={0}
-                      step={0.25}
-                      value={border.width}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isFinite(value) && value >= 0) {
-                          setBorder({ ...border, width: value });
-                        }
-                      }}
-                      disabled={!border.enabled}
-                    />
+                    <span className="code-icon-input code-border-input">
+                      <BorderWidthIcon />
+                      <input
+                        id="code-border-width"
+                        name="code-border-width"
+                        type="number"
+                        min={0}
+                        step={0.25}
+                        value={border.width}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (Number.isFinite(value) && value >= 0) {
+                            setBorder({ ...border, width: value });
+                          }
+                        }}
+                        disabled={!border.enabled}
+                      />
+                    </span>
                   </label>
                   <label className="code-border-field">
                     <span>Padding (pt)</span>
-                    <input
-                      id="code-border-padding"
-                      name="code-border-padding"
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={border.padding}
-                      onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (Number.isFinite(value) && value >= 0) {
-                          setBorder({ ...border, padding: value });
-                        }
-                      }}
-                      disabled={!border.enabled}
-                    />
+                    <span className="code-icon-input code-border-input">
+                      <PaddingIcon />
+                      <input
+                        id="code-border-padding"
+                        name="code-border-padding"
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={border.padding}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (Number.isFinite(value) && value >= 0) {
+                            setBorder({ ...border, padding: value });
+                          }
+                        }}
+                        disabled={!border.enabled}
+                      />
+                    </span>
                   </label>
                 </div>
               </>
@@ -999,6 +1138,52 @@ export const CodePanel = ({
 
           <ColoredLine color="var(--line)" />
 
+          <section className="code-section">
+            <div className="code-section-head">
+              <div className="code-section-title">File export</div>
+            </div>
+            <div className="code-file-export-actions">
+              <button
+                type="button"
+                className="code-download-button secondary"
+                onClick={() => void savePdf()}
+                disabled={fileExportBusy !== null}
+              > <ExportFileIcon kind="pdf" />
+                {fileExportBusy === "pdf" ? "Saving PDF…" : "Save as PDF"}
+              </button>
+              <button
+                type="button"
+                className="code-download-button secondary"
+                onClick={() => void savePng()}
+                disabled={fileExportBusy !== null}
+              > <ExportFileIcon kind="png" />
+                {fileExportBusy === "png" ? "Saving PNG…" : "Save as PNG"}
+              </button>
+              <button
+                type="button"
+                className="code-download-button secondary"
+                onClick={() => void saveSvg()}
+                disabled={fileExportBusy !== null}
+              > <ExportFileIcon kind="svg" />
+                {fileExportBusy === "svg" ? "Saving SVG…" : "Save as SVG"}
+              </button>
+            </div>
+              <label className="code-checkbox">
+                <input
+                  type="checkbox"
+                  checked={transparentPng}
+                  onChange={(event) => setTransparentPng(event.target.checked)}
+                  disabled={fileExportBusy !== null}
+                />
+                Transparent PNG background
+              </label>
+            {fileExportError !== null ? (
+              <p className="code-hint code-warning-hint">{fileExportError}</p>
+            ) : null}
+          </section>
+
+          <ColoredLine color="var(--line)" />
+
           <section className="code-section code-source-section">
             <div className="code-section-head">
               <div className="code-section-title">Typst Code</div>
@@ -1056,26 +1241,26 @@ export const CodePanel = ({
                   )}
                 </p>
                 {exportFilesSupported ? (
-                  <>                    
-                  {scope === "diagram" ? (
-                    <label
-                      className={`code-auto-export ${automaticExport ? "on" : ""}`}
-                      title={
-                        exportBinding === null
-                          ? "Pick an export file first"
-                          : "Write this scene's .typ file whenever Ctrl+S saves"
-                      }
-                    >
-                      <input
-                        type="checkbox"
-                        checked={automaticExport}
-                        disabled={exportBinding === null}
-                        onChange={(event) => changeAutomaticExport(event.target.checked)}
-                      />
-                      <span>Automatic export</span>
-                      {exportBinding === null ? <em>Pick an export file first</em> : null}
-                    </label>
-                  ) : null}
+                  <>
+                    {scope === "diagram" ? (
+                      <label
+                        className={`code-auto-export ${automaticExport ? "on" : ""}`}
+                        title={
+                          exportBinding === null
+                            ? "Pick an export file first"
+                            : "Write this scene's .typ file whenever Ctrl+S saves"
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={automaticExport}
+                          disabled={exportBinding === null}
+                          onChange={(event) => changeAutomaticExport(event.target.checked)}
+                        />
+                        <span>Automatic export</span>
+                        {exportBinding === null ? <em>Pick an export file first</em> : null}
+                      </label>
+                    ) : null}
                     {exportBinding !== null ? (
                       <div className="code-export-file-row">
                         <button
