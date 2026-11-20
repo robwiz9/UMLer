@@ -906,10 +906,19 @@ export const NodeFocusMenu = ({
     const isClassRow = node.kind === "table" && node.tableKind === "class";
     const prefixValue = row.prefix ?? row.visibility ?? "";
     const typeValue = isMethod ? row.returnType ?? "" : row.type ?? "";
-    const allRows = sections.flatMap((entry) => entry.rows);
-    const rowIndex = allRows.findIndex((entry) => entry.id === row.id);
-    const canMoveUp = rowIndex > 0;
-    const canMoveDown = rowIndex >= 0 && rowIndex < allRows.length - 1;
+    const rowSectionIndex = rowSection === undefined
+      ? -1
+      : sections.findIndex((entry) => entry.id === rowSection.id);
+    const rowIndexInSection = rowSection === undefined
+      ? -1
+      : rowSection.rows.findIndex((entry) => entry.id === row.id);
+    const canMoveUp =
+      rowIndexInSection > 0 || rowSectionIndex > 0;
+    const canMoveDown =
+      rowSection !== undefined &&
+      rowSectionIndex >= 0 &&
+      (rowIndexInSection < rowSection.rows.length - 1 ||
+        rowSectionIndex < sections.length - 1);
     const focusTypeField = (): void => {
       const input = document.getElementById(`row-${row.id}-type`);
       if (input instanceof HTMLInputElement) {
