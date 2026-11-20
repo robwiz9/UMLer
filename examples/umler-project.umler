@@ -1,9 +1,1512 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-20T15:39:50.385Z",
-  "activeSceneId": "scene_uml_class_payments",
+  "exportedAt": "2026-11-20T19:50:59.523Z",
+  "activeSceneId": "scene_4cae8430",
   "scenes": [
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_e36a97c4",
+      "revision": 1,
+      "meta": {
+        "title": "Untitled Entity-Relation diagram",
+        "diagramKind": "er",
+        "createdAt": "2026-11-15T20:27:32.529Z",
+        "updatedAt": "2026-11-15T20:27:32.529Z",
+        "appVersion": "0.1.0-step1",
+        "description": "Step 1 schema fixture"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {
+        "customers": {
+          "id": "customers",
+          "kind": "table",
+          "name": "customers",
+          "frame": {
+            "x": 36,
+            "y": 72,
+            "width": 225,
+            "height": 90
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "tableKind": "entity",
+          "header": {},
+          "sections": [
+            {
+              "id": "customers_attrs",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "customers_id",
+                  "kind": "attribute",
+                  "name": "id",
+                  "type": "uuid",
+                  "constraints": [
+                    "PK",
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "customers_email",
+                  "kind": "attribute",
+                  "name": "email",
+                  "type": "citext",
+                  "constraints": [
+                    "UQ",
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "customers_name",
+                  "kind": "attribute",
+                  "name": "name",
+                  "type": "text"
+                }
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        },
+        "orders": {
+          "id": "orders",
+          "kind": "table",
+          "name": "orders",
+          "frame": {
+            "x": 396,
+            "y": 72,
+            "width": 225,
+            "height": 108
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "tableKind": "entity",
+          "header": {},
+          "sections": [
+            {
+              "id": "orders_attrs",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "orders_id",
+                  "kind": "attribute",
+                  "name": "id",
+                  "type": "uuid",
+                  "constraints": [
+                    "PK",
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "orders_customer_id",
+                  "kind": "attribute",
+                  "name": "customer_id",
+                  "type": "uuid",
+                  "constraints": [
+                    "FK",
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "orders_total",
+                  "kind": "attribute",
+                  "name": "total",
+                  "type": "numeric(12,2)",
+                  "constraints": [
+                    "NN"
+                  ]
+                },
+                {
+                  "id": "orders_placed_at",
+                  "kind": "attribute",
+                  "name": "placed_at",
+                  "type": "timestamptz",
+                  "constraints": [
+                    "NN"
+                  ]
+                }
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        },
+        "order_line": {
+          "id": "order_line",
+          "kind": "relationAttribute",
+          "name": "order_line",
+          "frame": {
+            "x": 225,
+            "y": 207,
+            "width": 198,
+            "height": 72
+          },
+          "z": 3,
+          "locked": false,
+          "visible": true,
+          "rows": [
+            {
+              "id": "order_line_quantity",
+              "kind": "attribute",
+              "name": "quantity",
+              "type": "int",
+              "constraints": [
+                "NN"
+              ]
+            },
+            {
+              "id": "order_line_unit_price",
+              "kind": "attribute",
+              "name": "unit_price",
+              "type": "numeric(12,2)",
+              "constraints": [
+                "NN"
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        }
+      },
+      "edges": {
+        "edge_places": {
+          "id": "edge_places",
+          "source": {
+            "target": "node",
+            "nodeId": "customers",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "orders",
+            "port": {
+              "kind": "perimeter",
+              "side": "west"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "er",
+              "kind": "one"
+            },
+            "target": {
+              "family": "er",
+              "kind": "zeroOrMany"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_places_source",
+              "zone": "source",
+              "text": "1",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.12
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            },
+            {
+              "id": "label_places_center",
+              "zone": "center",
+              "text": "places",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            },
+            {
+              "id": "label_places_target",
+              "zone": "target",
+              "text": "0..*",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.88
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "er",
+            "name": "places"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "edge_order_line": {
+          "id": "edge_order_line",
+          "source": {
+            "target": "node",
+            "nodeId": "order_line",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "target": {
+            "target": "edge",
+            "edgeId": "edge_places",
+            "t": 0.5
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_order_line_center",
+              "zone": "center",
+              "text": "line items",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "er",
+            "name": "has"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "dashed"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        }
+      },
+      "assets": {}
+    },
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_9c10c901",
+      "revision": 14,
+      "meta": {
+        "title": "Untitled Class diagram",
+        "diagramKind": "uml-class",
+        "createdAt": "2026-11-15T20:27:40.534Z",
+        "updatedAt": "2026-11-15T20:32:20.225Z",
+        "appVersion": "0.1.0-step1",
+        "description": "Step 1 schema fixture"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {
+        "payment_method": {
+          "id": "payment_method",
+          "kind": "table",
+          "name": "PaymentMethod",
+          "frame": {
+            "x": 36,
+            "y": 72,
+            "width": 225,
+            "height": 72
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "tableKind": "class",
+          "header": {
+            "stereotype": "interface",
+            "isInterface": true
+          },
+          "sections": [
+            {
+              "id": "payment_method_ops",
+              "role": "methods",
+              "rows": [
+                {
+                  "id": "payment_method_authorize",
+                  "kind": "method",
+                  "name": "authorize",
+                  "visibility": "+",
+                  "parameters": [
+                    {
+                      "name": "amount",
+                      "type": "Money"
+                    }
+                  ],
+                  "returnType": "Authorization",
+                  "abstract": true
+                },
+                {
+                  "id": "payment_method_capture",
+                  "kind": "method",
+                  "name": "capture",
+                  "visibility": "+",
+                  "parameters": [
+                    {
+                      "name": "auth",
+                      "type": "Authorization"
+                    }
+                  ],
+                  "returnType": "Receipt",
+                  "abstract": true
+                }
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        },
+        "card_payment": {
+          "id": "card_payment",
+          "kind": "table",
+          "name": "CardPayment",
+          "frame": {
+            "x": 36,
+            "y": 216,
+            "width": 225,
+            "height": 108
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "tableKind": "class",
+          "header": {},
+          "sections": [
+            {
+              "id": "card_payment_attrs",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "card_payment_last4",
+                  "kind": "attribute",
+                  "name": "last4",
+                  "visibility": "-",
+                  "type": "string"
+                },
+                {
+                  "id": "card_payment_brand",
+                  "kind": "attribute",
+                  "name": "brand",
+                  "visibility": "-",
+                  "type": "CardBrand"
+                },
+                {
+                  "id": "card_payment_expiry",
+                  "kind": "attribute",
+                  "name": "expiry",
+                  "visibility": "-",
+                  "type": "YearMonth"
+                }
+              ]
+            },
+            {
+              "id": "card_payment_ops",
+              "role": "methods",
+              "rows": [
+                {
+                  "id": "card_payment_authorize",
+                  "kind": "method",
+                  "name": "authorize",
+                  "visibility": "+",
+                  "parameters": [
+                    {
+                      "name": "amount",
+                      "type": "Money"
+                    }
+                  ],
+                  "returnType": "Authorization"
+                },
+                {
+                  "id": "card_payment_capture",
+                  "kind": "method",
+                  "name": "capture",
+                  "visibility": "+",
+                  "parameters": [
+                    {
+                      "name": "auth",
+                      "type": "Authorization"
+                    }
+                  ],
+                  "returnType": "Receipt"
+                }
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        },
+        "order": {
+          "id": "order",
+          "kind": "table",
+          "name": "Order",
+          "frame": {
+            "x": 396,
+            "y": 72,
+            "width": 225,
+            "height": 126
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "tableKind": "class",
+          "header": {},
+          "sections": [
+            {
+              "id": "order_attrs",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "order_id",
+                  "kind": "attribute",
+                  "name": "id",
+                  "visibility": "-",
+                  "type": "UUID"
+                },
+                {
+                  "id": "order_total",
+                  "kind": "attribute",
+                  "name": "total",
+                  "visibility": "-",
+                  "type": "Money"
+                },
+                {
+                  "id": "order_status",
+                  "kind": "attribute",
+                  "name": "status",
+                  "visibility": "-",
+                  "type": "OrderStatus"
+                }
+              ]
+            },
+            {
+              "id": "order_ops",
+              "role": "methods",
+              "rows": [
+                {
+                  "id": "order_submit",
+                  "kind": "method",
+                  "name": "submit",
+                  "visibility": "+",
+                  "returnType": "Receipt"
+                },
+                {
+                  "id": "order_cancel",
+                  "kind": "method",
+                  "name": "cancel",
+                  "visibility": "+",
+                  "returnType": "void"
+                }
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        },
+        "order_line": {
+          "id": "order_line",
+          "kind": "table",
+          "name": "OrderLine",
+          "frame": {
+            "x": 396,
+            "y": 270,
+            "width": 225,
+            "height": 90
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "tableKind": "class",
+          "header": {},
+          "sections": [
+            {
+              "id": "order_line_attrs",
+              "role": "attributes",
+              "rows": [
+                {
+                  "id": "order_line_quantity",
+                  "kind": "attribute",
+                  "name": "quantity",
+                  "visibility": "-",
+                  "type": "int"
+                },
+                {
+                  "id": "order_line_price",
+                  "kind": "attribute",
+                  "name": "unitPrice",
+                  "visibility": "-",
+                  "type": "Money"
+                },
+                {
+                  "id": "order_line_discount",
+                  "kind": "attribute",
+                  "name": "discount",
+                  "visibility": "-",
+                  "type": "Percentage"
+                }
+              ]
+            }
+          ],
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "headerFill": {
+              "color": "#f3f1eb"
+            },
+            "headerText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 11.5,
+              "color": "#111111",
+              "weight": 700
+            },
+            "divider": {
+              "color": "#111111",
+              "width": 0.5,
+              "pattern": "solid"
+            },
+            "cornerRadius": 0,
+            "paddingX": 7,
+            "headerHeight": 29,
+            "rowHeight": 20,
+            "rowPaddingY": 2,
+            "sectionGap": 2
+          }
+        }
+      },
+      "edges": {
+        "edge_realizes": {
+          "id": "edge_realizes",
+          "source": {
+            "target": "node",
+            "nodeId": "card_payment",
+            "port": {
+              "kind": "perimeter",
+              "side": "north"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "payment_method",
+            "port": {
+              "kind": "perimeter",
+              "side": "south"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "uml",
+              "kind": "realization"
+            }
+          },
+          "labels": [],
+          "semantic": {
+            "family": "uml",
+            "relationship": "realization"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "dashed"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "edge_composition": {
+          "id": "edge_composition",
+          "source": {
+            "target": "node",
+            "nodeId": "order",
+            "port": {
+              "kind": "perimeter",
+              "side": "south"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "order_line",
+            "port": {
+              "kind": "perimeter",
+              "side": "north"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "uml",
+              "kind": "composition"
+            },
+            "target": {
+              "family": "none",
+              "kind": "none"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_composition_target",
+              "zone": "target",
+              "text": "1..*",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.88
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "uml",
+            "relationship": "composition"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        },
+        "edge_uses_payment": {
+          "id": "edge_uses_payment",
+          "source": {
+            "target": "node",
+            "nodeId": "order",
+            "port": {
+              "kind": "perimeter",
+              "side": "west"
+            }
+          },
+          "target": {
+            "target": "node",
+            "nodeId": "payment_method",
+            "port": {
+              "kind": "perimeter",
+              "side": "east"
+            }
+          },
+          "routing": {
+            "mode": "orthogonal",
+            "avoidObstacles": true,
+            "obstaclePadding": 9,
+            "stubLength": 9,
+            "waypoints": []
+          },
+          "markers": {
+            "source": {
+              "family": "none",
+              "kind": "none"
+            },
+            "target": {
+              "family": "uml",
+              "kind": "directedAssociation"
+            }
+          },
+          "labels": [
+            {
+              "id": "label_uses_source",
+              "zone": "source",
+              "text": "1",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.12
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            },
+            {
+              "id": "label_uses_center",
+              "zone": "center",
+              "text": "authorizes",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.5
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            },
+            {
+              "id": "label_uses_target",
+              "zone": "target",
+              "text": "1",
+              "anchor": {
+                "kind": "edgePoint",
+                "t": 0.88
+              },
+              "offset": {
+                "x": 0,
+                "y": -12
+              },
+              "locked": false,
+              "visible": true
+            }
+          ],
+          "semantic": {
+            "family": "uml",
+            "relationship": "directedAssociation"
+          },
+          "style": {
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "labelText": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 9.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "labelFill": {
+              "color": "#ffffff"
+            },
+            "labelPadding": 2,
+            "labelInset": 18,
+            "arrowScale": 1
+          },
+          "locked": false,
+          "visible": true,
+          "z": 10
+        }
+      },
+      "assets": {}
+    },
+    {
+      "schemaVersion": "umler.scene/1",
+      "id": "scene_4cae8430",
+      "revision": 13,
+      "meta": {
+        "title": "Untitled Object diagram",
+        "diagramKind": "uml-object",
+        "createdAt": "2026-11-15T20:33:23.354Z",
+        "updatedAt": "2026-11-20T19:49:39.020Z",
+        "appVersion": "0.1.0-step1"
+      },
+      "canvas": {
+        "grid": {
+          "size": 9,
+          "visible": true,
+          "majorEvery": 4,
+          "snapNodes": true,
+          "snapPorts": true,
+          "snapWaypoints": true,
+          "snapLabels": false,
+          "labelStep": 1
+        },
+        "background": "#ffffff",
+        "exportPadding": 18,
+        "minZoom": 0.2,
+        "maxZoom": 4,
+        "initialZoom": 1
+      },
+      "layout": {
+        "engine": "manual",
+        "direction": "TB",
+        "spacing": "normal",
+        "rankGap": 90,
+        "nodeGap": 54,
+        "edgeGap": 36,
+        "respectLocks": true,
+        "reduceCrossings": true,
+        "maxIterations": 12
+      },
+      "theme": {
+        "colors": {
+          "ink": "#111111",
+          "muted": "#555555",
+          "canvas": "#ffffff",
+          "grid": "#e8e5df",
+          "gridMajor": "#d7d2c8",
+          "selection": "#2563eb",
+          "port": "#0f766e",
+          "portActive": "#0d9488",
+          "warning": "#b45309"
+        },
+        "table": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 11.5,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "shape": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 10.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "edge": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "nodes": {
+        "object_3de5d8a5": {
+          "id": "object_3de5d8a5",
+          "name": ":Class",
+          "frame": {
+            "x": -99,
+            "y": -72,
+            "width": 180,
+            "height": 45
+          },
+          "z": 2,
+          "locked": false,
+          "visible": true,
+          "style": {
+            "fill": {
+              "color": "#ffffff"
+            },
+            "stroke": {
+              "color": "#111111",
+              "width": 0.75,
+              "pattern": "solid"
+            },
+            "text": {
+              "fontFamily": "Latin Modern Roman",
+              "fontSize": 10.5,
+              "color": "#111111",
+              "weight": 400
+            },
+            "cornerRadius": 0,
+            "padding": 6
+          },
+          "kind": "object",
+          "underlineName": true
+        }
+      },
+      "edges": {},
+      "assets": {}
+    },
     {
       "schemaVersion": "umler.scene/1",
       "id": "scene_er_commerce",
@@ -7822,938 +9325,6 @@
         "crossings": "bridge",
         "bridgeRadius": 6
       }
-    },
-    {
-      "schemaVersion": "umler.scene/1",
-      "id": "scene_9c10c901",
-      "revision": 14,
-      "meta": {
-        "title": "Untitled Class diagram",
-        "diagramKind": "uml-class",
-        "createdAt": "2026-11-15T20:27:40.534Z",
-        "updatedAt": "2026-11-15T20:32:20.225Z",
-        "appVersion": "0.1.0-step1",
-        "description": "Step 1 schema fixture"
-      },
-      "canvas": {
-        "grid": {
-          "size": 9,
-          "visible": true,
-          "majorEvery": 4,
-          "snapNodes": true,
-          "snapPorts": true,
-          "snapWaypoints": true,
-          "snapLabels": false,
-          "labelStep": 1
-        },
-        "background": "#ffffff",
-        "exportPadding": 18,
-        "minZoom": 0.2,
-        "maxZoom": 4,
-        "initialZoom": 1
-      },
-      "layout": {
-        "engine": "manual",
-        "direction": "TB",
-        "spacing": "normal",
-        "rankGap": 90,
-        "nodeGap": 54,
-        "edgeGap": 36,
-        "respectLocks": true,
-        "reduceCrossings": true,
-        "maxIterations": 12
-      },
-      "theme": {
-        "colors": {
-          "ink": "#111111",
-          "muted": "#555555",
-          "canvas": "#ffffff",
-          "grid": "#e8e5df",
-          "gridMajor": "#d7d2c8",
-          "selection": "#2563eb",
-          "port": "#0f766e",
-          "portActive": "#0d9488",
-          "warning": "#b45309"
-        },
-        "table": {
-          "fill": {
-            "color": "#ffffff"
-          },
-          "stroke": {
-            "color": "#111111",
-            "width": 0.75,
-            "pattern": "solid"
-          },
-          "text": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 10.5,
-            "color": "#111111",
-            "weight": 400
-          },
-          "headerFill": {
-            "color": "#f3f1eb"
-          },
-          "headerText": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 11.5,
-            "color": "#111111",
-            "weight": 700
-          },
-          "divider": {
-            "color": "#111111",
-            "width": 0.5,
-            "pattern": "solid"
-          },
-          "cornerRadius": 0,
-          "paddingX": 7,
-          "headerHeight": 29,
-          "rowHeight": 20,
-          "rowPaddingY": 2,
-          "sectionGap": 2
-        },
-        "shape": {
-          "fill": {
-            "color": "#ffffff"
-          },
-          "stroke": {
-            "color": "#111111",
-            "width": 0.75,
-            "pattern": "solid"
-          },
-          "text": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 10.5,
-            "color": "#111111",
-            "weight": 400
-          },
-          "cornerRadius": 0,
-          "padding": 6
-        },
-        "edge": {
-          "stroke": {
-            "color": "#111111",
-            "width": 0.75,
-            "pattern": "solid"
-          },
-          "labelText": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 9.5,
-            "color": "#111111",
-            "weight": 400
-          },
-          "labelFill": {
-            "color": "#ffffff"
-          },
-          "labelPadding": 2,
-          "labelInset": 18,
-          "arrowScale": 1
-        }
-      },
-      "nodes": {
-        "payment_method": {
-          "id": "payment_method",
-          "kind": "table",
-          "name": "PaymentMethod",
-          "frame": {
-            "x": 36,
-            "y": 72,
-            "width": 225,
-            "height": 72
-          },
-          "z": 2,
-          "locked": false,
-          "visible": true,
-          "tableKind": "class",
-          "header": {
-            "stereotype": "interface",
-            "isInterface": true
-          },
-          "sections": [
-            {
-              "id": "payment_method_ops",
-              "role": "methods",
-              "rows": [
-                {
-                  "id": "payment_method_authorize",
-                  "kind": "method",
-                  "name": "authorize",
-                  "visibility": "+",
-                  "parameters": [
-                    {
-                      "name": "amount",
-                      "type": "Money"
-                    }
-                  ],
-                  "returnType": "Authorization",
-                  "abstract": true
-                },
-                {
-                  "id": "payment_method_capture",
-                  "kind": "method",
-                  "name": "capture",
-                  "visibility": "+",
-                  "parameters": [
-                    {
-                      "name": "auth",
-                      "type": "Authorization"
-                    }
-                  ],
-                  "returnType": "Receipt",
-                  "abstract": true
-                }
-              ]
-            }
-          ],
-          "style": {
-            "fill": {
-              "color": "#ffffff"
-            },
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "text": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 10.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "headerFill": {
-              "color": "#f3f1eb"
-            },
-            "headerText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 11.5,
-              "color": "#111111",
-              "weight": 700
-            },
-            "divider": {
-              "color": "#111111",
-              "width": 0.5,
-              "pattern": "solid"
-            },
-            "cornerRadius": 0,
-            "paddingX": 7,
-            "headerHeight": 29,
-            "rowHeight": 20,
-            "rowPaddingY": 2,
-            "sectionGap": 2
-          }
-        },
-        "card_payment": {
-          "id": "card_payment",
-          "kind": "table",
-          "name": "CardPayment",
-          "frame": {
-            "x": 36,
-            "y": 216,
-            "width": 225,
-            "height": 108
-          },
-          "z": 2,
-          "locked": false,
-          "visible": true,
-          "tableKind": "class",
-          "header": {},
-          "sections": [
-            {
-              "id": "card_payment_attrs",
-              "role": "attributes",
-              "rows": [
-                {
-                  "id": "card_payment_last4",
-                  "kind": "attribute",
-                  "name": "last4",
-                  "visibility": "-",
-                  "type": "string"
-                },
-                {
-                  "id": "card_payment_brand",
-                  "kind": "attribute",
-                  "name": "brand",
-                  "visibility": "-",
-                  "type": "CardBrand"
-                },
-                {
-                  "id": "card_payment_expiry",
-                  "kind": "attribute",
-                  "name": "expiry",
-                  "visibility": "-",
-                  "type": "YearMonth"
-                }
-              ]
-            },
-            {
-              "id": "card_payment_ops",
-              "role": "methods",
-              "rows": [
-                {
-                  "id": "card_payment_authorize",
-                  "kind": "method",
-                  "name": "authorize",
-                  "visibility": "+",
-                  "parameters": [
-                    {
-                      "name": "amount",
-                      "type": "Money"
-                    }
-                  ],
-                  "returnType": "Authorization"
-                },
-                {
-                  "id": "card_payment_capture",
-                  "kind": "method",
-                  "name": "capture",
-                  "visibility": "+",
-                  "parameters": [
-                    {
-                      "name": "auth",
-                      "type": "Authorization"
-                    }
-                  ],
-                  "returnType": "Receipt"
-                }
-              ]
-            }
-          ],
-          "style": {
-            "fill": {
-              "color": "#ffffff"
-            },
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "text": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 10.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "headerFill": {
-              "color": "#f3f1eb"
-            },
-            "headerText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 11.5,
-              "color": "#111111",
-              "weight": 700
-            },
-            "divider": {
-              "color": "#111111",
-              "width": 0.5,
-              "pattern": "solid"
-            },
-            "cornerRadius": 0,
-            "paddingX": 7,
-            "headerHeight": 29,
-            "rowHeight": 20,
-            "rowPaddingY": 2,
-            "sectionGap": 2
-          }
-        },
-        "order": {
-          "id": "order",
-          "kind": "table",
-          "name": "Order",
-          "frame": {
-            "x": 396,
-            "y": 72,
-            "width": 225,
-            "height": 126
-          },
-          "z": 2,
-          "locked": false,
-          "visible": true,
-          "tableKind": "class",
-          "header": {},
-          "sections": [
-            {
-              "id": "order_attrs",
-              "role": "attributes",
-              "rows": [
-                {
-                  "id": "order_id",
-                  "kind": "attribute",
-                  "name": "id",
-                  "visibility": "-",
-                  "type": "UUID"
-                },
-                {
-                  "id": "order_total",
-                  "kind": "attribute",
-                  "name": "total",
-                  "visibility": "-",
-                  "type": "Money"
-                },
-                {
-                  "id": "order_status",
-                  "kind": "attribute",
-                  "name": "status",
-                  "visibility": "-",
-                  "type": "OrderStatus"
-                }
-              ]
-            },
-            {
-              "id": "order_ops",
-              "role": "methods",
-              "rows": [
-                {
-                  "id": "order_submit",
-                  "kind": "method",
-                  "name": "submit",
-                  "visibility": "+",
-                  "returnType": "Receipt"
-                },
-                {
-                  "id": "order_cancel",
-                  "kind": "method",
-                  "name": "cancel",
-                  "visibility": "+",
-                  "returnType": "void"
-                }
-              ]
-            }
-          ],
-          "style": {
-            "fill": {
-              "color": "#ffffff"
-            },
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "text": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 10.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "headerFill": {
-              "color": "#f3f1eb"
-            },
-            "headerText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 11.5,
-              "color": "#111111",
-              "weight": 700
-            },
-            "divider": {
-              "color": "#111111",
-              "width": 0.5,
-              "pattern": "solid"
-            },
-            "cornerRadius": 0,
-            "paddingX": 7,
-            "headerHeight": 29,
-            "rowHeight": 20,
-            "rowPaddingY": 2,
-            "sectionGap": 2
-          }
-        },
-        "order_line": {
-          "id": "order_line",
-          "kind": "table",
-          "name": "OrderLine",
-          "frame": {
-            "x": 396,
-            "y": 270,
-            "width": 225,
-            "height": 90
-          },
-          "z": 2,
-          "locked": false,
-          "visible": true,
-          "tableKind": "class",
-          "header": {},
-          "sections": [
-            {
-              "id": "order_line_attrs",
-              "role": "attributes",
-              "rows": [
-                {
-                  "id": "order_line_quantity",
-                  "kind": "attribute",
-                  "name": "quantity",
-                  "visibility": "-",
-                  "type": "int"
-                },
-                {
-                  "id": "order_line_price",
-                  "kind": "attribute",
-                  "name": "unitPrice",
-                  "visibility": "-",
-                  "type": "Money"
-                },
-                {
-                  "id": "order_line_discount",
-                  "kind": "attribute",
-                  "name": "discount",
-                  "visibility": "-",
-                  "type": "Percentage"
-                }
-              ]
-            }
-          ],
-          "style": {
-            "fill": {
-              "color": "#ffffff"
-            },
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "text": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 10.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "headerFill": {
-              "color": "#f3f1eb"
-            },
-            "headerText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 11.5,
-              "color": "#111111",
-              "weight": 700
-            },
-            "divider": {
-              "color": "#111111",
-              "width": 0.5,
-              "pattern": "solid"
-            },
-            "cornerRadius": 0,
-            "paddingX": 7,
-            "headerHeight": 29,
-            "rowHeight": 20,
-            "rowPaddingY": 2,
-            "sectionGap": 2
-          }
-        }
-      },
-      "edges": {
-        "edge_realizes": {
-          "id": "edge_realizes",
-          "source": {
-            "target": "node",
-            "nodeId": "card_payment",
-            "port": {
-              "kind": "perimeter",
-              "side": "north"
-            }
-          },
-          "target": {
-            "target": "node",
-            "nodeId": "payment_method",
-            "port": {
-              "kind": "perimeter",
-              "side": "south"
-            }
-          },
-          "routing": {
-            "mode": "orthogonal",
-            "avoidObstacles": true,
-            "obstaclePadding": 9,
-            "stubLength": 9,
-            "waypoints": []
-          },
-          "markers": {
-            "source": {
-              "family": "none",
-              "kind": "none"
-            },
-            "target": {
-              "family": "uml",
-              "kind": "realization"
-            }
-          },
-          "labels": [],
-          "semantic": {
-            "family": "uml",
-            "relationship": "realization"
-          },
-          "style": {
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "dashed"
-            },
-            "labelText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 9.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "labelFill": {
-              "color": "#ffffff"
-            },
-            "labelPadding": 2,
-            "labelInset": 18,
-            "arrowScale": 1
-          },
-          "locked": false,
-          "visible": true,
-          "z": 10
-        },
-        "edge_composition": {
-          "id": "edge_composition",
-          "source": {
-            "target": "node",
-            "nodeId": "order",
-            "port": {
-              "kind": "perimeter",
-              "side": "south"
-            }
-          },
-          "target": {
-            "target": "node",
-            "nodeId": "order_line",
-            "port": {
-              "kind": "perimeter",
-              "side": "north"
-            }
-          },
-          "routing": {
-            "mode": "orthogonal",
-            "avoidObstacles": true,
-            "obstaclePadding": 9,
-            "stubLength": 9,
-            "waypoints": []
-          },
-          "markers": {
-            "source": {
-              "family": "uml",
-              "kind": "composition"
-            },
-            "target": {
-              "family": "none",
-              "kind": "none"
-            }
-          },
-          "labels": [
-            {
-              "id": "label_composition_target",
-              "zone": "target",
-              "text": "1..*",
-              "anchor": {
-                "kind": "edgePoint",
-                "t": 0.88
-              },
-              "offset": {
-                "x": 0,
-                "y": -12
-              },
-              "locked": false,
-              "visible": true
-            }
-          ],
-          "semantic": {
-            "family": "uml",
-            "relationship": "composition"
-          },
-          "style": {
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "labelText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 9.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "labelFill": {
-              "color": "#ffffff"
-            },
-            "labelPadding": 2,
-            "labelInset": 18,
-            "arrowScale": 1
-          },
-          "locked": false,
-          "visible": true,
-          "z": 10
-        },
-        "edge_uses_payment": {
-          "id": "edge_uses_payment",
-          "source": {
-            "target": "node",
-            "nodeId": "order",
-            "port": {
-              "kind": "perimeter",
-              "side": "west"
-            }
-          },
-          "target": {
-            "target": "node",
-            "nodeId": "payment_method",
-            "port": {
-              "kind": "perimeter",
-              "side": "east"
-            }
-          },
-          "routing": {
-            "mode": "orthogonal",
-            "avoidObstacles": true,
-            "obstaclePadding": 9,
-            "stubLength": 9,
-            "waypoints": []
-          },
-          "markers": {
-            "source": {
-              "family": "none",
-              "kind": "none"
-            },
-            "target": {
-              "family": "uml",
-              "kind": "directedAssociation"
-            }
-          },
-          "labels": [
-            {
-              "id": "label_uses_source",
-              "zone": "source",
-              "text": "1",
-              "anchor": {
-                "kind": "edgePoint",
-                "t": 0.12
-              },
-              "offset": {
-                "x": 0,
-                "y": -12
-              },
-              "locked": false,
-              "visible": true
-            },
-            {
-              "id": "label_uses_center",
-              "zone": "center",
-              "text": "authorizes",
-              "anchor": {
-                "kind": "edgePoint",
-                "t": 0.5
-              },
-              "offset": {
-                "x": 0,
-                "y": -12
-              },
-              "locked": false,
-              "visible": true
-            },
-            {
-              "id": "label_uses_target",
-              "zone": "target",
-              "text": "1",
-              "anchor": {
-                "kind": "edgePoint",
-                "t": 0.88
-              },
-              "offset": {
-                "x": 0,
-                "y": -12
-              },
-              "locked": false,
-              "visible": true
-            }
-          ],
-          "semantic": {
-            "family": "uml",
-            "relationship": "directedAssociation"
-          },
-          "style": {
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "labelText": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 9.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "labelFill": {
-              "color": "#ffffff"
-            },
-            "labelPadding": 2,
-            "labelInset": 18,
-            "arrowScale": 1
-          },
-          "locked": false,
-          "visible": true,
-          "z": 10
-        }
-      },
-      "assets": {}
-    },
-    {
-      "schemaVersion": "umler.scene/1",
-      "id": "scene_4cae8430",
-      "revision": 9,
-      "meta": {
-        "title": "Untitled Object diagram",
-        "diagramKind": "uml-object",
-        "createdAt": "2026-11-15T20:33:23.354Z",
-        "updatedAt": "2026-11-20T13:12:01.720Z",
-        "appVersion": "0.1.0-step1"
-      },
-      "canvas": {
-        "grid": {
-          "size": 9,
-          "visible": true,
-          "majorEvery": 4,
-          "snapNodes": true,
-          "snapPorts": true,
-          "snapWaypoints": true,
-          "snapLabels": false,
-          "labelStep": 1
-        },
-        "background": "#ffffff",
-        "exportPadding": 18,
-        "minZoom": 0.2,
-        "maxZoom": 4,
-        "initialZoom": 1
-      },
-      "layout": {
-        "engine": "manual",
-        "direction": "TB",
-        "spacing": "normal",
-        "rankGap": 90,
-        "nodeGap": 54,
-        "edgeGap": 36,
-        "respectLocks": true,
-        "reduceCrossings": true,
-        "maxIterations": 12
-      },
-      "theme": {
-        "colors": {
-          "ink": "#111111",
-          "muted": "#555555",
-          "canvas": "#ffffff",
-          "grid": "#e8e5df",
-          "gridMajor": "#d7d2c8",
-          "selection": "#2563eb",
-          "port": "#0f766e",
-          "portActive": "#0d9488",
-          "warning": "#b45309"
-        },
-        "table": {
-          "fill": {
-            "color": "#ffffff"
-          },
-          "stroke": {
-            "color": "#111111",
-            "width": 0.75,
-            "pattern": "solid"
-          },
-          "text": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 10.5,
-            "color": "#111111",
-            "weight": 400
-          },
-          "headerFill": {
-            "color": "#f3f1eb"
-          },
-          "headerText": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 11.5,
-            "color": "#111111",
-            "weight": 700
-          },
-          "divider": {
-            "color": "#111111",
-            "width": 0.5,
-            "pattern": "solid"
-          },
-          "cornerRadius": 0,
-          "paddingX": 7,
-          "headerHeight": 29,
-          "rowHeight": 20,
-          "rowPaddingY": 2,
-          "sectionGap": 2
-        },
-        "shape": {
-          "fill": {
-            "color": "#ffffff"
-          },
-          "stroke": {
-            "color": "#111111",
-            "width": 0.75,
-            "pattern": "solid"
-          },
-          "text": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 10.5,
-            "color": "#111111",
-            "weight": 400
-          },
-          "cornerRadius": 0,
-          "padding": 6
-        },
-        "edge": {
-          "stroke": {
-            "color": "#111111",
-            "width": 0.75,
-            "pattern": "solid"
-          },
-          "labelText": {
-            "fontFamily": "Latin Modern Roman",
-            "fontSize": 9.5,
-            "color": "#111111",
-            "weight": 400
-          },
-          "labelFill": {
-            "color": "#ffffff"
-          },
-          "labelPadding": 2,
-          "labelInset": 18,
-          "arrowScale": 1
-        }
-      },
-      "nodes": {
-        "object_3de5d8a5": {
-          "id": "object_3de5d8a5",
-          "name": ":Class",
-          "frame": {
-            "x": -99,
-            "y": -36,
-            "width": 180,
-            "height": 45
-          },
-          "z": 2,
-          "locked": false,
-          "visible": true,
-          "style": {
-            "fill": {
-              "color": "#ffffff"
-            },
-            "stroke": {
-              "color": "#111111",
-              "width": 0.75,
-              "pattern": "solid"
-            },
-            "text": {
-              "fontFamily": "Latin Modern Roman",
-              "fontSize": 10.5,
-              "color": "#111111",
-              "weight": 400
-            },
-            "cornerRadius": 0,
-            "padding": 6
-          },
-          "kind": "object",
-          "underlineName": true
-        }
-      },
-      "edges": {},
-      "assets": {}
     }
   ],
   "assets": {}
