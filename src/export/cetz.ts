@@ -658,11 +658,20 @@ const drawReferencePoint = (
   const fontWeight = layout.text.style.weight >= 600 ? "bold" : "regular";
   const fontStyle = layout.text.style.italic === true ? "italic" : "normal";
   const diameter = num(radius * 2 * scale);
+  const counterName = `umler-ref-${label}`;
   const content =
-    `#box(width: ${diameter}pt, height: ${diameter}pt)[` +
+    // A plain box cannot be referenced with @label in Typst. Wrap the point
+    // in a referenceable figure, then immediately undo the figure-counter
+    // step so reference points do not disturb the document's figure numbering.
+    // A point-specific counter stores the enclosing figure number for @ref.
+    `#figure(placement: none, kind: "umler-reference", supplement: none, numbering: (n) => context [#{str(counter("${counterName}").get().first()) + ".${index}"}], gap: 0pt, [#context {` +
+    ` let n = counter(figure).get().first() - 1;` +
+    ` counter(figure).update(n => n - 1);` +
+    ` counter("${counterName}").update(n);` +
+    ` box(width: ${diameter}pt, height: ${diameter}pt)[` +
     `#place(center + horizon, circle(radius: ${num(radius * scale)}pt, fill: ${fillExpr(node.style.fill)}, stroke: (paint: ${color}, thickness: ${strokeWidth}pt)))` +
-    `#place(center + horizon, text(size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", style: "${fontStyle}")[#context [#{str(counter(figure).get().first()) + ".${index}"}]])` +
-    `] <${label}>`;
+    `#place(center + horizon, text(size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", style: "${fontStyle}")[#{str(n) + ".${index}"}])` +
+    `] }]) <${label}>`;
   writer.push(
     level,
     `draw.content(${p.point(center)}, [${content}], anchor: "center", padding: 0pt)`,
