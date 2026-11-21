@@ -103,9 +103,10 @@ const COMMON_TEMPLATES: readonly ObjectTemplate[] = [
   {
     id: "reference-point",
     label: "Reference point",
-    hint: "Clickable Typst @reference target on the diagram",
+    hint: "Clickable reference from/to this point in the diagram",
     icon: "◉",
     group: "annotation",
+    keywords: ["reference", "ref", "td", "dt", "typst", "point"],
   },
 ];
 
@@ -449,6 +450,7 @@ const referencePointNode = (
   ),
   kind: "referencePoint",
   referenceId: `ref-${referenceIndex}`,
+  referenceVariant: "td",
   referenceIndex,
   labelSize: 9,
 });

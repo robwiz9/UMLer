@@ -658,20 +658,60 @@ const drawReferencePoint = (
   const fontWeight = layout.text.style.weight >= 600 ? "bold" : "regular";
   const fontStyle = layout.text.style.italic === true ? "italic" : "normal";
   const diameter = num(radius * 2 * scale);
-  const counterName = `umler-ref-${label}`;
-  const content =
-    // A plain box cannot be referenced with @label in Typst. Wrap the point
-    // in a referenceable figure, then immediately undo the figure-counter
-    // step so reference points do not disturb the document's figure numbering.
-    // A point-specific counter stores the enclosing figure number for @ref.
-    `#figure(placement: none, kind: "umler-reference", supplement: none, numbering: (n) => context [#{str(counter("${counterName}").get().first()) + ".${index}"}], gap: 0pt, [#context {` +
-    ` let n = counter(figure).get().first() - 1;` +
-    ` counter(figure).update(n => n - 1);` +
-    ` counter("${counterName}").update(n);` +
-    ` box(width: ${diameter}pt, height: ${diameter}pt)[` +
-    `#place(center + horizon, circle(radius: ${num(radius * scale)}pt, fill: ${fillExpr(node.style.fill)}, stroke: (paint: ${color}, thickness: ${strokeWidth}pt)))` +
-    `#place(center + horizon, text(size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", style: "${fontStyle}")[#{str(n) + ".${index}"}])` +
-    `] }]) <${label}>`;
+  const variant = node.referenceVariant ?? "td";
+  const textStyleProps =
+    `size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", ` +
+    `style: "${fontStyle}"`;
+  const circleFor = (r: number, dashed: boolean): string =>
+    `circle(radius: ${num(r * scale)}pt, fill: ${fillExpr(node.style.fill)}, ` +
+    `stroke: (paint: ${color}, thickness: ${strokeWidth}pt` +
+    `${dashed ? ', dash: "dashed"' : ""}))`;
+  const textPlace = (body: string): string =>
+    `#place(center + horizon, text(${textStyleProps})[${body}])`;
+  const boxFor = (circles: string, body: string): string =>
+    `box(width: ${diameter}pt, height: ${diameter}pt)[${circles}${textPlace(body)}]`;
+  const solidCircle = circleFor(radius, false);
+  const dashedCircle = circleFor(radius, true);
+  const doubleCircle =
+    `#place(center + horizon, ${dashedCircle})` +
+    `#place(center + horizon, ${circleFor(Math.max(4, radius - 2.5), false)})`;
+  let content: string;
+  if (variant === "dt") {
+    const box = boxFor(`#place(center + horizon, ${solidCircle})`, "#targetLabel");
+    content =
+      `#context {` +
+      ` let targets = query(<${label}>);` +
+      ` let targetLabel = if targets.len() == 0 { [Ref] } else {` +
+      ` let e = targets.first();` +
+      ` if e.at("numbering", default: none) == none { [Ref] } else { ref(<${label}>, supplement: none) }` +
+      ` };` +
+      ` let point = ${box};` +
+      ` if targets.len() == 0 { point } else { link(<${label}>)[#point] }` +
+      `}`;
+  } else {
+    const counterName = `umler-ref-${label}`;
+    const circles = variant === "tdt"
+      ? doubleCircle
+      : `#place(center + horizon, ${dashedCircle})`;
+    const box = boxFor(circles, `#{str(n) + ".${index}"}`);
+    const target = typstReferenceLabel(node.referToId ?? "");
+    const point =
+      variant === "tdt" && node.referToId?.trim()
+        ? `let point = ${box};` +
+          ` if query(<${target}>).len() == 0 { point } else { link(<${target}>)[#point] }`
+        : box;
+    content =
+      // A plain box cannot be referenced with @label in Typst. Wrap the point
+      // in a referenceable figure, then immediately undo the figure-counter
+      // step so reference points do not disturb the document's figure numbering.
+      // A point-specific counter stores the enclosing figure number for @ref.
+      `#figure(placement: none, kind: "umler-reference", supplement: none, numbering: (n) => context [#{str(counter("${counterName}").get().first()) + ".${index}"}], gap: 0pt, [#context {` +
+      ` let n = counter(figure).get().first() - 1;` +
+      ` counter(figure).update(n => n - 1);` +
+      ` counter("${counterName}").update(n);` +
+      ` ${point}` +
+      ` }]) <${label}>`;
+  }
   writer.push(
     level,
     `draw.content(${p.point(center)}, [${content}], anchor: "center", padding: 0pt)`,

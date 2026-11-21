@@ -3857,6 +3857,10 @@ button {
   display: flex;
 }
 
+.reference-variant-switch {
+  margin: 2px 0 10px;
+}
+
 .code-align-row .code-segmented {
   width: 100%;
 }

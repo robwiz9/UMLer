@@ -182,6 +182,15 @@ export interface ReferencePointNode extends NodeBase {
   readonly kind: "referencePoint";
   /** Typst label id, referenced as `@referenceId`. */
   readonly referenceId: string;
+  /**
+   * `td`: text references diagram point (dashed circle).
+   * `dt`: diagram point links to text (solid circle).
+   * `tdt`: both directions, with double circle.
+   * Undefined is treated as `td` for older saved documents.
+   */
+  readonly referenceVariant?: "td" | "dt" | "tdt";
+  /** DT/TDT click-through target label. */
+  readonly referToId?: string;
   /** Ordinal within the diagram; rendered as `1.<index>` on the canvas. */
   readonly referenceIndex: number;
   /** Number label size in points. */

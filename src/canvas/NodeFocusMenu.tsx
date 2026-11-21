@@ -226,7 +226,13 @@ export const NodeFocusMenu = ({
       circuitJunction: "Junction",
     };
     const objectTitle =
-      node.kind === "circuitComponent"
+      node.kind === "referencePoint"
+        ? node.referenceVariant === "dt"
+          ? "Diagram to Text reference"
+          : node.referenceVariant === "tdt"
+            ? "Both ways reference"
+            : "Text to Diagram reference"
+        : node.kind === "circuitComponent"
         ? circuitComponent(node.component)?.label ?? kindTitle[node.kind]
         : node.kind === "circuitJunction" && node.measurement !== undefined
           ? node.measurement.kind === "voltage"
@@ -261,32 +267,120 @@ export const NodeFocusMenu = ({
       </div>
     );
     if (node.kind === "referencePoint") {
+      const variant = node.referenceVariant ?? "td";
+      const referenceId = node.referenceId || "ref-id";
       return (
         <div className="node-focus-menu">
           {head}
           <label className="field-label">
-            Reference ID
+              Reference mode
+          <div className="reference-variant-switch code-segmented">
+            <button
+              type="button"
+              className={variant === "td" ? "active" : ""}
+              aria-pressed={variant === "td"}
+              title="Text references this diagram point"
+              onClick={() =>
+                onUpdateNode(node.id, { referenceVariant: "td" })}
+            >
+              Text → Diag
+            </button>
+            <button
+              type="button"
+              className={variant === "dt" ? "active" : ""}
+              aria-pressed={variant === "dt"}
+              title="This diagram point links to a text target"
+              onClick={() =>
+                onUpdateNode(node.id, { referenceVariant: "dt" })}
+            >
+              Diag → Text
+            </button>
+            <button
+              type="button"
+              className={variant === "tdt" ? "active" : ""}
+              aria-pressed={variant === "tdt"}
+              title="Both directions: text references this point, and the point links to a target"
+              onClick={() =>
+                onUpdateNode(node.id, { referenceVariant: "tdt" })}
+            >
+              Both ways
+            </button>
+          </div>
+          </label>
+          <label className="field-label">
+            {variant === "dt" ? "Target reference ID" : "Reference ID"}
             <input
               id={`node-${node.id}-reference-id`}
               name={`node-${node.id}-reference-id`}
               value={node.referenceId}
               onChange={(event) => {
-                const referenceId = event.target.value.replace(
+                const nextReferenceId = event.target.value.replace(
                   /[^A-Za-z0-9_.:-]+/g,
                   "-",
                 );
                 onUpdateNode(node.id, {
-                  referenceId,
-                  name: referenceId,
+                  referenceId: nextReferenceId,
+                  name: nextReferenceId,
                 });
               }}
               placeholder="ref-id"
               spellCheck={false}
             />
           </label>
-            <p className="panel-footnote code-mono-hint">
-              Reference node with <code>@{node.referenceId || "ref-id"}</code>
-            </p>
+          {variant === "tdt" ? (
+            <label className="field-label">
+              Refer to ID
+              <input
+                id={`node-${node.id}-refer-to-id`}
+                name={`node-${node.id}-refer-to-id`}
+                value={node.referToId ?? ""}
+                onChange={(event) => {
+                  const referToId = event.target.value.replace(
+                    /[^A-Za-z0-9_.:-]+/g,
+                    "-",
+                  );
+                  onUpdateNode(node.id, { referToId });
+                }}
+                placeholder="target-ref"
+                spellCheck={false}
+              />
+            </label>
+          ) : null}
+          {variant === "dt" ? (
+            <>
+              <p className="panel-footnote code-mono-hint">
+                Mark the target with <code>&lt;{referenceId}&gt;</code>, for
+                example <code>#figure(...) &lt;{referenceId}&gt;</code> or{" "}
+                <code>= Heading &lt;{referenceId}&gt;</code>.
+              </p>
+              <p className="panel-footnote">
+                Clicking this point navigates to target. Displays target's enumeration or `Ref`
+              </p>
+            </>
+          ) : variant === "tdt" ? (
+            <>
+              <p className="panel-footnote code-mono-hint">
+                Use <code>@{referenceId}</code> to reference this point.
+              </p>
+              <p className="panel-footnote code-mono-hint">
+                Mark the target once with{" "}
+                <code>&lt;{node.referToId || "target-ref"}&gt;</code>, e.g.{" "}
+                <code>#figure(...) &lt;{node.referToId || "target-ref"}&gt;</code>.
+              </p>
+              <p className="panel-footnote">
+                Reference this point with a clickable link.<br></br>Clicking this point navigates to target.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="panel-footnote code-mono-hint">
+                Use <code>@{referenceId}</code> to reference this point.
+              </p>
+              <p className="panel-footnote">
+                Reference this point with a clickable link.
+              </p>
+            </>
+          )}
           <TextStyleControls
             base={{ ...node.style.text, fontSize: node.labelSize }}
             value={node.textStyle}

@@ -641,14 +641,37 @@ const ShapeBody = ({
     const radius = Math.min(frame.width, frame.height) / 2;
     return (
       <>
-        <circle
-          cx={center.x}
-          cy={center.y}
-          r={radius}
-          fill={node.style.fill.color ?? "white"}
-          stroke={node.style.stroke.color}
-          strokeWidth={node.style.stroke.width}
-        />
+        {node.referenceVariant === "tdt" ? (
+          <>
+            <circle
+              cx={center.x}
+              cy={center.y}
+              r={radius}
+              fill={node.style.fill.color ?? "white"}
+              stroke={node.style.stroke.color}
+              strokeWidth={node.style.stroke.width}
+              strokeDasharray="4 3"
+            />
+            <circle
+              cx={center.x}
+              cy={center.y}
+              r={Math.max(4, radius - 3)}
+              fill={node.style.fill.color ?? "white"}
+              stroke={node.style.stroke.color}
+              strokeWidth={node.style.stroke.width}
+            />
+          </>
+        ) : (
+          <circle
+            cx={center.x}
+            cy={center.y}
+            r={radius}
+            fill={node.style.fill.color ?? "white"}
+            stroke={node.style.stroke.color}
+            strokeWidth={node.style.stroke.width}
+            strokeDasharray={node.referenceVariant === "dt" ? undefined : "4 3"}
+          />
+        )}
         {skeleton ? null : (
           <text
             x={center.x}

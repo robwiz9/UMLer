@@ -23,7 +23,7 @@ const kindLabel: Record<SceneNode["kind"], string> = {
   object: "Object",
   state: "State",
   pseudostate: "Pseudostate",
-  referencePoint: "Typst reference point",
+  referencePoint: "TD / DT reference label",
   lifeline: "Lifeline",
   frame: "Frame / boundary",
   image: "Foreign image",

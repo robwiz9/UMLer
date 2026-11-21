@@ -512,7 +512,9 @@ const measureShape = (
       ),
     };
     text = measurer.measure(
-      `1.${Math.max(1, node.referenceIndex)}`,
+      node.referenceVariant === "dt"
+        ? "Ref"
+        : `1.${Math.max(1, node.referenceIndex)}`,
       textStyle,
       Math.max(20, frame.width - padding * 2),
     );

@@ -231,7 +231,7 @@ export const CircuitAddObjectMenu = ({
             </span>
             <span className="circuit-table-name">Reference point</span>
             <span className="circuit-table-ref">—</span>
-            <span className="circuit-table-desc">Clickable Typst @reference target</span>
+            <span className="circuit-table-desc">Text reference or diagram-to-text link</span>
           </button>
         </div>
       ) : null}

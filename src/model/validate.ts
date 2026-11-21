@@ -167,6 +167,20 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
         error("node/reference-id", `${path}.referenceId`, "reference id must be a non-empty string");
       }
       if (
+        node.referenceVariant !== undefined &&
+        node.referenceVariant !== "td" &&
+        node.referenceVariant !== "dt" &&
+        node.referenceVariant !== "tdt"
+      ) {
+        error("node/reference-variant", `${path}.referenceVariant`, "reference variant must be td, dt, or tdt");
+      }
+      if (
+        node.referToId !== undefined &&
+        typeof node.referToId !== "string"
+      ) {
+        error("node/refer-to", `${path}.referToId`, "refer-to id must be a string");
+      }
+      if (
         typeof node.referenceIndex !== "number" ||
         !Number.isInteger(node.referenceIndex) ||
         node.referenceIndex < 1
