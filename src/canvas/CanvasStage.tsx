@@ -174,6 +174,14 @@ interface CanvasStageProps {
     target: PortAttachmentRef | EdgeAttachmentRef,
   ) => void;
   readonly onMoveSequenceEdge: (edgeId: string, deltaY: number) => void;
+  readonly onMoveSequenceSelection: (
+    edgeIds: readonly string[],
+    activations: readonly {
+      readonly nodeId: string;
+      readonly activationId: ActivationId;
+    }[],
+    deltaY: number,
+  ) => void;
   readonly onSlideStraightEdge: (edgeId: string, position: number) => void;
   readonly onMoveEdgeLabel: (
     edgeId: string,
@@ -330,6 +338,18 @@ type Interaction =
       readonly kind: "edge-move";
       readonly pointerId: number;
       readonly edgeId: string;
+      readonly startWorld: Point;
+      moved: boolean;
+      lastDelta: number;
+    }
+  | {
+      readonly kind: "sequence-group-move";
+      readonly pointerId: number;
+      readonly edgeIds: readonly string[];
+      readonly activations: readonly {
+        readonly nodeId: string;
+        readonly activationId: ActivationId;
+      }[];
       readonly startWorld: Point;
       moved: boolean;
       lastDelta: number;
@@ -1229,6 +1249,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onInsertComponentOnWire,
   onReattachEdge,
   onMoveSequenceEdge,
+  onMoveSequenceSelection,
   onSlideStraightEdge,
   onMoveEdgeLabel,
   onTextDoubleClick,
@@ -1374,6 +1395,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     readonly edgeId: string;
     readonly deltaY: number;
   } | null>(null);
+  const [sequenceActivationSelection, setSequenceActivationSelection] = useState<
+    readonly { readonly nodeId: string; readonly activationId: ActivationId }[]
+  >([]);
+  const [sequenceGroupPreviewDelta, setSequenceGroupPreviewDelta] = useState<number | null>(null);
   const [edgeSlidePreview, setEdgeSlidePreview] = useState<{
     readonly edgeId: string;
     readonly axis: "x" | "y";
@@ -2280,6 +2305,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     setLinePopover(null);
     onClearNodeFocus();
     onSelectEdge(null);
+    setSequenceActivationSelection([]);
+    setSequenceGroupPreviewDelta(null);
     const additive = event.ctrlKey || event.metaKey;
     if (!additive) onSelectNode(null);
     interactionRef.current = {
@@ -2305,6 +2332,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const svg = svgRef.current;
     const nodeLayout = layout.nodes[nodeId];
     if (svg === null || nodeLayout === undefined) return;
+    setSequenceActivationSelection([]);
+    setSequenceGroupPreviewDelta(null);
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     const duplicate = event.ctrlKey || event.metaKey;
@@ -2575,6 +2604,42 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     };
   };
 
+  const beginSequenceGroupMove = (
+    event: React.PointerEvent<SVGElement>,
+    edgeIds: readonly string[],
+    activations: readonly {
+      readonly nodeId: string;
+      readonly activationId: ActivationId;
+    }[],
+  ): void => {
+    const svg = svgRef.current;
+    if (svg === null || edgeIds.length + activations.length === 0) return;
+    const screen = pointFromEvent(event, svg);
+    const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
+    setActiveEndpoint(null);
+    setLinePopover(null);
+    setSequenceMovePreview(null);
+    setSequenceGroupPreviewDelta(null);
+    setActivationDraft(null);
+    onSelectActivation(null);
+    interactionRef.current = {
+      kind: "sequence-group-move",
+      pointerId: event.pointerId,
+      edgeIds,
+      activations,
+      startWorld: world,
+      moved: false,
+      lastDelta: 0,
+    };
+    try {
+      svg.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events cannot own capture.
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
   const handleEdgePointerDown = (
     edgeId: string,
     event: React.PointerEvent<SVGPolylineElement>,
@@ -2582,6 +2647,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const svg = svgRef.current;
     const edgeLayout = layout.edges[edgeId];
     if (svg === null || edgeLayout === undefined) return;
+    if (scene.meta.diagramKind === "uml-sequence") {
+      const selected =
+        selectedEdgeIds.includes(edgeId) &&
+        (selectedEdgeIds.length > 1 || sequenceActivationSelection.length > 0);
+      if (selected) {
+        beginSequenceGroupMove(
+          event,
+          selectedEdgeIds,
+          sequenceActivationSelection,
+        );
+        return;
+      }
+      setSequenceActivationSelection([]);
+    }
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     const now = performance.now();
@@ -3017,6 +3096,24 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const startTop = activation.frame.y - nodeLayout.frame.y;
     const startHeight = activation.frame.height;
 
+    if (
+      edge === "body" &&
+      scene.meta.diagramKind === "uml-sequence" &&
+      sequenceActivationSelection.some(
+        (item) =>
+          item.nodeId === nodeId && item.activationId === activation.id,
+      ) &&
+      (sequenceActivationSelection.length > 1 || selectedEdgeIds.length > 0)
+    ) {
+      beginSequenceGroupMove(
+        event,
+        selectedEdgeIds,
+        sequenceActivationSelection,
+      );
+      return;
+    }
+
+    setSequenceActivationSelection([]);
     onSelectNode(nodeId);
     onSelectEdge(null);
     onClearNodeFocus();
@@ -3150,6 +3247,55 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     setCoincidentHighlights([]);
 
     if (interaction.kind === "marquee") {
+      if (commit && interaction.moved && scene.meta.diagramKind === "uml-sequence") {
+        const region = rectFromPoints(interaction.startWorld, interaction.currentWorld);
+        const edgeIds = Object.values(scene.edges)
+          .filter((edge) => {
+            const edgeLayout = layout.edges[edge.id];
+            return edgeLayout !== undefined &&
+              polylineCrossesRect(edgeLayout.points, region);
+          })
+          .map((edge) => edge.id);
+        const activations = Object.values(layout.nodes).flatMap((node) => {
+          if (
+            node.kind !== "lifeline" ||
+            scene.nodes[node.nodeId]?.visible === false
+          ) {
+            return [];
+          }
+          return node.activations
+            .filter((activation) => rectsIntersect(activation.frame, region))
+            .map((activation) => ({
+              nodeId: node.nodeId,
+              activationId: activation.id,
+            }));
+        });
+        const nextEdges = interaction.additive
+          ? [...new Set([...selectedEdgeIds, ...edgeIds])]
+          : edgeIds;
+        const nextActivations = interaction.additive
+          ? [
+              ...new Map(
+                [...sequenceActivationSelection, ...activations].map((item) => [
+                  `${item.nodeId}:${item.activationId}`,
+                  item,
+                ]),
+              ).values(),
+            ]
+          : activations;
+        onSelectNodes([], null);
+        onSelectEdges(nextEdges);
+        setSequenceActivationSelection(nextActivations);
+        onSelectActivation(null);
+        setMarquee(null);
+        interactionRef.current = null;
+        setPanning(false);
+        const pointerId = interaction.pointerId;
+        if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+          svgRef.current.releasePointerCapture(pointerId);
+        }
+        return;
+      }
       if (commit && interaction.moved) {
         const region = rectFromPoints(interaction.startWorld, interaction.currentWorld);
         const contained = Object.values(layout.nodes)
@@ -3376,12 +3522,45 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           ) {
             onReattachEdgeToPoint(interaction.edgeId, interaction.end, candidate);
           }
+        } else if (
+          interaction.moved &&
+          scene.meta.diagramKind === "uml-sequence"
+        ) {
+          const candidate = snapEnabled
+            ? {
+                x: snap(interaction.lastWorld.x, Math.max(1, gridSize)),
+                y: snap(interaction.lastWorld.y, Math.max(1, gridSize)),
+              }
+            : interaction.lastWorld;
+          onReattachEdgeToPoint(interaction.edgeId, interaction.end, candidate);
         } else if (!interaction.moved) {
           openTerminalMenu(interaction.edgeId, interaction.end, false);
         }
       }
       reattachTargetRef.current = null;
       setReattachPreview(null);
+      interactionRef.current = null;
+      setPanning(false);
+      const pointerId = interaction.pointerId;
+      if (svgRef.current?.hasPointerCapture(pointerId) === true) {
+        svgRef.current.releasePointerCapture(pointerId);
+      }
+      return;
+    }
+
+    if (interaction.kind === "sequence-group-move") {
+      if (
+        commit &&
+        interaction.moved &&
+        Math.abs(interaction.lastDelta) > 0.5
+      ) {
+        onMoveSequenceSelection(
+          interaction.edgeIds,
+          interaction.activations,
+          interaction.lastDelta,
+        );
+      }
+      setSequenceGroupPreviewDelta(null);
       interactionRef.current = null;
       setPanning(false);
       const pointerId = interaction.pointerId;
@@ -3836,6 +4015,23 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         to: target?.point ?? world,
         snapped: target !== null,
       });
+      return;
+    }
+
+    if (interaction.kind === "sequence-group-move") {
+      const moved = interaction.moved ||
+        Math.hypot(
+          world.x - interaction.startWorld.x,
+          world.y - interaction.startWorld.y,
+        ) * zoomRef.current > 3;
+      interaction.moved = moved;
+      if (!moved) return;
+      const deltaY = snap(
+        world.y - interaction.startWorld.y,
+        Math.max(1, gridSize),
+      );
+      interaction.lastDelta = deltaY;
+      setSequenceGroupPreviewDelta(deltaY);
       return;
     }
 
@@ -4438,6 +4634,22 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       centerX: activation.frame.x + activation.frame.width / 2,
     };
   })();
+  const sequenceActivationFrames = sequenceActivationSelection.flatMap((item) => {
+    const nodeLayout = layout.nodes[item.nodeId];
+    if (nodeLayout === undefined || nodeLayout.kind !== "lifeline") return [];
+    const activation = nodeLayout.activations.find(
+      (candidate) => candidate.id === item.activationId,
+    );
+    if (activation === undefined) return [];
+    return [{
+      nodeId: item.nodeId,
+      activationId: item.activationId,
+      x: activation.frame.x,
+      y: activation.frame.y + (sequenceGroupPreviewDelta ?? 0),
+      width: activation.frame.width,
+      height: activation.frame.height,
+    }];
+  });
   const sequenceMode = scene.meta.diagramKind === "uml-sequence";
   const edgeItems = Object.values(scene.edges)
     .sort((a, b) => a.z - b.z)
@@ -4973,6 +5185,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               })}
             </g>
           ) : null}
+          {sequenceActivationFrames.map((frame) => (
+            <rect
+              key={`sequence-activation-selection-${frame.nodeId}:${frame.activationId}`}
+              x={frame.x - 1}
+              y={frame.y - 1}
+              width={frame.width + 2}
+              height={frame.height + 2}
+              fill="#2563eb"
+              fillOpacity={0.08}
+              stroke={scene.theme.colors.selection}
+              strokeWidth={1.4}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          ))}
           {[draftEdge, reattachPreview].map((preview, index) => {
             if (preview === null) return null;
             const interaction = interactionRef.current;
@@ -5108,6 +5335,29 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               />
             );
           })() : null}
+          {sequenceGroupPreviewDelta !== null
+            ? selectedEdgeIds.map((edgeId) => {
+                const previewLayout = layout.edges[edgeId];
+                const edge = scene.edges[edgeId];
+                if (previewLayout === undefined || edge === undefined) return null;
+                return (
+                  <polyline
+                    key={`sequence-group-preview-${edgeId}`}
+                    points={edgeLinePoints(previewLayout, edge.markers)
+                      .map(
+                        (p) =>
+                          `${p.x},${p.y + sequenceGroupPreviewDelta}`,
+                      )
+                      .join(" ")}
+                    fill="none"
+                    stroke={scene.theme.colors.selection}
+                    strokeWidth={2.2}
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />
+                );
+              })
+            : null}
           {labelDraft !== null ? (() => {
             const label = layout.edges[labelDraft.edgeId]?.labels.find(
               (candidate) => candidate.labelId === labelDraft.labelId,

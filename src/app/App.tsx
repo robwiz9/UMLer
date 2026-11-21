@@ -3053,6 +3053,17 @@ export const App = () => {
 
   const handleReattachEdgeToPoint = useCallback(
     (edgeId: string, end: "source" | "target", point: Point) => {
+      if (scene.meta.diagramKind === "uml-sequence") {
+        setScene((current) =>
+          setEdgeAttachment(current, asEdgeId(edgeId), end, {
+            target: "free",
+            point,
+          }),
+        );
+        setSelectedEdgeId(edgeId);
+        setLayoutNote("Message endpoint detached to a free point.");
+        return;
+      }
       const result = reattachCircuitEdgeToPoint(
         scene,
         asEdgeId(edgeId),
@@ -4215,6 +4226,39 @@ export const App = () => {
     setLayoutNote("Sequence message moved vertically.");
   }, []);
 
+  const handleMoveSequenceSelection = useCallback((
+    edgeIds: readonly string[],
+    activations: readonly { readonly nodeId: string; readonly activationId: ActivationId }[],
+    deltaY: number,
+  ) => {
+    setScene((current) => {
+      let next = current;
+      for (const edgeId of edgeIds) {
+        next = moveSequenceEdge(next, asEdgeId(edgeId), deltaY);
+      }
+      for (const activation of activations) {
+        const node = next.nodes[activation.nodeId];
+        if (node?.kind !== "lifeline") continue;
+        const bar = node.activationBars.find(
+          (candidate) => candidate.id === activation.activationId,
+        );
+        if (bar === undefined) continue;
+        next = updateActivation(
+          next,
+          asNodeId(activation.nodeId),
+          activation.activationId,
+          { top: bar.top + deltaY, height: bar.height },
+        );
+      }
+      return next;
+    });
+    setLayoutNote(
+      `Moved ${edgeIds.length + activations.length} sequence item${
+        edgeIds.length + activations.length === 1 ? "" : "s"
+      } vertically.`,
+    );
+  }, []);
+
   const handleSlideStraightEdge = useCallback((edgeId: string, position: number) => {
     setScene((current) =>
       setEdgePreferredPosition(current, asEdgeId(edgeId), position));
@@ -4595,6 +4639,7 @@ export const App = () => {
           onInsertComponentOnWire={handleInsertComponentOnWire}
           onReattachEdge={handleReattachEdge}
           onMoveSequenceEdge={handleMoveSequenceEdge}
+          onMoveSequenceSelection={handleMoveSequenceSelection}
           onSlideStraightEdge={handleSlideStraightEdge}
           onMoveEdgeLabel={handleMoveEdgeLabel}
           onTextDoubleClick={handleCanvasTextDoubleClick}

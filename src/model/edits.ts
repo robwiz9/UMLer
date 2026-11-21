@@ -743,6 +743,12 @@ export const moveSequenceEdge = (
 ): SceneDocument => {
   const clamp = (value: number): number => Math.min(1, Math.max(0, value));
   const moved = (attachment: SceneEdge["source"]): SceneEdge["source"] => {
+    if (attachment.target === "free") {
+      return {
+        ...attachment,
+        point: { x: attachment.point.x, y: attachment.point.y + deltaY },
+      };
+    }
     if (attachment.target !== "node" || attachment.port.kind !== "spine") return attachment;
     const lane = scene.nodes[attachment.nodeId];
     if (lane === undefined || lane.kind !== "lifeline") return attachment;
