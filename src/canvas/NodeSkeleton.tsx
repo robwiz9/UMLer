@@ -637,6 +637,33 @@ const ShapeBody = ({
     );
   }
 
+  if (node.kind === "referencePoint") {
+    const radius = Math.min(frame.width, frame.height) / 2;
+    return (
+      <>
+        <circle
+          cx={center.x}
+          cy={center.y}
+          r={radius}
+          fill={node.style.fill.color ?? "white"}
+          stroke={node.style.stroke.color}
+          strokeWidth={node.style.stroke.width}
+        />
+        {skeleton ? null : (
+          <text
+            x={center.x}
+            y={center.y}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            {...textStyle(layout.text)}
+          >
+            {layout.text.text}
+          </text>
+        )}
+      </>
+    );
+  }
+
   if (node.kind === "pseudostate") {
     const radius = Math.min(frame.width, frame.height) / 2;
     const symbol = (() => {

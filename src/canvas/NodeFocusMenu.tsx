@@ -216,6 +216,7 @@ export const NodeFocusMenu = ({
       object: "Object",
       state: "State",
       pseudostate: "Pseudostate",
+      referencePoint: "Reference point",
       relationship: "Relationship",
       lifeline: "Lifeline",
       frame: "Frame",
@@ -259,6 +260,64 @@ export const NodeFocusMenu = ({
         )}
       </div>
     );
+    if (node.kind === "referencePoint") {
+      return (
+        <div className="node-focus-menu">
+          {head}
+          <label className="field-label">
+            Reference ID
+            <input
+              id={`node-${node.id}-reference-id`}
+              name={`node-${node.id}-reference-id`}
+              value={node.referenceId}
+              onChange={(event) => {
+                const referenceId = event.target.value.replace(
+                  /[^A-Za-z0-9_.:-]+/g,
+                  "-",
+                );
+                onUpdateNode(node.id, {
+                  referenceId,
+                  name: referenceId,
+                });
+              }}
+              placeholder="ref-id"
+              spellCheck={false}
+            />
+          </label>
+            <p className="panel-footnote code-mono-hint">
+              Reference node with <code>@{node.referenceId || "ref-id"}</code>
+            </p>
+          <TextStyleControls
+            base={{ ...node.style.text, fontSize: node.labelSize }}
+            value={node.textStyle}
+            onChange={(textStyle) => {
+              const color = textStyle?.color ?? node.style.text.color;
+              onUpdateNode(node.id, {
+                textStyle,
+                style: {
+                  ...node.style,
+                  stroke: { ...node.style.stroke, color },
+                },
+              });
+            }}
+          />
+
+          <div className="focus-actions">
+            <button
+              type="button"
+              className="editor-add danger"
+              onClick={() => {
+                onDeleteNode(node.id);
+                onClose();
+              }}
+            >
+              Delete object
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     const objectTextBase = node.kind === "frame" || node.kind === "lifeline"
       ? { ...node.style.text, weight: 600 as const }
       : node.style.text;
@@ -475,13 +534,13 @@ export const NodeFocusMenu = ({
                     node.id,
                     axis === "horizontal"
                       ? {
-                          mirrorX: node.mirrorX !== true,
-                          swapPinsX: node.swapPinsX !== true,
-                        }
+                        mirrorX: node.mirrorX !== true,
+                        swapPinsX: node.swapPinsX !== true,
+                      }
                       : {
-                          mirrorY: node.mirrorY !== true,
-                          swapPinsY: node.swapPinsY !== true,
-                        },
+                        mirrorY: node.mirrorY !== true,
+                        swapPinsY: node.swapPinsY !== true,
+                      },
                   );
                 }}
                 title="Change orientation and rewire the mirrored endings"
@@ -620,8 +679,8 @@ export const NodeFocusMenu = ({
         />
         <div className="focus-actions">
           {node.kind === "circuitJunction" &&
-          junctionWireCount === 2 &&
-          onMergeJunction !== undefined ? (
+            junctionWireCount === 2 &&
+            onMergeJunction !== undefined ? (
             <button
               type="button"
               className="editor-add"
@@ -651,10 +710,10 @@ export const NodeFocusMenu = ({
   const sections: readonly TableSection[] = node.kind === "table"
     ? node.sections
     : [{
-        id: asSectionId(`${node.id}_attributes`),
-        role: "attributes",
-        rows: node.rows,
-      }];
+      id: asSectionId(`${node.id}_attributes`),
+      role: "attributes",
+      rows: node.rows,
+    }];
   const section = focus.kind === "section"
     ? sections.find((entry) => entry.id === focus.sectionId)
     : undefined;
@@ -797,10 +856,10 @@ export const NodeFocusMenu = ({
     const commonVisibility = firstRow === undefined
       ? null
       : section.rows.every(
-          (entry) =>
-            entry.prefix === undefined &&
-            entry.visibility === firstRow.visibility,
-        )
+        (entry) =>
+          entry.prefix === undefined &&
+          entry.visibility === firstRow.visibility,
+      )
         ? firstRow.visibility ?? "none"
         : "mixed";
     return (
@@ -1097,9 +1156,10 @@ export const NodeFocusMenu = ({
                       onClick={() => onUpdateRow(node.id, row.id, { visibility, prefix: undefined })}
                       title={title}
                     >
-                    {visibility}
-                  </button>
-                )})}
+                      {visibility}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <label className="field-label">

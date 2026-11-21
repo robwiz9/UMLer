@@ -177,6 +177,18 @@ export type LifelineHeadKind =
   | "control"
   | "entity";
 
+/** Clickable Typst reference target placed on the diagram canvas. */
+export interface ReferencePointNode extends NodeBase {
+  readonly kind: "referencePoint";
+  /** Typst label id, referenced as `@referenceId`. */
+  readonly referenceId: string;
+  /** Ordinal within the diagram; rendered as `1.<index>` on the canvas. */
+  readonly referenceIndex: number;
+  /** Number label size in points. */
+  readonly labelSize: number;
+  readonly style: ShapeNodeStyle;
+}
+
 export interface LifelineHead {
   readonly headKind: LifelineHeadKind;
   readonly stereotype?: string;
@@ -293,6 +305,7 @@ export type SceneNode =
   | ObjectNode
   | StateNode
   | PseudostateNode
+  | ReferencePointNode
   | LifelineNode
   | FrameNode
   | ImageNode

@@ -125,7 +125,7 @@ export interface LifelineNodeLayout extends NodeLayoutBase {
 }
 
 export interface ShapeNodeLayout extends NodeLayoutBase {
-  readonly kind: "relationship" | "actor" | "useCase" | "object" | "state" | "pseudostate" | "frame";
+  readonly kind: "relationship" | "actor" | "useCase" | "object" | "state" | "pseudostate" | "referencePoint" | "frame";
   readonly textFrame: Rect;
   readonly text: TextMeasurement;
   readonly labelFrame?: Rect;

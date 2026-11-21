@@ -29,6 +29,23 @@ window.addEventListener("vite:preloadError", (event) => {
   window.location.replace(url.toString());
 });
 
+// Double-clicking an inline code token copies/shows its full text; the
+// browser's default word selection would only grab part of ids such as
+// `ref-1` or `edge_123`.
+document.addEventListener("dblclick", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const code = target.closest("code");
+  if (code === null) return;
+  const selection = window.getSelection();
+  if (selection === null) return;
+  const range = document.createRange();
+  range.selectNodeContents(code);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  event.preventDefault();
+});
+
 const root = document.getElementById("root");
 if (root === null) throw new Error("Missing #root");
 

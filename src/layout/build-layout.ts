@@ -493,7 +493,7 @@ const measureShape = (
   const baseTextStyle = node.kind === "frame"
     ? { ...style.text, weight: 600 as const }
     : style.text;
-  const textStyle = resolveTextStyle(baseTextStyle, node.textStyle);
+  let textStyle = resolveTextStyle(baseTextStyle, node.textStyle);
   let textFrame: Rect;
   let text: TextMeasurement;
 
@@ -503,6 +503,26 @@ const measureShape = (
   } else if (node.kind === "frame") {
     text = measurer.measure(node.name, textStyle, maxWidth);
     textFrame = rect(frame.x + padding, frame.y + padding, maxWidth, text.height);
+  } else if (node.kind === "referencePoint") {
+    textStyle = {
+      ...textStyle,
+      fontSize: Math.max(
+        4,
+        Math.min(32, node.textStyle?.fontSize ?? node.labelSize),
+      ),
+    };
+    text = measurer.measure(
+      `1.${Math.max(1, node.referenceIndex)}`,
+      textStyle,
+      Math.max(20, frame.width - padding * 2),
+    );
+    const center = rectCenter(frame);
+    textFrame = rect(
+      center.x - text.width / 2,
+      center.y - text.height / 2,
+      text.width,
+      text.height,
+    );
   } else if (node.kind === "pseudostate") {
     // Pseudostate names are free labels around the symbol, so they need a
     // wider measure than the tiny 18pt symbol frame.

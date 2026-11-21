@@ -87,6 +87,12 @@ export const CircuitAddObjectMenu = ({
       ),
   );
 
+  const referenceMatches =
+    normalized.length === 0 ||
+    ["reference", "point", "typst", "annotation", "ref"].some(
+      (word) => word.includes(normalized) || normalized.includes(word),
+    );
+
   const pick = (templateId: ObjectTemplateId): void => {
     remember(templateId);
     onPick(templateId);
@@ -203,6 +209,32 @@ export const CircuitAddObjectMenu = ({
           ))
         )}
       </div>
+
+      {referenceMatches ? (
+        <div className="circuit-table-group">
+          <div className="circuit-table-group-title">Annotations</div>
+          <button
+            type="button"
+            className="circuit-table-row"
+            data-circuit-row="true"
+            role="menuitem"
+            onClick={() => pick("reference-point")}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onClose();
+              }
+            }}
+          >
+            <span className="circuit-table-symbol">
+              <span className="circuit-node-symbol" aria-hidden="true">◉</span>
+            </span>
+            <span className="circuit-table-name">Reference point</span>
+            <span className="circuit-table-ref">—</span>
+            <span className="circuit-table-desc">Clickable Typst @reference target</span>
+          </button>
+        </div>
+      ) : null}
 
       {nodeMatches ? (
         <div className="circuit-table-group">

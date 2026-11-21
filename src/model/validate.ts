@@ -43,6 +43,7 @@ const NODE_KINDS = new Set([
   "object",
   "state",
   "pseudostate",
+  "referencePoint",
   "lifeline",
   "frame",
   "image",
@@ -158,6 +159,27 @@ export const validateScene = (scene: SceneDocument): readonly Diagnostic[] => {
           );
         }
         rowIds.add(row.id);
+      }
+    }
+
+    if (node.kind === "referencePoint") {
+      if (typeof node.referenceId !== "string" || node.referenceId.trim().length === 0) {
+        error("node/reference-id", `${path}.referenceId`, "reference id must be a non-empty string");
+      }
+      if (
+        typeof node.referenceIndex !== "number" ||
+        !Number.isInteger(node.referenceIndex) ||
+        node.referenceIndex < 1
+      ) {
+        error("node/reference-index", `${path}.referenceIndex`, "reference index must be a positive integer");
+      }
+      if (
+        typeof node.labelSize !== "number" ||
+        !Number.isFinite(node.labelSize) ||
+        node.labelSize < 4 ||
+        node.labelSize > 32
+      ) {
+        error("node/label-size", `${path}.labelSize`, "label size must be between 4 and 32 pt");
       }
     }
 

@@ -17,6 +17,7 @@ import type {
   LifelineNode,
   ObjectNode,
   PseudostateNode,
+  ReferencePointNode,
   RelationAttributeNode,
   SceneNode,
   StateNode,
@@ -65,6 +66,7 @@ export type ObjectTemplateId =
   | "interaction-frame"
   | "comment"
   | "image"
+  | "reference-point"
   | "circuit-node"
   | "circuit-voltage-label"
   | "circuit-current-label"
@@ -96,6 +98,13 @@ const COMMON_TEMPLATES: readonly ObjectTemplate[] = [
     label: "Image",
     hint: "Drop a PNG/JPG/SVG, or add a placeholder frame",
     icon: "▨",
+    group: "annotation",
+  },
+  {
+    id: "reference-point",
+    label: "Reference point",
+    hint: "Clickable Typst @reference target on the diagram",
+    icon: "◉",
     group: "annotation",
   },
 ];
@@ -429,6 +438,21 @@ const classTable = (frame: Rect): TableNode => ({
   ],
 });
 
+const referencePointNode = (
+  frame: Rect,
+  referenceIndex: number,
+): ReferencePointNode => ({
+  ...shapeBase(
+    asNodeId(newId("reference")),
+    `ref-${referenceIndex}`,
+    frame,
+  ),
+  kind: "referencePoint",
+  referenceId: `ref-${referenceIndex}`,
+  referenceIndex,
+  labelSize: 9,
+});
+
 const stateNode = (frame: Rect): StateNode => ({
   ...shapeBase(asNodeId(newId("state")), "New state", frame),
   kind: "state",
@@ -712,6 +736,18 @@ export const createObjectFromTemplate = (
       return created(actorNode(placeObjectFrame(scene, center, 72, 126)));
     case "use-case":
       return created(useCaseNode(placeObjectFrame(scene, center, 138, 45)));
+    case "reference-point": {
+      const nextIndex =
+        Math.max(
+          0,
+          ...Object.values(scene.nodes)
+            .filter((node) => node.kind === "referencePoint")
+            .map((node) => node.referenceIndex),
+        ) + 1;
+      return created(
+        referencePointNode(placeObjectFrame(scene, center, 26, 26), nextIndex),
+      );
+    }
     case "system-boundary":
       return created(boundaryFrame(placeObjectFrame(scene, center, 450, 270)));
     case "interaction-frame":

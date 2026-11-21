@@ -630,6 +630,43 @@ const drawLifeline = (
   }
 };
 
+const typstReferenceLabel = (value: string): string => {
+  const safe = value
+    .trim()
+    .replace(/[^A-Za-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return safe.length > 0 ? safe : "ref";
+};
+
+const drawReferencePoint = (
+  writer: Writer,
+  level: number,
+  p: Projector,
+  scale: number,
+  node: Extract<ShapeSceneNode, { kind: "referencePoint" }>,
+  layout: ShapeNodeLayout,
+): void => {
+  const frame = layout.frame;
+  const center = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
+  const radius = Math.min(frame.width, frame.height) / 2;
+  const label = typstReferenceLabel(node.referenceId);
+  const index = Math.max(1, node.referenceIndex);
+  const color = colorExpr(node.style.stroke.color);
+  const strokeWidth = num(node.style.stroke.width * scale);
+  const textColor = colorExpr(layout.text.style.color);
+  const fontSize = num(layout.text.style.fontSize * scale);
+  const fontWeight = layout.text.style.weight >= 600 ? "bold" : "regular";
+  const fontStyle = layout.text.style.italic === true ? "italic" : "normal";
+  const content =
+    `#box(circle(radius: ${num(radius * scale)}pt, fill: ${fillExpr(node.style.fill)}, stroke: (paint: ${color}, thickness: ${strokeWidth}pt))[` +
+    `#text(size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", style: "${fontStyle}")[#context [#{str(counter(figure).get().first()) + ".${index}"}]]` +
+    `]) <${label}>`;
+  writer.push(
+    level,
+    `draw.content(${p.point(center)}, [${content}], anchor: "center", padding: 0pt)`,
+  );
+};
+
 const drawShape = (
   writer: Writer,
   level: number,
@@ -642,6 +679,11 @@ const drawShape = (
   const frame = layout.frame;
   const centerPoint = { x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 };
   const commonFill = node.kind === "frame" ? null : style.fill;
+
+  if (node.kind === "referencePoint") {
+    drawReferencePoint(writer, level, p, scale, node, layout);
+    return;
+  }
 
   if (node.kind === "actor") {
     drawActor(writer, level, p, scale, layout, style);
