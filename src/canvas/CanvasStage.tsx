@@ -180,6 +180,7 @@ interface CanvasStageProps {
       readonly nodeId: string;
       readonly activationId: ActivationId;
     }[],
+    lifelineIds: readonly string[],
     deltaY: number,
   ) => void;
   readonly onSlideStraightEdge: (edgeId: string, position: number) => void;
@@ -350,6 +351,7 @@ type Interaction =
         readonly nodeId: string;
         readonly activationId: ActivationId;
       }[];
+      readonly lifelineIds: readonly string[];
       readonly startWorld: Point;
       moved: boolean;
       lastDelta: number;
@@ -1398,6 +1400,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const [sequenceActivationSelection, setSequenceActivationSelection] = useState<
     readonly { readonly nodeId: string; readonly activationId: ActivationId }[]
   >([]);
+  const [sequenceLifelineSelection, setSequenceLifelineSelection] = useState<
+    readonly string[]
+  >([]);
   const [sequenceGroupPreviewDelta, setSequenceGroupPreviewDelta] = useState<number | null>(null);
   const [edgeSlidePreview, setEdgeSlidePreview] = useState<{
     readonly edgeId: string;
@@ -2306,6 +2311,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     onClearNodeFocus();
     onSelectEdge(null);
     setSequenceActivationSelection([]);
+    setSequenceLifelineSelection([]);
     setSequenceGroupPreviewDelta(null);
     const additive = event.ctrlKey || event.metaKey;
     if (!additive) onSelectNode(null);
@@ -2332,7 +2338,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const svg = svgRef.current;
     const nodeLayout = layout.nodes[nodeId];
     if (svg === null || nodeLayout === undefined) return;
+    if (
+      scene.meta.diagramKind === "uml-sequence" &&
+      sequenceLifelineSelection.includes(nodeId)
+    ) {
+      beginSequenceGroupMove(
+        event,
+        selectedEdgeIds,
+        sequenceActivationSelection,
+        sequenceLifelineSelection,
+      );
+      return;
+    }
     setSequenceActivationSelection([]);
+    setSequenceLifelineSelection([]);
     setSequenceGroupPreviewDelta(null);
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
@@ -2611,9 +2630,15 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       readonly nodeId: string;
       readonly activationId: ActivationId;
     }[],
+    lifelineIds: readonly string[],
   ): void => {
     const svg = svgRef.current;
-    if (svg === null || edgeIds.length + activations.length === 0) return;
+    if (
+      svg === null ||
+      edgeIds.length + activations.length + lifelineIds.length === 0
+    ) {
+      return;
+    }
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setActiveEndpoint(null);
@@ -2627,6 +2652,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       pointerId: event.pointerId,
       edgeIds,
       activations,
+      lifelineIds,
       startWorld: world,
       moved: false,
       lastDelta: 0,
@@ -2650,16 +2676,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (scene.meta.diagramKind === "uml-sequence") {
       const selected =
         selectedEdgeIds.includes(edgeId) &&
-        (selectedEdgeIds.length > 1 || sequenceActivationSelection.length > 0);
+        (selectedEdgeIds.length > 1 ||
+          sequenceActivationSelection.length > 0 ||
+          sequenceLifelineSelection.length > 0);
       if (selected) {
         beginSequenceGroupMove(
           event,
           selectedEdgeIds,
           sequenceActivationSelection,
+          sequenceLifelineSelection,
         );
         return;
       }
       setSequenceActivationSelection([]);
+      setSequenceLifelineSelection([]);
     }
     const screen = pointFromEvent(event, svg);
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
@@ -3103,17 +3133,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         (item) =>
           item.nodeId === nodeId && item.activationId === activation.id,
       ) &&
-      (sequenceActivationSelection.length > 1 || selectedEdgeIds.length > 0)
+      (sequenceActivationSelection.length > 1 ||
+        selectedEdgeIds.length > 0 ||
+        sequenceLifelineSelection.length > 0)
     ) {
       beginSequenceGroupMove(
         event,
         selectedEdgeIds,
         sequenceActivationSelection,
+        sequenceLifelineSelection,
       );
       return;
     }
 
     setSequenceActivationSelection([]);
+    setSequenceLifelineSelection([]);
     onSelectNode(nodeId);
     onSelectEdge(null);
     onClearNodeFocus();
@@ -3283,9 +3317,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               ).values(),
             ]
           : activations;
+        const lifelineIds = Object.values(layout.nodes)
+          .filter(
+            (node) =>
+              node.kind === "lifeline" &&
+              scene.nodes[node.nodeId]?.visible !== false &&
+              rectsIntersect(selectionFrameFor(node), region),
+          )
+          .map((node) => node.nodeId);
+        const nextLifelines = interaction.additive
+          ? [...new Set([...sequenceLifelineSelection, ...lifelineIds])]
+          : lifelineIds;
         onSelectNodes([], null);
         onSelectEdges(nextEdges);
         setSequenceActivationSelection(nextActivations);
+        setSequenceLifelineSelection(nextLifelines);
         onSelectActivation(null);
         setMarquee(null);
         interactionRef.current = null;
@@ -3557,6 +3603,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         onMoveSequenceSelection(
           interaction.edgeIds,
           interaction.activations,
+          interaction.lifelineIds,
           interaction.lastDelta,
         );
       }
@@ -4650,6 +4697,17 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       height: activation.frame.height,
     }];
   });
+  const sequenceLifelineFrames = sequenceLifelineSelection.flatMap((nodeId) => {
+    const nodeLayout = layout.nodes[nodeId];
+    if (nodeLayout === undefined || nodeLayout.kind !== "lifeline") return [];
+    return [{
+      nodeId,
+      frame: {
+        ...nodeLayout.headFrame,
+        y: nodeLayout.headFrame.y + (sequenceGroupPreviewDelta ?? 0),
+      },
+    }];
+  });
   const sequenceMode = scene.meta.diagramKind === "uml-sequence";
   const edgeItems = Object.values(scene.edges)
     .sort((a, b) => a.z - b.z)
@@ -5185,6 +5243,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               })}
             </g>
           ) : null}
+          {sequenceLifelineFrames.map((item) => (
+            <rect
+              key={`sequence-lifeline-selection-${item.nodeId}`}
+              x={item.frame.x - 1}
+              y={item.frame.y - 1}
+              width={item.frame.width + 2}
+              height={item.frame.height + 2}
+              fill="#2563eb"
+              fillOpacity={0.06}
+              stroke={scene.theme.colors.selection}
+              strokeWidth={1.4}
+              vectorEffect="non-scaling-stroke"
+              pointerEvents="none"
+            />
+          ))}
           {sequenceActivationFrames.map((frame) => (
             <rect
               key={`sequence-activation-selection-${frame.nodeId}:${frame.activationId}`}

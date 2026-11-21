@@ -2168,6 +2168,47 @@ export const withNodeFrames = (
   frames: Readonly<Record<string, Rect>>,
 ): SceneDocument => {
   if (Object.keys(frames).length === 0) return scene;
+  const bottomResizedLifelines = new Set(
+    Object.entries(frames).flatMap(([id, frame]) => {
+      const node = scene.nodes[id];
+      if (
+        node?.kind !== "lifeline" ||
+        frame.y !== node.frame.y ||
+        frame.height === node.frame.height
+      ) {
+        return [];
+      }
+      return [id];
+    }),
+  );
+  const rebaseSpine = (
+    attachment: SceneEdge["source"],
+  ): SceneEdge["source"] => {
+    if (
+      attachment.target !== "node" ||
+      attachment.port.kind !== "spine" ||
+      !bottomResizedLifelines.has(attachment.nodeId)
+    ) {
+      return attachment;
+    }
+    const node = scene.nodes[attachment.nodeId];
+    const frame = frames[attachment.nodeId];
+    if (node?.kind !== "lifeline" || frame === undefined) return attachment;
+    const oldSpan = Math.max(1, node.frame.height - node.headHeight);
+    const newSpan = Math.max(1, frame.height - node.headHeight);
+    const absoluteY =
+      node.frame.y + node.headHeight + attachment.port.t * oldSpan;
+    return {
+      ...attachment,
+      port: {
+        kind: "spine",
+        t: Math.min(
+          1,
+          Math.max(0, (absoluteY - (frame.y + node.headHeight)) / newSpan),
+        ),
+      },
+    };
+  };
   return {
     ...scene,
     nodes: Object.fromEntries(
@@ -2176,6 +2217,19 @@ export const withNodeFrames = (
         return [id, frame === undefined ? node : { ...node, frame }];
       }),
     ),
+    edges:
+      bottomResizedLifelines.size === 0
+        ? scene.edges
+        : Object.fromEntries(
+            Object.entries(scene.edges).map(([id, edge]) => [
+              id,
+              {
+                ...edge,
+                source: rebaseSpine(edge.source),
+                target: rebaseSpine(edge.target),
+              },
+            ]),
+          ),
   };
 };
 

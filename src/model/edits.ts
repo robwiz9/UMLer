@@ -28,7 +28,7 @@ import type {
   EdgeRoutingMode,
   SceneEdge,
 } from "./edges.ts";
-import { asActivationId, asLabelId, asRowId, asSectionId, asWaypointId, newId, type ActivationId, type EdgeId, type LabelId, type NodeId, type RowId, type SectionId } from "./ids.ts";
+import { asActivationId, asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, asWaypointId, newId, type ActivationId, type EdgeId, type LabelId, type NodeId, type RowId, type SectionId } from "./ids.ts";
 import type { EdgeEnd, EndpointMarker } from "./markers.ts";
 import type { StrokePattern, TextStyleOverride, Theme } from "./styles.ts";
 
@@ -763,6 +763,80 @@ export const moveSequenceEdge = (
       ? { ...edge, source: moved(edge.source), target: moved(edge.target) }
       : edge,
   );
+};
+
+/**
+ * Moves a sequence selection as one vertical group. A selected lifeline moves
+ * its own frame; spine-attached messages on that lifeline follow automatically,
+ * while free/unselected-lifeline endpoints move by the delta. Activations on a
+ * moved lifeline inherit that movement instead of receiving it twice.
+ */
+export const moveSequenceItems = (
+  scene: SceneDocument,
+  edgeIds: readonly string[],
+  activations: readonly {
+    readonly nodeId: string;
+    readonly activationId: ActivationId;
+  }[],
+  lifelineIds: readonly string[],
+  deltaY: number,
+): SceneDocument => {
+  const movedLifelines = new Set(lifelineIds);
+  const nodes = Object.fromEntries(
+    Object.entries(scene.nodes).map(([id, node]) => [
+      id,
+      movedLifelines.has(id) && node.kind === "lifeline"
+        ? { ...node, frame: { ...node.frame, y: node.frame.y + deltaY } }
+        : node,
+    ]),
+  );
+  let next: SceneDocument = { ...scene, nodes };
+
+  for (const activation of activations) {
+    if (movedLifelines.has(activation.nodeId)) continue;
+    const node = next.nodes[activation.nodeId];
+    if (node?.kind !== "lifeline") continue;
+    const bar = node.activationBars.find(
+      (candidate) => candidate.id === activation.activationId,
+    );
+    if (bar === undefined) continue;
+    next = updateActivation(
+      next,
+      asNodeId(activation.nodeId),
+      activation.activationId,
+      { top: bar.top + deltaY, height: bar.height },
+    );
+  }
+
+  for (const edgeId of edgeIds) {
+    const edge = next.edges[edgeId];
+    if (edge === undefined || edge.semantic.family !== "sequence") continue;
+    const moved = (attachment: SceneEdge["source"]): SceneEdge["source"] => {
+      if (attachment.target === "free") {
+        return {
+          ...attachment,
+          point: { x: attachment.point.x, y: attachment.point.y + deltaY },
+        };
+      }
+      if (attachment.target !== "node" || attachment.port.kind !== "spine") {
+        return attachment;
+      }
+      if (movedLifelines.has(attachment.nodeId)) return attachment;
+      const lane = next.nodes[attachment.nodeId];
+      if (lane?.kind !== "lifeline") return attachment;
+      const span = Math.max(1, lane.frame.height - lane.headHeight);
+      return {
+        ...attachment,
+        port: {
+          kind: "spine",
+          t: Math.min(1, Math.max(0, attachment.port.t + deltaY / span)),
+        },
+      };
+    };
+    next = setEdgeAttachment(next, asEdgeId(edgeId), "source", moved(edge.source));
+    next = setEdgeAttachment(next, asEdgeId(edgeId), "target", moved(edge.target));
+  }
+  return next;
 };
 
 export const setMarkers = (

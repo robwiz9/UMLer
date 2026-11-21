@@ -179,6 +179,7 @@ import {
   insertConnectedObject,
   moveRow,
   moveSequenceEdge,
+  moveSequenceItems,
   patchLayout,
   patchNode,
   removeEdgeWaypoint,
@@ -4229,33 +4230,21 @@ export const App = () => {
   const handleMoveSequenceSelection = useCallback((
     edgeIds: readonly string[],
     activations: readonly { readonly nodeId: string; readonly activationId: ActivationId }[],
+    lifelineIds: readonly string[],
     deltaY: number,
   ) => {
-    setScene((current) => {
-      let next = current;
-      for (const edgeId of edgeIds) {
-        next = moveSequenceEdge(next, asEdgeId(edgeId), deltaY);
-      }
-      for (const activation of activations) {
-        const node = next.nodes[activation.nodeId];
-        if (node?.kind !== "lifeline") continue;
-        const bar = node.activationBars.find(
-          (candidate) => candidate.id === activation.activationId,
-        );
-        if (bar === undefined) continue;
-        next = updateActivation(
-          next,
-          asNodeId(activation.nodeId),
-          activation.activationId,
-          { top: bar.top + deltaY, height: bar.height },
-        );
-      }
-      return next;
-    });
+    setScene((current) =>
+      moveSequenceItems(
+        current,
+        edgeIds,
+        activations,
+        lifelineIds,
+        deltaY,
+      ),
+    );
+    const count = edgeIds.length + activations.length + lifelineIds.length;
     setLayoutNote(
-      `Moved ${edgeIds.length + activations.length} sequence item${
-        edgeIds.length + activations.length === 1 ? "" : "s"
-      } vertically.`,
+      `Moved ${count} sequence item${count === 1 ? "" : "s"} vertically.`,
     );
   }, []);
 
