@@ -657,10 +657,12 @@ const drawReferencePoint = (
   const fontSize = num(layout.text.style.fontSize * scale);
   const fontWeight = layout.text.style.weight >= 600 ? "bold" : "regular";
   const fontStyle = layout.text.style.italic === true ? "italic" : "normal";
+  const diameter = num(radius * 2 * scale);
   const content =
-    `#box(circle(radius: ${num(radius * scale)}pt, fill: ${fillExpr(node.style.fill)}, stroke: (paint: ${color}, thickness: ${strokeWidth}pt))[` +
-    `#text(size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", style: "${fontStyle}")[#context [#{str(counter(figure).get().first()) + ".${index}"}]]` +
-    `]) <${label}>`;
+    `#box(width: ${diameter}pt, height: ${diameter}pt)[` +
+    `#place(center + horizon, circle(radius: ${num(radius * scale)}pt, fill: ${fillExpr(node.style.fill)}, stroke: (paint: ${color}, thickness: ${strokeWidth}pt)))` +
+    `#place(center + horizon, text(size: ${fontSize}pt, fill: ${textColor}, weight: "${fontWeight}", style: "${fontStyle}")[#context [#{str(counter(figure).get().first()) + ".${index}"}]])` +
+    `] <${label}>`;
   writer.push(
     level,
     `draw.content(${p.point(center)}, [${content}], anchor: "center", padding: 0pt)`,
