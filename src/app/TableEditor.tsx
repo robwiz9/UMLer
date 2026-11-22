@@ -6,6 +6,7 @@ import type {
   TableSection,
   Visibility,
 } from "../model/nodes.ts";
+import { CLASS_STEREOTYPE_PRESETS, normalizeStereotypeName, withClassStereotype } from "../model/nodes.ts";
 import type { RowId, SectionId } from "../model/ids.ts";
 
 interface TableEditorProps {
@@ -140,17 +141,44 @@ export const TableEditor = ({
         />
       </label>
       {node.kind === "table" && node.tableKind === "class" ? (
-        <label className="field-label">
-          Stereotype
-          <input
-            id={`node-${node.id}-stereotype`}
-            name={`node-${node.id}-stereotype`}
-            placeholder="interface"
-            value={node.header.stereotype ?? ""}
-            onChange={(event) =>
-              onUpdateNode({ header: { ...node.header, stereotype: event.target.value || undefined } })}
-          />
-        </label>
+        <>
+          <label className="field-label">
+            Stereotype
+            <input
+              id={`node-${node.id}-stereotype`}
+              name={`node-${node.id}-stereotype`}
+              placeholder="interface"
+              value={node.header.stereotype ?? ""}
+              onChange={(event) =>
+                onUpdateNode({ header: withClassStereotype(node.header, event.target.value) })}
+            />
+          </label>
+          <div className="chip-row compact" role="group" aria-label="Class stereotype presets">
+            {CLASS_STEREOTYPE_PRESETS.map((preset) => {
+              const active =
+                normalizeStereotypeName(node.header.stereotype) === preset ||
+                (preset === "interface" && node.header.isInterface === true) ||
+                (preset === "abstract" && node.header.abstract === true);
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  className={`chip ${active ? "on" : ""}`}
+                  aria-pressed={active}
+                  onClick={() =>
+                    onUpdateNode({
+                      header: withClassStereotype(
+                        node.header,
+                        active ? undefined : preset,
+                      ),
+                    })}
+                >
+                  {preset}
+                </button>
+              );
+            })}
+          </div>
+        </>
       ) : null}
 
       {sections.map((section) => (

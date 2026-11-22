@@ -8,6 +8,7 @@ import { FixedTextMeasurer } from "../src/layout/text.ts";
 import { serializeSceneToDigest } from "../src/export/diagram-digest.ts";
 import type { SceneDocument } from "../src/model/scene.ts";
 import type { SceneEdge } from "../src/model/edges.ts";
+import type { TableNode } from "../src/model/nodes.ts";
 import { createEdgeForDiagram } from "../src/model/edge-create.ts";
 import { insertEdge } from "../src/model/edits.ts";
 import { asEdgeId, asNodeId } from "../src/model/ids.ts";
@@ -77,6 +78,68 @@ const classText = digestOf(fixture("uml-class"));
 check(classText.includes("kind=composition whole=C2 part=C4"), "class composition names whole and part");
 check(classText.includes("kind=realization"), "class realization is preserved");
 check(classText.includes("interface=yes"), "class interfaces are marked");
+check(
+  !classText.includes('stereotype="interface"'),
+  "an interface stereotype is represented by interface=yes, not free text",
+);
+
+const classWithHeader = (nodeId: string, header: TableNode["header"]): SceneDocument => {
+  const base = fixture("uml-class");
+  const node = base.nodes[nodeId];
+  if (node === undefined || node.kind !== "table") throw new Error(`missing class ${nodeId}`);
+  return { ...base, nodes: { ...base.nodes, [nodeId]: { ...node, header } } };
+};
+const cardClass = fixture("uml-class").nodes[asNodeId("card_payment")];
+const orderClass = fixture("uml-class").nodes[asNodeId("order")];
+if (cardClass === undefined || cardClass.kind !== "table") throw new Error("missing card class");
+if (orderClass === undefined || orderClass.kind !== "table") throw new Error("missing order class");
+
+const abstractText = digestOf(
+  classWithHeader("card_payment", {
+    ...cardClass.header,
+    stereotype: "abstract",
+    abstract: undefined,
+    isInterface: undefined,
+  }),
+);
+check(
+  /C\d+ "CardPayment" table=class abstract=yes interface=no/.test(abstractText),
+  "stereotype=abstract sets abstract=yes",
+);
+check(
+  !abstractText.includes('stereotype="abstract"'),
+  "an abstract stereotype is represented by abstract=yes, not free text",
+);
+
+const interfaceText = digestOf(
+  classWithHeader("order", {
+    ...orderClass.header,
+    stereotype: "«Interface»",
+    abstract: undefined,
+    isInterface: undefined,
+  }),
+);
+check(
+  /C\d+ "Order" table=class abstract=no interface=yes/.test(interfaceText),
+  "a decorated interface stereotype sets interface=yes",
+);
+check(
+  !interfaceText.includes("stereotype="),
+  "the interface stereotype is not repeated as free text",
+);
+
+const utilityText = digestOf(
+  classWithHeader("order", {
+    ...orderClass.header,
+    stereotype: "utility",
+    abstract: undefined,
+    isInterface: undefined,
+  }),
+);
+check(
+  /C\d+ "Order" table=class abstract=no interface=no\s+stereotype="utility"/.test(utilityText),
+  "a non-semantic stereotype remains free text",
+);
 
 const classClone = structuredClone(fixture("uml-class"));
 const classEdge = Object.values(classClone.edges)[0] as SceneEdge;

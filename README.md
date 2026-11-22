@@ -331,7 +331,8 @@ chooser opens.
   has a **lock** toggle in place of the close button; class row menus expose visibility-prefix chips and a
   custom prefix. The lock badge is an editor-only canvas overlay and must **not** be emitted by the
   Typst/CeTZ exporter.
-  - header: table name, stereotype for classes, **lock**, Text style, Add row, Add section;
+  - header: table name, stereotype for classes with interface/abstract/enumeration/utility quick chips, **lock**,
+    Text style, Add row, Add section;
   - section: header text, Text style, Add row, Add section, Delete section; the divider above the rows is a
     dedicated hit strip so an untitled section remains selectable;
   - row: attribute/operation name, data type/return type, class visibility prefix or ER PK/FK/NN/UQ,

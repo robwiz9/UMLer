@@ -16,6 +16,7 @@ import type {
   TableRow,
   Visibility,
 } from "../model/nodes.ts";
+import { normalizeStereotypeName } from "../model/nodes.ts";
 import type { SceneEdge } from "../model/edges.ts";
 import { markerDefinition } from "../model/markers.ts";
 import type { LayoutSnapshot } from "../model/layout.ts";
@@ -523,12 +524,22 @@ const serializeClass = (
   tables.forEach((node) => {
     const id = classIds.get(node.id) ?? "C?";
     const members = tableRows(node).map(classMember).join("; ");
+    const stereotype = node.header.stereotype?.trim();
+    const stereotypeKey = normalizeStereotypeName(stereotype);
+    // Interface/abstract are semantic flags, not free-text annotations: the
+    // digest reports them as booleans and does not repeat them as a stereotype.
+    const isInterface = node.header.isInterface === true || stereotypeKey === "interface";
+    const isAbstract = node.header.abstract === true || stereotypeKey === "abstract";
+    const explicitStereotype =
+      stereotypeKey === "interface" || stereotypeKey === "abstract"
+        ? undefined
+        : stereotype;
     writer.push(
       digestLine(`${id} ${q(node.name)}`, [
         `table=${node.tableKind}`,
-        `abstract=${bool(node.header.abstract)}`,
-        `interface=${bool(node.header.isInterface)}`,
-        field("stereotype", node.header.stereotype),
+        `abstract=${bool(isAbstract)}`,
+        `interface=${bool(isInterface)}`,
+        field("stereotype", explicitStereotype),
         members.length > 0 ? `| ${members}` : "",
         hiddenFlag(node),
       ]),

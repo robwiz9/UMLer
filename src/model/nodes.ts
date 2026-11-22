@@ -70,6 +70,42 @@ export interface TableHeader {
   readonly backgroundColor?: Color | null;
 }
 
+/** Common class-diagram stereotype values offered as quick chips. */
+export const CLASS_STEREOTYPE_PRESETS = [
+  "interface",
+  "abstract",
+  "enumeration",
+  "utility",
+] as const;
+
+/** Lower-case stereotype name without «»/<<>> decoration, for flag matching. */
+export const normalizeStereotypeName = (value?: string): string =>
+  (value ?? "").replace(/[«»<>]/g, "").trim().toLowerCase();
+
+/** Store a stereotype without the guillemets/angle brackets the canvas adds. */
+export const cleanStereotypeText = (value?: string): string | undefined => {
+  const text = (value ?? "")
+    .replace(/^[«<]+/, "")
+    .replace(/[»>]+$/, "")
+    .trim();
+  return text.length === 0 ? undefined : text;
+};
+
+/** Apply a stereotype and keep the semantic class flags in sync with it. */
+export const withClassStereotype = (
+  header: TableHeader,
+  value?: string,
+): TableHeader => {
+  const text = cleanStereotypeText(value);
+  const key = normalizeStereotypeName(text);
+  return {
+    ...header,
+    stereotype: text,
+    isInterface: key === "interface" ? true : undefined,
+    abstract: key === "abstract" ? true : undefined,
+  };
+};
+
 export interface NodeBase {
   readonly id: NodeId;
   readonly kind: string;
