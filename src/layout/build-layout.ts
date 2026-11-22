@@ -1003,6 +1003,8 @@ const adjustPerimeterAttachments = (
     edge.target.port.kind === "perimeter" &&
     targetFrame !== undefined;
   if (!sourceDynamic && !targetDynamic) return { source, target };
+  // A unary connector deliberately owns both ends. The waypoint route below
+  // decides whether its ends need to re-anchor to another border.
   if (sourceNodeId !== undefined && sourceNodeId === targetNodeId) return { source, target };
 
   const sourceSide =
@@ -1319,7 +1321,11 @@ const simplifyPoints = (input: readonly Point[]): readonly Point[] => {
     const b = deduped[i] as Point;
     const c = deduped[i + 1] as Point;
     const cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
-    if (Math.abs(cross) > EPSILON) result.push(b);
+    const dot = (b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y);
+    // A collinear point is removable only when the path keeps going forward.
+    // A reversal (U-turn) must stay, otherwise a manual waypoint could be
+    // simplified out of existence.
+    if (Math.abs(cross) > EPSILON || dot < -EPSILON) result.push(b);
   }
   result.push(deduped[deduped.length - 1] as Point);
   return result;
@@ -1463,17 +1469,502 @@ const orthogonalRoute = (
   ) ?? simplified;
 };
 
+/* ------------------------------------------------------------------------- */
+/* Unary / self connectors                                                    */
+/* ------------------------------------------------------------------------- */
+
+type LoopSide = "north" | "east" | "south" | "west";
+
+/** Clockwise ring order; screen coordinates grow down, so N → E → S → W. */
+const LOOP_SIDES: readonly LoopSide[] = ["north", "east", "south", "west"];
+
+const loopSideOf = (normal: Point): LoopSide =>
+  Math.abs(normal.x) >= Math.abs(normal.y)
+    ? normal.x >= 0 ? "east" : "west"
+    : normal.y >= 0 ? "south" : "north";
+
+const ringAlong = (side: LoopSide, p: Point): number =>
+  side === "north" || side === "south" ? p.x : p.y;
+
+/** Point on the outward offset ring, level with `along` on the given side. */
+const ringPointAt = (
+  frame: Rect,
+  side: LoopSide,
+  along: number,
+  margin: number,
+): Point => {
+  if (side === "north") return point(along, frame.y - margin);
+  if (side === "south") return point(along, rectBottom(frame) + margin);
+  if (side === "east") return point(rectRight(frame) + margin, along);
+  return point(frame.x - margin, along);
+};
+
+/** Ring corner at the clockwise start or end of a side. */
+const ringCorner = (
+  frame: Rect,
+  side: LoopSide,
+  end: boolean,
+  margin: number,
+): Point => {
+  const left = frame.x - margin;
+  const right = rectRight(frame) + margin;
+  const top = frame.y - margin;
+  const bottom = rectBottom(frame) + margin;
+  if (side === "north") return end ? point(right, top) : point(left, top);
+  if (side === "east") return end ? point(right, bottom) : point(right, top);
+  if (side === "south") return end ? point(left, bottom) : point(right, bottom);
+  return end ? point(left, top) : point(left, bottom);
+};
+
+/** Is the target coordinate ahead of the source coordinate in ring order? */
+const ringAhead = (side: LoopSide, from: number, to: number): boolean =>
+  side === "north" || side === "east" ? to >= from : to <= from;
+
+/** Points travelling clockwise along the outside ring between two side points. */
+const cwRingPath = (
+  frame: Rect,
+  fromSide: LoopSide,
+  fromAlong: number,
+  toSide: LoopSide,
+  toAlong: number,
+  margin: number,
+): readonly Point[] => {
+  const start = ringPointAt(frame, fromSide, fromAlong, margin);
+  const end = ringPointAt(frame, toSide, toAlong, margin);
+  if (
+    fromSide === toSide &&
+    Math.abs(toAlong - fromAlong) > EPSILON &&
+    ringAhead(fromSide, fromAlong, toAlong)
+  ) {
+    return [start, end];
+  }
+  const points: Point[] = [start, ringCorner(frame, fromSide, true, margin)];
+  let index = (LOOP_SIDES.indexOf(fromSide) + 1) % LOOP_SIDES.length;
+  const targetIndex = LOOP_SIDES.indexOf(toSide);
+  for (let guard = 0; guard < LOOP_SIDES.length && index !== targetIndex; guard += 1) {
+    points.push(ringCorner(frame, LOOP_SIDES[index] as LoopSide, false, margin));
+    index = (index + 1) % LOOP_SIDES.length;
+  }
+  points.push(ringCorner(frame, toSide, false, margin), end);
+  return points;
+};
+
+/** An attachment replacement used only while routing a unary waypoint path. */
+interface SelfAnchor {
+  readonly point: Point;
+  readonly normal: Point;
+  readonly side?: LoopSide;
+  /** Parameter angle for an elliptical (use-case) anchor. */
+  readonly angle?: number;
+}
+
+const borderInset = (frame: Rect, gridSize: number): number =>
+  Math.min(
+    Math.max(6, gridSize),
+    Math.max(0, Math.min(frame.width, frame.height) / 2 - 0.5),
+  );
+
+const ellipseSelfAnchor = (frame: Rect, toward: Point): SelfAnchor => {
+  const center = rectCenter(frame);
+  const rx = Math.max(1, frame.width / 2);
+  const ry = Math.max(1, frame.height / 2);
+  const theta = Math.atan2((toward.y - center.y) / ry, (toward.x - center.x) / rx);
+  return {
+    point: point(center.x + rx * Math.cos(theta), center.y + ry * Math.sin(theta)),
+    normal: normalize(point(Math.cos(theta) / rx, Math.sin(theta) / ry)),
+    angle: theta,
+  };
+};
+
+/** Nearest border point to a waypoint, mirroring binary connector snapping. */
+const nearestSelfAnchor = (
+  node: NodeLayout,
+  toward: Point,
+  gridSize: number,
+): SelfAnchor => {
+  const frame = node.frame;
+  if (node.kind === "useCase") return ellipseSelfAnchor(frame, toward);
+  const inset = borderInset(frame, gridSize);
+  const left = frame.x + inset;
+  const right = rectRight(frame) - inset;
+  const top = frame.y + inset;
+  const bottom = rectBottom(frame) - inset;
+  const candidates: readonly SelfAnchor[] = [
+    { side: "north", point: point(clamp(toward.x, left, right), frame.y), normal: compassNormal("north") },
+    { side: "east", point: point(rectRight(frame), clamp(toward.y, top, bottom)), normal: compassNormal("east") },
+    { side: "south", point: point(clamp(toward.x, left, right), rectBottom(frame)), normal: compassNormal("south") },
+    { side: "west", point: point(frame.x, clamp(toward.y, top, bottom)), normal: compassNormal("west") },
+  ];
+  return candidates.reduce((best, candidate) => {
+    const bestDistance = Math.hypot(best.point.x - toward.x, best.point.y - toward.y);
+    const candidateDistance = Math.hypot(candidate.point.x - toward.x, candidate.point.y - toward.y);
+    return candidateDistance < bestDistance ? candidate : best;
+  });
+};
+
+const shiftSelfAnchor = (
+  node: NodeLayout,
+  anchor: SelfAnchor,
+  awayFrom: Point,
+  gridSize: number,
+): SelfAnchor => {
+  if (anchor.side === undefined) {
+    if (anchor.angle === undefined) return anchor;
+    const frame = node.frame;
+    const center = rectCenter(frame);
+    const rx = Math.max(1, frame.width / 2);
+    const ry = Math.max(1, frame.height / 2);
+    const awayAngle = Math.atan2(
+      (awayFrom.y - center.y) / ry,
+      (awayFrom.x - center.x) / rx,
+    );
+    const difference = Math.atan2(
+      Math.sin(anchor.angle - awayAngle),
+      Math.cos(anchor.angle - awayAngle),
+    );
+    const delta = Math.min(
+      Math.PI / 2,
+      Math.max(0.12, gridSize / Math.max(1, Math.min(rx, ry))),
+    );
+    const angle = anchor.angle + (difference >= 0 ? 1 : -1) * delta;
+    return {
+      point: point(center.x + rx * Math.cos(angle), center.y + ry * Math.sin(angle)),
+      normal: normalize(point(Math.cos(angle) / rx, Math.sin(angle) / ry)),
+      angle,
+    };
+  }
+  const frame = node.frame;
+  const inset = borderInset(frame, gridSize);
+  const horizontal = anchor.side === "north" || anchor.side === "south";
+  const low = horizontal ? frame.x + inset : frame.y + inset;
+  const high = horizontal ? rectRight(frame) - inset : rectBottom(frame) - inset;
+  const along = horizontal ? anchor.point.x : anchor.point.y;
+  const reference = horizontal ? awayFrom.x : awayFrom.y;
+  const direction = along >= reference ? 1 : -1;
+  let next = clamp(along + direction * Math.max(1, gridSize), low, high);
+  if (Math.abs(next - along) <= EPSILON) {
+    next = clamp(along - direction * Math.max(1, gridSize), low, high);
+  }
+  return {
+    ...anchor,
+    point: horizontal
+      ? point(next, anchor.point.y)
+      : point(anchor.point.x, next),
+  };
+};
+
+const distinctSelfAnchors = (
+  node: NodeLayout,
+  source: SelfAnchor,
+  target: SelfAnchor,
+  gridSize: number,
+): { readonly source: SelfAnchor; readonly target: SelfAnchor } => {
+  const separated = (a: SelfAnchor, b: SelfAnchor): boolean =>
+    Math.abs(a.point.x - b.point.x) + Math.abs(a.point.y - b.point.y) >= Math.max(1, gridSize);
+  if (separated(source, target)) return { source, target };
+  const shiftedTarget = shiftSelfAnchor(node, target, source.point, gridSize);
+  if (separated(source, shiftedTarget)) return { source, target: shiftedTarget };
+  return { source: shiftSelfAnchor(node, source, target.point, gridSize), target };
+};
+
+const polylineCrossingCount = (points: readonly Point[], obstacle: Rect): number => {
+  let count = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1] as Point;
+    const b = points[index] as Point;
+    if (segmentEntersRect(a, b, obstacle)) count += 1;
+  }
+  return count;
+};
+
+/** Total length travelled backwards over the previous segment (U-turns). */
+const polylineBacktrackLength = (points: readonly Point[]): number => {
+  let total = 0;
+  for (let index = 2; index < points.length; index += 1) {
+    const a = points[index - 2] as Point;
+    const b = points[index - 1] as Point;
+    const c = points[index] as Point;
+    const abx = b.x - a.x;
+    const aby = b.y - a.y;
+    const bcx = c.x - b.x;
+    const bcy = c.y - b.y;
+    if (abx * bcx + aby * bcy < -EPSILON) {
+      total += Math.hypot(bcx, bcy);
+    }
+  }
+  return total;
+};
+
+/**
+ * Manual waypoint route for a unary connector. Normally the chosen ports are
+ * kept, but once a routing point pulls the line across its own node, that end
+ * re-anchors to the border nearest the waypoint, exactly like the dynamic
+ * perimeter snapping of a binary connector.
+ */
+const selfWaypointRoute = (
+  source: AttachmentResolution,
+  target: AttachmentResolution,
+  node: NodeLayout,
+  routing: EdgeRouting,
+  waypoints: readonly Point[],
+  gridSize: number,
+): { readonly points: readonly Point[]; readonly routedBy: EdgeLayout["routedBy"] } => {
+  if (node.kind === "lifeline") {
+    return {
+      points: routeThroughWaypoints(source, target, routing, waypoints),
+      routedBy: "polyline",
+    };
+  }
+  const frame = node.frame;
+  const original = routeThroughWaypoints(source, target, routing, waypoints, frame);
+  const originalCrossings = polylineCrossingCount(original, frame);
+  // Keep the chosen ports while a single routing point nudges the automatic
+  // loop. Two or more routing points define a manual shape, so evaluate the
+  // nearest-border anchors even when the direct route is already clean;
+  // backtracking or a crossing always forces that comparison.
+  const forceAnchors = waypoints.length >= 2;
+  const originalBacktrack = polylineBacktrackLength(original);
+  if (!forceAnchors && originalCrossings === 0 && originalBacktrack <= EPSILON) {
+    return { points: original, routedBy: "polyline" };
+  }
+
+  const first = waypoints[0] ?? rectCenter(frame);
+  const last = waypoints[waypoints.length - 1] ?? rectCenter(frame);
+  const anchors = distinctSelfAnchors(
+    node,
+    nearestSelfAnchor(node, first, gridSize),
+    nearestSelfAnchor(node, last, gridSize),
+    gridSize,
+  );
+  const candidates: readonly {
+    readonly source: AttachmentResolution;
+    readonly target: AttachmentResolution;
+  }[] = [
+    { source: anchors.source, target: anchors.target },
+    { source: anchors.source, target },
+    { source, target: anchors.target },
+  ];
+  let best = original;
+  let bestScore = originalCrossings * 100_000 +
+    polylineBacktrackLength(original) * 4 +
+    polylineLength(original);
+  for (const candidate of candidates) {
+    const route = routeThroughWaypoints(
+      candidate.source,
+      candidate.target,
+      routing,
+      waypoints,
+      frame,
+    );
+    const score = polylineCrossingCount(route, frame) * 100_000 +
+      polylineBacktrackLength(route) * 4 +
+      polylineLength(route);
+    if (score < bestScore) {
+      best = route;
+      bestScore = score;
+    }
+  }
+  return { points: best, routedBy: "polyline" };
+};
+
+/**
+ * Both ends of a unary connector live on the same node. The generic router
+ * would have to cut through that node, so draw an outside loop instead: leave
+ * each port along its normal, travel around a rectangular ring offset from the
+ * node, and re-enter at the other port. The shorter clockwise/counter-clockwise
+ * direction wins, which produces the usual bracket for two ports on one side
+ * and a corner-wrapping loop for neighbouring sides.
+ */
+const selfLoopRoute = (
+  source: AttachmentResolution,
+  target: AttachmentResolution,
+  node: NodeLayout,
+  routing: EdgeRouting,
+  scene: SceneDocument,
+  obstacles: readonly Rect[],
+): { readonly points: readonly Point[]; readonly routedBy: EdgeLayout["routedBy"] } => {
+  const grid = Math.max(1, scene.canvas.grid.size);
+  const base = Math.max(
+    2 * grid,
+    Math.max(0, routing.stubLength) + Math.max(0, routing.obstaclePadding),
+  );
+
+  // Manual routing points win over the automatic outside ring. This mirrors a
+  // normal connector: the endpoints keep their normal stubs and the line is
+  // built orthogonally through each waypoint; crossing the node re-anchors the
+  // affected end to the nearest border.
+  if (routing.waypoints.length > 0) {
+    return selfWaypointRoute(
+      source,
+      target,
+      node,
+      routing,
+      routing.waypoints.map((waypoint) => waypoint.point),
+      grid,
+    );
+  }
+
+  if (node.kind === "lifeline") {
+    // Sequence self message: leave the spine, run parallel to it and return.
+    const x = node.spine.from.x + base;
+    const y1 = source.point.y;
+    const y2 = target.point.y;
+    const points = Math.abs(y1 - y2) <= EPSILON
+      ? simplifyPoints([
+          source.point,
+          point(x, y1),
+          point(x, y1 - base),
+          point(node.spine.from.x, y1 - base),
+          target.point,
+        ])
+      : simplifyPoints([source.point, point(x, y1), point(x, y2), target.point]);
+    return { points, routedBy: "orthogonal" };
+  }
+
+  const build = (margin: number): readonly Point[] => {
+    const fromSide = loopSideOf(source.normal);
+    const toSide = loopSideOf(target.normal);
+    const fromAlong = ringAlong(fromSide, source.point);
+    const toAlong = ringAlong(toSide, target.point);
+
+    if (fromSide === toSide && Math.abs(toAlong - fromAlong) <= EPSILON) {
+      // The two ends coincide (for example after a manual reattachment). A
+      // small bracket leaves along the port normal, steps sideways and comes
+      // straight back; using the port's own axes keeps even an ellipse end
+      // orthogonal.
+      const normal = source.normal;
+      const tangent = point(-normal.y, normal.x);
+      const center = rectCenter(node.frame);
+      const away =
+        tangent.x * (source.point.x - center.x) +
+          tangent.y * (source.point.y - center.y) >=
+        0
+          ? 1
+          : -1;
+      const out = add(source.point, scale(normal, margin));
+      const beside = add(out, scale(tangent, margin * away));
+      const back = add(source.point, scale(tangent, margin * away));
+      return simplifyPoints([source.point, out, beside, back, target.point]);
+    }
+
+    const clockwise = cwRingPath(
+      node.frame,
+      fromSide,
+      fromAlong,
+      toSide,
+      toAlong,
+      margin,
+    );
+    const counter = [...cwRingPath(
+      node.frame,
+      toSide,
+      toAlong,
+      fromSide,
+      fromAlong,
+      margin,
+    )].reverse();
+    const chosen = polylineLength(clockwise) <= polylineLength(counter)
+      ? clockwise
+      : counter;
+    return simplifyPoints([source.point, ...chosen, target.point]);
+  };
+
+  // Grow the loop when another object sits immediately beside the node; the
+  // first collision-free ring keeps the connector readable.
+  let fallback: readonly Point[] | null = null;
+  for (const factor of [1, 2, 3]) {
+    const candidate = build(base * factor);
+    if (fallback === null) fallback = candidate;
+    if (!polylineEntersObstacles(candidate, obstacles)) {
+      return { points: candidate, routedBy: "orthogonal" };
+    }
+  }
+  return { points: fallback ?? build(base), routedBy: "orthogonal" };
+};
+
+
 const routeThroughWaypoints = (
   source: AttachmentResolution,
   target: AttachmentResolution,
   routing: SceneEdge["routing"],
   waypoints: readonly Point[],
+  /** Rect the route should stay out of (the unary connector's own node). */
+  avoid?: Rect,
 ): readonly Point[] => {
   const stub = Math.max(0, routing.stubLength);
   const s = add(source.point, scale(source.normal, stub));
   const t = add(target.point, scale(target.normal, stub));
   const points: Point[] = [source.point, s];
   let cursor = s;
+
+  const lastDirection = (): { readonly axis: "x" | "y"; readonly sign: number } | null => {
+    for (let index = points.length - 1; index > 0; index -= 1) {
+      const b = points[index] as Point;
+      const a = points[index - 1] as Point;
+      if (samePoint(a, b)) continue;
+      if (Math.abs(a.y - b.y) <= EPSILON) {
+        return { axis: "x", sign: Math.sign(b.x - a.x) };
+      }
+      if (Math.abs(a.x - b.x) <= EPSILON) {
+        return { axis: "y", sign: Math.sign(b.y - a.y) };
+      }
+      return null;
+    }
+    return null;
+  };
+
+  /**
+   * Prefer the elbow that stays outside the node and does not immediately
+   * reverse the previous segment. Both L-shaped elbows have the same length,
+   * so this choice is what keeps a unary route tidy around the object.
+   */
+  const elbowScore = (
+    from: Point,
+    elbow: Point,
+    next: Point,
+  ): number => {
+    let score = 0;
+    const segments: [Point, Point][] = [];
+    if (!samePoint(from, elbow)) segments.push([from, elbow]);
+    if (!samePoint(elbow, next)) segments.push([elbow, next]);
+    if (avoid !== undefined) {
+      for (const [a, b] of segments) {
+        if (segmentEntersRect(a, b, avoid)) score += 10_000;
+      }
+    }
+    const direction = lastDirection();
+    if (direction !== null) {
+      const firstDirection = (() => {
+        for (const [a, b] of segments) {
+          if (Math.abs(a.y - b.y) <= EPSILON) {
+            return { axis: "x" as const, sign: Math.sign(b.x - a.x) };
+          }
+          if (Math.abs(a.x - b.x) <= EPSILON) {
+            return { axis: "y" as const, sign: Math.sign(b.y - a.y) };
+          }
+        }
+        return null;
+      })();
+      if (firstDirection !== null) {
+        if (firstDirection.sign !== 0 && firstDirection.sign === -direction.sign && firstDirection.axis === direction.axis) {
+          score += 200;
+        } else if (firstDirection.axis !== direction.axis) {
+          // Prefer continuing the current run before turning; it keeps the
+          // manual route close to the automatic corner loop.
+          score += 4;
+        }
+      }
+    }
+    return score;
+  };
+
+  const chooseElbow = (from: Point, next: Point, preferred: Point, alternate: Point): Point => {
+    if (avoid === undefined) return preferred;
+    const preferredScore = elbowScore(from, preferred, next);
+    const alternateScore = elbowScore(from, alternate, next);
+    return alternateScore + EPSILON < preferredScore ? alternate : preferred;
+  };
+
   for (const waypoint of waypoints) {
     // Keep manual points as orthogonal constraints: if the point is not
     // already on the current row/column, insert one elbow before it.
@@ -1481,16 +1972,26 @@ const routeThroughWaypoints = (
       Math.abs(cursor.x - waypoint.x) > EPSILON &&
       Math.abs(cursor.y - waypoint.y) > EPSILON
     ) {
-      points.push(point(waypoint.x, cursor.y));
+      const elbow = chooseElbow(
+        cursor,
+        waypoint,
+        point(waypoint.x, cursor.y),
+        point(cursor.x, waypoint.y),
+      );
+      points.push(elbow);
     }
     points.push(waypoint);
     cursor = waypoint;
   }
   if (Math.abs(cursor.x - t.x) > EPSILON && Math.abs(cursor.y - t.y) > EPSILON) {
+    const horizontalNormal = directionIsHorizontal(target.normal);
     points.push(
-      directionIsHorizontal(target.normal)
-        ? point(t.x, cursor.y)
-        : point(cursor.x, t.y),
+      chooseElbow(
+        cursor,
+        t,
+        horizontalNormal ? point(t.x, cursor.y) : point(cursor.x, t.y),
+        horizontalNormal ? point(cursor.x, t.y) : point(t.x, cursor.y),
+      ),
     );
   }
   points.push(t, target.point);
@@ -1746,6 +2247,9 @@ const autoEllipseAttachment = (
 ): EdgeAttachment => {
   if (attachment.target !== "node" || attachment.port.kind !== "angle") return attachment;
   if (attachment.port.auto !== true) return attachment;
+  // A unary connector has no partner direction to follow; keep both explicit
+  // angles so the two ends never collapse onto the same ellipse point.
+  if (partner.target === "node" && partner.nodeId === attachment.nodeId) return attachment;
   const useCase = nodes[attachment.nodeId];
   if (useCase === undefined || useCase.kind !== "useCase") return attachment;
   let other: Point | undefined;
@@ -1875,7 +2379,20 @@ const computeEdge = (
     targetNodeId !== undefined && nodes[targetNodeId]?.kind === "useCase"
       ? { ...target, normal: axisAlignedNormal(target.normal) }
       : target;
-  const routed = routeEdge(edge, routingSource, routingTarget, endpointObstacles, routingObstacles);
+  const selfNode =
+    sourceNodeId !== undefined && sourceNodeId === targetNodeId
+      ? nodes[sourceNodeId]
+      : undefined;
+  const routed = selfNode !== undefined && scene.meta.diagramKind !== "circuit"
+    ? selfLoopRoute(
+        routingSource,
+        routingTarget,
+        selfNode,
+        edge.routing,
+        scene,
+        routingObstacles,
+      )
+    : routeEdge(edge, routingSource, routingTarget, endpointObstacles, routingObstacles);
   const points = routed.points;
   const markerObstacles = markerLabelObstacles(edge, points);
   const lineObstacles = lineLabelObstacles(points);

@@ -495,6 +495,7 @@ interface PendingSaveFilePrompt {
 
 type SaveFileRead =
   | { readonly kind: "empty" }
+  | { readonly kind: "stale"; readonly message: string }
   | { readonly kind: "invalid"; readonly message: string }
   | {
       readonly kind: "project";
@@ -1293,6 +1294,15 @@ export const App = () => {
         if (error instanceof DOMException && error.name === "NotFoundError") {
           return { kind: "empty" };
         }
+        if (
+          error instanceof DOMException &&
+          (error.name === "NotAllowedError" || error.name === "SecurityError")
+        ) {
+          return {
+            kind: "stale",
+            message: "Browser access to the save file expired.",
+          };
+        }
         return {
           kind: "invalid",
           message: error instanceof Error
@@ -1350,6 +1360,10 @@ export const App = () => {
       const handle = await pickProjectSaveFile(projectFileName());
       if (handle === null) return;
       const existing = await readProjectFromHandle(handle);
+      if (existing.kind === "stale") {
+        showToast(`${existing.message} Choose the save file again.`, "error");
+        return;
+      }
       if (existing.kind === "invalid") {
         showToast(`The selected save file is not a valid project: ${existing.message}`, "error");
         return;
@@ -1427,6 +1441,18 @@ export const App = () => {
       shortcut = false,
     ): Promise<boolean> => {
       const existing = await readProjectFromHandle(handle);
+      if (existing.kind === "stale") {
+        saveFileHandleRef.current = null;
+        saveFileBaselineRef.current = null;
+        setSaveFileName(null);
+        void storeSaveFileHandle(null);
+        void storeSaveFileBaseline(null);
+        showToast(
+          `${existing.message} Choose the save file again to resume Ctrl+S.`,
+          "error",
+        );
+        return false;
+      }
       if (existing.kind === "invalid") {
         showToast(
           `The save file changed, but it is not a valid project: ${existing.message}`,

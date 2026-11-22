@@ -55,6 +55,7 @@ import {
   defaultDiagramId,
   fitDiagramToPage,
   normalizeResourceFolder,
+  normalizeRotation,
   pageMarginsPt,
   pageSize,
   toDiagramLabel,
@@ -1556,9 +1557,11 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
   const canvasBounds = borderEnabled
     ? expandRect(selection.contentBounds, borderPadding + borderWidth)
     : selection.bounds;
+  const rotation = normalizeRotation(settings.rotation);
+  const quarterTurn = rotation === 90 || rotation === 270;
   const fit = fitDiagramToPage(
-    Math.max(1, canvasBounds.width),
-    Math.max(1, canvasBounds.height),
+    Math.max(1, quarterTurn ? canvasBounds.height : canvasBounds.width),
+    Math.max(1, quarterTurn ? canvasBounds.width : canvasBounds.height),
     page,
     settings.zoom,
     hasCaption,
@@ -1736,7 +1739,17 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
   }
   writer.push(0, ")[");
   writer.push(1, `#align(${settings.align})[`);
-  writer.push(2, "#canvas(length: 1pt, padding: 0pt, {");
+  const canvasLevel = rotation === 0 ? 2 : 4;
+  if (rotation !== 0) {
+    const rotatedWidth = quarterTurn ? canvasBounds.height : canvasBounds.width;
+    const rotatedHeight = quarterTurn ? canvasBounds.width : canvasBounds.height;
+    writer.push(
+      2,
+      `#box(width: ${num(rotatedWidth * fit.scale)}pt, height: ${num(rotatedHeight * fit.scale)}pt)[`,
+    );
+    writer.push(3, `#place(center + horizon, rotate(${rotation}deg, origin: center, [`);
+  }
+  writer.push(canvasLevel, "#canvas(length: 1pt, padding: 0pt, {");
 
   // The draw pass populates `usedMarks`, so emit the body first and prepend
   // mark registrations afterwards by assembling in a fixed order.
@@ -1762,9 +1775,9 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
       if (!usedMarks.has(name)) continue;
       const definition = MARK_DEFINITIONS[name];
       if (definition === undefined) continue;
-      writer.push(3, `draw.register-mark("${name}", style => {`);
-      for (const line of definition.body) writer.push(4, line);
-      writer.push(3, "})");
+      writer.push(canvasLevel + 1, `draw.register-mark("${name}", style => {`);
+      for (const line of definition.body) writer.push(canvasLevel + 2, line);
+      writer.push(canvasLevel + 1, "})");
     }
     writer.blank();
   }
@@ -1772,11 +1785,15 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
     if (line.length === 0) {
       writer.blank();
     } else {
-      writer.push(3, line);
+      writer.push(canvasLevel + 1, line);
     }
   }
   writer.blank();
-  writer.push(2, "})");
+  writer.push(canvasLevel, "})");
+  if (rotation !== 0) {
+    writer.push(3, "]))");
+    writer.push(2, "]");
+  }
   writer.push(1, "]");
   writer.push(0, `] <${label}>`);
 
@@ -1802,8 +1819,8 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
     selection,
     fit,
     page,
-    canvasWidthPt: canvasBounds.width,
-    canvasHeightPt: canvasBounds.height,
+    canvasWidthPt: quarterTurn ? canvasBounds.height : canvasBounds.width,
+    canvasHeightPt: quarterTurn ? canvasBounds.width : canvasBounds.height,
     label,
     caption,
     warnings,

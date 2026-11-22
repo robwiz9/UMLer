@@ -6,15 +6,18 @@ import {
   CETZ_EXPORT_VERSION,
   serializeSceneToCetz,
 } from "../export/cetz.ts";
+import { serializeSceneToDigest } from "../export/diagram-digest.ts";
 import {
   defaultDiagramId,
   normalizeBorder,
   normalizePageSpec,
+  normalizeRotation,
   pageSize,
   ptToUnit,
   unitToPt,
   type BorderSettings,
   type ExportAlign,
+  type ExportRotation,
   type ExportScope,
   type ExportSettings,
   type PagePreset,
@@ -54,6 +57,7 @@ interface StoredSettings {
   readonly page?: PageSpec;
   readonly zoom?: number;
   readonly align?: ExportAlign;
+  readonly rotation?: ExportRotation;
   readonly border?: Partial<BorderSettings>;
   readonly resourceFolder?: string;
 }
@@ -82,6 +86,8 @@ const ALIGN_OPTIONS: readonly { readonly value: ExportAlign; readonly label: str
   { value: "center", label: "Center" },
   { value: "right", label: "Right" },
 ];
+
+const ROTATION_OPTIONS: readonly ExportRotation[] = [0, 90, 180, 270];
 
 const PageIcon = ({ kind }: { readonly kind: "portrait" | "landscape" | "custom" }) => (
   <svg className="code-icon" viewBox="0 0 18 18" aria-hidden="true">
@@ -284,6 +290,9 @@ export const CodePanel = ({
   );
   const [scope, setScope] = useState<ExportScope>("diagram");
   const [align, setAlign] = useState<ExportAlign>(stored.current.align ?? "center");
+  const [rotation, setRotation] = useState<ExportRotation>(
+    normalizeRotation(stored.current.rotation),
+  );
   const [border, setBorder] = useState<BorderSettings>(normalizeBorder(stored.current.border));
   const [label, setLabel] = useState<string>(scene.meta.title);
   const [resourceFolder, setResourceFolder] = useState<string>(
@@ -294,6 +303,7 @@ export const CodePanel = ({
   const [importState, setImportState] = useState<"idle" | "copied" | "error">("idle");
   const [fileState, setFileState] = useState<"idle" | "copied" | "error">("idle");
   const [downloadState, setDownloadState] = useState<"idle" | "saved" | "error">("idle");
+  const [digestState, setDigestState] = useState<"idle" | "copied" | "saved" | "error">("idle");
   const [exportFileState, setExportFileState] = useState<"idle" | "saved" | "error">("idle");
   const [exportBinding, setExportBinding] = useState<ExportFileBinding | null>(null);
   const [automaticExport, setAutomaticExport] = useState(false);
@@ -360,13 +370,20 @@ export const CodePanel = ({
   };
 
   useEffect(() => {
-    const data: StoredSettings = { page, zoom, align, border, resourceFolder };
+    const data: StoredSettings = {
+      page,
+      zoom,
+      align,
+      rotation,
+      border,
+      resourceFolder,
+    };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       // Local storage can be unavailable in private windows; export still works.
     }
-  }, [page, zoom, align, border, resourceFolder]);
+  }, [page, zoom, align, rotation, border, resourceFolder]);
 
   useEffect(
     () => () => {
@@ -394,12 +411,13 @@ export const CodePanel = ({
       zoom,
       scope,
       align,
+      rotation,
       border,
       label,
       diagramId,
       resourceFolder,
     }),
-    [page, zoom, scope, align, border, label, diagramId, resourceFolder],
+    [page, zoom, scope, align, rotation, border, label, diagramId, resourceFolder],
   );
 
   useEffect(() => {
@@ -415,6 +433,11 @@ export const CodePanel = ({
     }
     saveSceneExportSettings(scene.id, settings);
   }, [scene.id, settings]);
+
+  const digest = useMemo(
+    () => serializeSceneToDigest(scene, layout),
+    [scene, layout],
+  );
 
   const result = useMemo(
     () =>
@@ -600,6 +623,33 @@ export const CodePanel = ({
   const fileExportBase =
     result.label.trim().replace(/[<>:"/\\|?*\u0000-\u001f]+/g, "-") ||
     "uml-diagram";
+
+  const flashDigestState = (state: "copied" | "saved" | "error"): void => {
+    setDigestState(state);
+    window.setTimeout(() => setDigestState("idle"), 1800);
+  };
+
+  const copyDigest = async (): Promise<void> => {
+    try {
+      await copyToClipboard(digest.text);
+      flashDigestState("copied");
+    } catch {
+      flashDigestState("error");
+    }
+  };
+
+  const saveDigest = (): void => {
+    try {
+      downloadTextFile(
+        `${fileExportBase}.digest.txt`,
+        digest.text,
+        "text/plain;charset=utf-8",
+      );
+      flashDigestState("saved");
+    } catch {
+      flashDigestState("error");
+    }
+  };
 
   const currentExportSvg = async (): Promise<string> => {
     const mounted = ready
@@ -847,6 +897,27 @@ export const CodePanel = ({
                       >
                         <AlignIcon align={option.value} />
                         <span>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="code-field">
+                  <span>Rotation</span>
+                  <div
+                    className="code-segmented code-rotation-options"
+                    role="group"
+                    aria-label="Diagram rotation"
+                  >
+                    {ROTATION_OPTIONS.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={rotation === value ? "active" : ""}
+                        aria-pressed={rotation === value}
+                        onClick={() => setRotation(value)}
+                        title={`Rotate diagram ${value}° clockwise`}
+                      >
+                        {value}°
                       </button>
                     ))}
                   </div>
@@ -1179,6 +1250,39 @@ export const CodePanel = ({
               </label>
             {fileExportError !== null ? (
               <p className="code-hint code-warning-hint">{fileExportError}</p>
+            ) : null}
+          </section>
+
+          <ColoredLine color="var(--line)" />
+
+          <section className="code-section">
+            <div className="code-section-head">
+              <div className="code-section-title">LLM digest</div>
+            </div>
+            <p className="code-hint">
+              Line-oriented semantic text for syntax and consistency review.
+              Geometry, colors and styling are omitted.
+            </p>
+            <div className="code-file-export-actions">
+              <button
+                type="button"
+                className="code-download-button secondary"
+                onClick={() => void copyDigest()}
+              >
+                {digestState === "copied" ? "Copied digest" : "Copy LLM digest"}
+              </button>
+              <button
+                type="button"
+                className="code-download-button secondary"
+                onClick={saveDigest}
+              >
+                {digestState === "saved" ? "Saved digest" : "Save as TXT"}
+              </button>
+            </div>
+            {digestState === "error" ? (
+              <p className="code-hint code-warning-hint">
+                Could not copy or save the digest.
+              </p>
             ) : null}
           </section>
 

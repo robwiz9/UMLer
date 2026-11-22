@@ -53,7 +53,16 @@ export const createEdgeForDiagram = (
   source: PortAttachmentRef,
   target: EdgeTargetRef,
 ): SceneEdge | null => {
-  if ("nodeId" in target && source.nodeId === target.nodeId) return null;
+  // A node can relate to itself (a unary/self association). The router turns
+  // the two ends into an outside loop. Circuit diagrams model connections as
+  // wires between pins, so a component still cannot wire to itself.
+  if (
+    scene.meta.diagramKind === "circuit" &&
+    "nodeId" in target &&
+    source.nodeId === target.nodeId
+  ) {
+    return null;
+  }
   const sourceNode = scene.nodes[source.nodeId];
   if (sourceNode === undefined) return null;
   if ("nodeId" in target && scene.nodes[target.nodeId] === undefined) return null;

@@ -3,7 +3,10 @@
  * settings and automatic-export flag are stored separately.
  */
 
-import type { SaveFileHandle } from "./file-system-access.ts";
+import {
+  isSaveFileHandleUsable,
+  type SaveFileHandle,
+} from "./file-system-access.ts";
 
 export interface ExportFileBinding {
   readonly handle: SaveFileHandle;
@@ -40,7 +43,11 @@ export const loadExportFileBinding = async (
   sceneId: string,
 ): Promise<ExportFileBinding | null> => {
   const memory = memoryBindings.get(sceneId);
-  if (memory !== undefined) return memory;
+  if (memory !== undefined) {
+    if (await isSaveFileHandleUsable(memory.handle)) return memory;
+    memoryBindings.delete(sceneId);
+    return null;
+  }
   if (typeof indexedDB === "undefined") return null;
   const database = await openDatabase();
   if (database === null) return null;
@@ -67,6 +74,11 @@ export const loadExportFileBinding = async (
     }
   });
   database.close();
+  if (binding === null) return null;
+  if (!(await isSaveFileHandleUsable(binding.handle))) {
+    await storeExportFileBinding(sceneId, null);
+    return null;
+  }
   return binding;
 };
 

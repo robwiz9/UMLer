@@ -1811,11 +1811,35 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     excludeEdgeId?: string,
     preferredPoint?: Point,
   ): DrawTarget | null => {
-    const nearby = nearestPort(layout.ports, world, 18 / zoomRef.current);
-    if (nearby !== null && nearby.nodeId !== sourceNodeId) {
+    // Dropping on the object the drag started from creates a unary relation
+    // (self association / self message). Circuit wires stay pin-to-pin and a
+    // component cannot wire to itself.
+    const allowSelf = scene.meta.diagramKind !== "circuit";
+    const isSourcePoint = (port: PortGeometry): boolean =>
+      port.nodeId === sourceNodeId &&
+      preferredPoint !== undefined &&
+      Math.hypot(port.point.x - preferredPoint.x, port.point.y - preferredPoint.y) < 0.5;
+    const portRadius = 18 / zoomRef.current;
+    let nearby: PortGeometry | null = null;
+    let nearbyDistance = portRadius;
+    for (const port of Object.values(layout.ports)) {
+      if (!allowSelf && port.nodeId === sourceNodeId) continue;
+      // Never resolve the exact port the drag/fixed end already uses; the
+      // self-loop needs two distinct ends.
+      if (isSourcePoint(port)) continue;
+      const distance = Math.hypot(port.point.x - world.x, port.point.y - world.y);
+      if (distance <= nearbyDistance) {
+        nearby = port;
+        nearbyDistance = distance;
+      }
+    }
+    if (nearby !== null) {
       const nearbyLayout = layout.nodes[nearby.nodeId];
       if (nearbyLayout?.kind === "useCase" && preferredPoint !== undefined) {
-        return useCaseTarget(nearbyLayout, preferredPoint);
+        return useCaseTarget(
+          nearbyLayout,
+          nearby.nodeId === sourceNodeId ? world : preferredPoint,
+        );
       }
       return {
         point: nearby.point,
@@ -1826,7 +1850,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const containing = Object.values(layout.nodes)
       .filter(
         (node) =>
-          node.nodeId !== sourceNodeId &&
+          (allowSelf || node.nodeId !== sourceNodeId) &&
           node.kind !== "frame" &&
           rectContainsPoint(node.frame, world),
       )
@@ -1839,7 +1863,18 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       if (node.kind === "lifeline") {
         const { from, to } = node.spine;
         const span = Math.max(1, to.y - from.y);
-        const t = clampValue((world.y - from.y) / span, 0, 1);
+        let t = clampValue((world.y - from.y) / span, 0, 1);
+        if (node.nodeId === sourceNodeId && preferredPoint !== undefined) {
+          // A self message needs a visible height; nudge the return anchor
+          // away from the fixed end when the drop lands on the same row.
+          const fixedT = clampValue((preferredPoint.y - from.y) / span, 0, 1);
+          const separation = 18 / span;
+          if (Math.abs(t - fixedT) < separation) {
+            t = fixedT + separation <= 1
+              ? fixedT + separation
+              : Math.max(0, fixedT - separation);
+          }
+        }
         return {
           point: { x: from.x, y: from.y + span * t },
           attachment: { nodeId: node.nodeId, port: { kind: "spine", t } },
@@ -1847,7 +1882,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       }
 
       if (node.kind === "useCase") {
-        return useCaseTarget(node, preferredPoint ?? world);
+        return useCaseTarget(
+          node,
+          node.nodeId === sourceNodeId ? world : preferredPoint ?? world,
+        );
       }
 
       if (node.kind === "circuitJunction") {
@@ -1859,7 +1897,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
 
       const perimeter = node.ports.filter((port) => port.ref.kind === "perimeter");
       if (perimeter.length > 0) {
-        const closest = perimeter.reduce((best, candidate) => {
+        const distinct = node.nodeId === sourceNodeId
+          ? perimeter.filter((port) => !isSourcePoint(port))
+          : perimeter;
+        const candidates = distinct.length > 0 ? distinct : perimeter;
+        const closest = candidates.reduce((best, candidate) => {
           const bestDistance = Math.hypot(best.point.x - world.x, best.point.y - world.y);
           const candidateDistance = Math.hypot(candidate.point.x - world.x, candidate.point.y - world.y);
           return candidateDistance < bestDistance ? candidate : best;
@@ -3470,6 +3512,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       if (commit) {
         if (target !== null) {
           const edgeTarget = "edgeId" in target.attachment;
+          const selfTarget =
+            !edgeTarget &&
+            target.attachment.nodeId === interaction.source.nodeId;
           const tooClose =
             scene.meta.diagramKind === "circuit" &&
             edgeTarget &&
@@ -3478,7 +3523,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 target.point.x - interaction.source.point.x,
                 target.point.y - interaction.source.point.y,
               ) < minExtendWorld(gridSize));
-          if (!tooClose) {
+          // A click (or a tiny jitter) on a handle must not leave a self
+          // relation behind; the user has to actually drag back onto the object.
+          const tooShortForSelf =
+            selfTarget &&
+            scene.meta.diagramKind !== "circuit" &&
+            interaction.pointerTravel < MIN_EXTEND_SCREEN_PX;
+          if (!tooClose && !tooShortForSelf) {
             onCreateEdge(attachmentFor(interaction.source), target.attachment);
           }
         } else if (
@@ -4051,7 +4102,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         ? edgeLayout.points[edgeLayout.points.length - 1]
         : edgeLayout.points[0];
       if (fixed === undefined) return;
-      const rawTarget = findDrawTarget(world, "", interaction.edgeId, fixed);
+      const fixedEnd = scene.edges[interaction.edgeId]?.[
+        interaction.end === "source" ? "target" : "source"
+      ];
+      const fixedNodeId = fixedEnd?.target === "node" ? fixedEnd.nodeId : "";
+      const rawTarget = findDrawTarget(world, fixedNodeId, interaction.edgeId, fixed);
       const target = rawTarget === null
         ? null
         : snapDrawTarget(rawTarget, fixed, event.altKey);

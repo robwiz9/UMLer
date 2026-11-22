@@ -10,6 +10,8 @@ import { STEP1_FIXTURES } from "../src/fixtures/index.ts";
 import { buildLayoutSnapshot } from "../src/layout/build-layout.ts";
 import { FixedTextMeasurer } from "../src/layout/text.ts";
 import { serializeSceneToCetz } from "../src/export/cetz.ts";
+import { createEdgeForDiagram } from "../src/model/edge-create.ts";
+import { insertEdge } from "../src/model/edits.ts";
 import {
   DEFAULT_EXPORT_SETTINGS,
   pageSize,
@@ -252,6 +254,24 @@ const zoomed = serialize(er.scene, {
 check(Math.abs(zoomed.fit.scale - 1.5) < 1e-9, "explicit zoom enlarges a small selection");
 check(zoomed.fit.diagramWidthPt > zoomed.selection.naturalWidth, "explicit zoom enlarges the emitted geometry");
 
+const plainCetz = serialize(er.scene);
+const rotatedCetz = serialize(er.scene, { settings: { rotation: 90 } });
+check(rotatedCetz.code.includes("rotate(90deg"), "90° export emits a Typst rotation");
+check(
+  Math.abs(rotatedCetz.canvasWidthPt - plainCetz.canvasHeightPt) < 0.01 &&
+    Math.abs(rotatedCetz.canvasHeightPt - plainCetz.canvasWidthPt) < 0.01,
+  "quarter-turn export swaps canvas dimensions",
+);
+check(
+  rotatedCetz.code.indexOf("caption:") < rotatedCetz.code.indexOf("rotate(90deg"),
+  "figure caption stays outside the rotated diagram",
+);
+check(
+  rotatedCetz.fit.scale * rotatedCetz.canvasWidthPt <=
+    rotatedCetz.fit.availableWidthPt + 0.01,
+  "rotated diagram fit respects available page width",
+);
+
 // The figure caption inherits the preview document's text size. Zoom may
 // scale the diagram, but it must not enlarge that surrounding caption.
 const previewTextSetter = (code: string): string =>
@@ -427,6 +447,30 @@ if (useCase !== undefined) {
   check(!imageResult.code.includes("Place the referenced image file"), "no resource commentary in source");
   const folder = serialize(useCase.scene, { settings: { resourceFolder: "media/img/" } });
   check(folder.code.includes('image("media/img/brand.svg"'), "resource folder is normalized");
+}
+
+// ---------------------------------------------------------------------------
+// Unary / self relations: the same object owns both ends.
+// ---------------------------------------------------------------------------
+const selfEdge = createEdgeForDiagram(
+  er.scene,
+  { nodeId: customers.id, port: { kind: "perimeter", side: "east" } },
+  { nodeId: customers.id, port: { kind: "perimeter", side: "north" } },
+);
+check(selfEdge !== null, "a node can be related to itself");
+if (selfEdge !== null) {
+  const selfScene = insertEdge(er.scene, selfEdge);
+  const selfResult = serialize(selfScene);
+  const selfPoints = buildLayoutSnapshot(selfScene, measurer).edges[selfEdge.id]?.points ?? [];
+  check(selfPoints.length >= 4, "self relation routes around the object");
+  check(
+    selfResult.stats.edges === serialize(er.scene).stats.edges + 1,
+    "self relation is emitted as a CeTZ line",
+  );
+  check(
+    selfResult.selection.edges.some((edge) => edge.id === selfEdge.id),
+    "self relation is part of the export",
+  );
 }
 
 // Text that would be Typst markup must render literally through `#("...")`.

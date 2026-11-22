@@ -358,6 +358,13 @@ chooser opens.
 - **Split edge menus**: a compact per-end terminal menu (custom text field, `none` first, suggested cardinality
   chips, SVG terminal glyphs) and a separate line menu (center label, visual full/dashed/dotted previews with
   width on the same row, routing).
+- **Unary (self) relations**: drag from an object's border, row, spine or ellipse handle and drop it back on the
+  same object to create a self association or sequence self message. The connector leaves the object, follows a
+  grid-aligned orthogonal ring outside it and re-enters at the drop port; sequence messages use the standard
+  right-side bracket. Ctrl+click routing points reshape the loop; with two or more points both ends snap to the
+  nearest border like a binary connector (including one grid square from a corner), while a single point keeps
+  the chosen ports unless it would pull the line through the object. Terminal menus, labels, deletion and
+  reattachment work like any other connector, and the loop exports to CeTZ as a normal polyline.
 - **Connector endpoint reattachment**: drag either square endpoint handle onto another object or line to change
   only that source/target, with a live preview and the same port/snap resolution as drawing; a click without
   dragging still opens that end’s terminal menu.

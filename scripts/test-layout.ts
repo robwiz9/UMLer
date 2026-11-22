@@ -15,7 +15,7 @@ import {
   type SceneDocument,
 } from "../src/model/scene.ts";
 import { DEFAULT_THEME, MONO_FONT } from "../src/model/styles.ts";
-import { rect, rectCenter, rectRight } from "../src/model/geometry.ts";
+import { rect, rectBottom, rectCenter, rectRight } from "../src/model/geometry.ts";
 import { asActivationId, asEdgeId, asNodeId, asRowId } from "../src/model/ids.ts";
 import { NO_MARKER } from "../src/model/edges.ts";
 import {
@@ -559,6 +559,197 @@ assert.equal(defaultErEdge.markers.source.family, "none");
 assert.equal(defaultErEdge.markers.target.family, "none");
 assert.equal(defaultErEdge.labels.find((label) => label.zone === "source")?.text, "1");
 assert.equal(defaultErEdge.labels.find((label) => label.zone === "target")?.text, "1");
+
+// Dropping a connector back onto its own object creates a unary (self)
+// association. The route leaves the object and returns without crossing it.
+const selfEdge = createEdgeForDiagram(
+  ER_COMMERCE,
+  { nodeId: asNodeId("customers"), port: { kind: "perimeter", side: "east" } },
+  { nodeId: asNodeId("customers"), port: { kind: "perimeter", side: "north" } },
+);
+assert.ok(selfEdge !== null, "a node may relate to itself");
+const selfScene = insertEdge(ER_COMMERCE, selfEdge);
+assert.deepEqual(
+  validateScene(selfScene).filter((diagnostic) => diagnostic.severity === "error"),
+  [],
+  "a self association must validate",
+);
+const selfLayout = buildLayoutSnapshot(selfScene, measurer);
+const selfEdgeLayout = selfLayout.edges[selfEdge.id];
+assert.ok(selfEdgeLayout !== undefined, "the self association must be routed");
+const customersFrame = selfLayout.nodes[asNodeId("customers")]?.frame;
+assert.ok(customersFrame !== undefined);
+const strictlyInside = (p: Point): boolean =>
+  p.x > customersFrame.x + 0.5 &&
+  p.x < rectRight(customersFrame) - 0.5 &&
+  p.y > customersFrame.y + 0.5 &&
+  p.y < rectBottom(customersFrame) - 0.5;
+assert.ok(
+  selfEdgeLayout.points.length >= 4,
+  "a self association needs an outside loop, not a chord",
+);
+assert.ok(
+  !selfEdgeLayout.points.some(strictlyInside),
+  "the self association must not route through its own object",
+);
+assert.ok(
+  selfEdgeLayout.points.some((p) => p.x > rectRight(customersFrame)) &&
+    selfEdgeLayout.points.some((p) => p.y < customersFrame.y),
+  "the self loop should wrap around the outside corner",
+);
+
+// Ctrl+click waypoints reshape the unary line instead of being ignored.
+const routeIncludes = (points: readonly Point[], target: Point): boolean => {
+  const near = (a: Point, b: Point): boolean =>
+    Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index] as Point;
+    if (near(current, target)) return true;
+    if (index === 0) continue;
+    const previous = points[index - 1] as Point;
+    if (Math.abs(previous.y - current.y) < 0.01) {
+      if (
+        Math.abs(target.y - previous.y) < 0.01 &&
+        target.x >= Math.min(previous.x, current.x) - 0.01 &&
+        target.x <= Math.max(previous.x, current.x) + 0.01
+      ) {
+        return true;
+      }
+    } else if (Math.abs(previous.x - current.x) < 0.01) {
+      if (
+        Math.abs(target.x - previous.x) < 0.01 &&
+        target.y >= Math.min(previous.y, current.y) - 0.01 &&
+        target.y <= Math.max(previous.y, current.y) + 0.01
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+const defaultTop = selfEdgeLayout.points[2];
+const defaultNext = selfEdgeLayout.points[3];
+assert.ok(defaultTop !== undefined && defaultNext !== undefined);
+const topWaypoint = {
+  x: (defaultTop.x + defaultNext.x) / 2,
+  y: (defaultTop.y + defaultNext.y) / 2,
+};
+const selfWaypointScene = addEdgeWaypoint(selfScene, selfEdge.id, topWaypoint);
+const selfWaypointLayout = buildLayoutSnapshot(selfWaypointScene, measurer);
+assert.ok(
+  routeIncludes(selfWaypointLayout.edges[selfEdge.id]?.points ?? [], topWaypoint),
+  "a unary waypoint on the automatic loop must stay on the route",
+);
+
+// Dragging that waypoint across the object makes the ends snap to the border
+// nearest the routing point, like a binary connector.
+const selfMovedWaypoint = {
+  x: customersFrame.x - 30,
+  y: customersFrame.y + customersFrame.height / 2,
+};
+const selfWaypointId = selfWaypointScene.edges[selfEdge.id]?.routing.waypoints[0]?.id;
+assert.ok(selfWaypointId !== undefined);
+const snappedScene = setEdgeWaypoint(
+  selfWaypointScene,
+  selfEdge.id,
+  selfWaypointId,
+  selfMovedWaypoint,
+);
+const snappedLayout = buildLayoutSnapshot(snappedScene, measurer);
+const snappedPoints = snappedLayout.edges[selfEdge.id]?.points ?? [];
+assert.ok(routeIncludes(snappedPoints, selfMovedWaypoint), "the moved waypoint stays on the route");
+assert.ok(
+  snappedPoints[0]?.x === customersFrame.x &&
+    snappedPoints[snappedPoints.length - 1]?.x === customersFrame.x,
+  "a waypoint across the object re-anchors both ends to its nearest border",
+);
+assert.ok(
+  !snappedPoints.some(strictlyInside),
+  "the waypoint route must not cut through its own object",
+);
+
+// Two waypoints close to a corner may attach one grid square from it. The
+// order in which the routing points were added must not force either end back
+// to the side centre.
+const grid = selfScene.canvas.grid.size;
+const cornerTop = { x: customersFrame.x + grid, y: customersFrame.y };
+const cornerLeft = { x: customersFrame.x, y: customersFrame.y + grid };
+const cornerWaypoints = [
+  { x: customersFrame.x + grid, y: customersFrame.y - grid },
+  { x: customersFrame.x - grid, y: customersFrame.y + grid },
+];
+for (const order of [cornerWaypoints, [...cornerWaypoints].reverse()]) {
+  let cornerScene = selfScene;
+  for (const waypoint of order) {
+    cornerScene = addEdgeWaypoint(cornerScene, selfEdge.id, waypoint);
+  }
+  const cornerPoints = buildLayoutSnapshot(cornerScene, measurer).edges[selfEdge.id]?.points ?? [];
+  for (const waypoint of cornerWaypoints) {
+    assert.ok(
+      routeIncludes(cornerPoints, waypoint),
+      "both close corner waypoints must stay on the route",
+    );
+  }
+  const first = cornerPoints[0];
+  const last = cornerPoints[cornerPoints.length - 1];
+  const same = (a: Point | undefined, b: Point): boolean =>
+    a !== undefined && Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01;
+  assert.ok(
+    (same(first, cornerTop) && same(last, cornerLeft)) ||
+      (same(first, cornerLeft) && same(last, cornerTop)),
+    "close corner waypoints attach one grid square from the corner, not at the side centre",
+  );
+  assert.ok(
+    !cornerPoints.some(strictlyInside),
+    "the close corner route must not cut through its own object",
+  );
+}
+
+// The same outside loop works for UML class objects.
+const selfClassEdge = createEdgeForDiagram(
+  UML_CLASS_PAYMENTS,
+  { nodeId: asNodeId("card_payment"), port: { kind: "perimeter", side: "east" } },
+  { nodeId: asNodeId("card_payment"), port: { kind: "perimeter", side: "south" } },
+);
+assert.ok(selfClassEdge !== null, "a UML class may relate to itself");
+assert.equal(
+  selfClassEdge.semantic.family === "uml" ? selfClassEdge.semantic.relationship : "",
+  "association",
+);
+const selfClassLayout = buildLayoutSnapshot(
+  insertEdge(UML_CLASS_PAYMENTS, selfClassEdge),
+  measurer,
+);
+assert.ok(
+  (selfClassLayout.edges[selfClassEdge.id]?.points.length ?? 0) >= 4,
+  "a class self association should also route around the object",
+);
+
+// A sequence self message leaves the lifeline to the right and returns.
+const selfMessage = createEdgeForDiagram(
+  UML_SEQUENCE_CHECKOUT,
+  { nodeId: asNodeId("seq_order_service"), port: { kind: "spine", t: 0.2 } },
+  { nodeId: asNodeId("seq_order_service"), port: { kind: "spine", t: 0.32 } },
+);
+assert.ok(selfMessage !== null, "a lifeline may message itself");
+const selfMessageLayout = buildLayoutSnapshot(
+  insertEdge(UML_SEQUENCE_CHECKOUT, selfMessage),
+  measurer,
+);
+const selfMessageEdge = selfMessageLayout.edges[selfMessage.id];
+assert.ok(selfMessageEdge !== undefined);
+const serviceLane = selfMessageLayout.nodes[asNodeId("seq_order_service")];
+assert.ok(serviceLane !== undefined && serviceLane.kind === "lifeline");
+const serviceSpineX = serviceLane.spine.from.x;
+assert.equal(selfMessageEdge.points.length, 4);
+assert.ok(
+  selfMessageEdge.points.every((p) => p.x >= serviceSpineX - 0.5),
+  "a sequence self message stays on its lane's right side",
+);
+assert.ok(
+  Math.max(...selfMessageEdge.points.map((p) => p.x)) > serviceSpineX + 9,
+  "the self message must visibly leave the lifeline",
+);
 
 // A fresh entity table starts with one primary-key row.
 const freshEntity = createObjectFromTemplate("er", "entity-table", ER_COMMERCE, {

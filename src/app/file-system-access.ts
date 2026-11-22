@@ -177,6 +177,27 @@ const openHandleDatabase = (): Promise<IDBDatabase | null> =>
     }
   });
 
+/**
+ * A persisted native handle is only reusable while Chromium still grants
+ * read/write access. Handles restored after a browser restart or a security
+ * policy change must be discarded; keeping them produces Chrome's opaque
+ * "request is not allowed" `getFile` failures.
+ */
+export const isSaveFileHandleUsable = async (
+  handle: SaveFileHandle,
+): Promise<boolean> => {
+  try {
+    if (handle.queryPermission !== undefined) {
+      const permission = await handle.queryPermission({ mode: "readwrite" });
+      if (permission !== "granted") return false;
+    }
+    if (handle.getFile !== undefined) await handle.getFile();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const loadSaveFileHandle = async (): Promise<SaveFileHandle | null> => {
   if (typeof indexedDB === "undefined") return null;
   const database = await openHandleDatabase();
@@ -195,16 +216,9 @@ export const loadSaveFileHandle = async (): Promise<SaveFileHandle | null> => {
   });
   database.close();
   if (handle === null) return null;
-  if (handle.queryPermission !== undefined) {
-    try {
-      const permission = await handle.queryPermission({ mode: "readwrite" });
-      if (permission === "denied") {
-        await storeSaveFileHandle(null);
-        return null;
-      }
-    } catch {
-      return null;
-    }
+  if (!(await isSaveFileHandleUsable(handle))) {
+    await storeSaveFileHandle(null);
+    return null;
   }
   return handle;
 };

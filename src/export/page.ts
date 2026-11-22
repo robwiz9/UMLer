@@ -10,6 +10,7 @@ export type PagePreset = "a4-portrait" | "a4-landscape" | "custom";
 export type PageUnit = "mm" | "pt";
 export type ExportAlign = "left" | "center" | "right";
 export type ExportScope = "diagram" | "selection";
+export type ExportRotation = 0 | 90 | 180 | 270;
 
 /** ISO A4 in Typst points (210mm × 297mm). */
 export const A4_WIDTH_PT = 595.2756;
@@ -51,6 +52,11 @@ export const ZERO_MARGINS: PageMargins = {
   right: 0,
   bottom: 0,
   left: 0,
+};
+
+export const normalizeRotation = (value?: number): ExportRotation => {
+  if (value === 90 || value === 180 || value === 270) return value;
+  return 0;
 };
 
 export const DEFAULT_PAGE: PageSpec = {
@@ -200,6 +206,8 @@ export interface ExportSettings {
   readonly zoom: number;
   readonly scope: ExportScope;
   readonly align: ExportAlign;
+  /** Clockwise rotation of the diagram canvas; the caption stays upright. */
+  readonly rotation?: ExportRotation;
   readonly border: BorderSettings;
   /**
    * Caption text. `undefined` means "use the scene name"; an empty or
@@ -215,6 +223,7 @@ export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   zoom: 1,
   scope: "diagram",
   align: "center",
+  rotation: 0,
   border: DEFAULT_BORDER,
   diagramId: "",
   resourceFolder: "assets",
@@ -231,6 +240,7 @@ export interface ExportSettingsPatch {
   readonly zoom?: number;
   readonly scope?: ExportScope;
   readonly align?: ExportAlign;
+  readonly rotation?: ExportRotation;
   readonly border?: Partial<BorderSettings>;
   readonly label?: string;
   readonly diagramId?: string;
@@ -243,6 +253,7 @@ export const mergeExportSettings = (
 ): ExportSettings => ({
   ...base,
   ...patch,
+  rotation: normalizeRotation(patch.rotation ?? base.rotation),
   page: {
     ...base.page,
     ...patch.page,
