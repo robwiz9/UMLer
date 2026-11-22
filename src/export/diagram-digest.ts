@@ -262,6 +262,7 @@ const readInstructions = (
       "# E=entity, R=relationship, RA=relationship attribute.",
       '# E1 "name" weak=... | "attribute" type PK|D|FK|NN|UQ.',
       "# R1 ... | E1 cardinality -> E2 cardinality. Inheritance uses child/parent.",
+      "# The name of RA Relation Attribute table substitutes its associated relation name, so having an unnamed Relation with a named RA associated is not considered a mistake."
     ],
     "uml-class": [
       "# C=class, R=relationship. Members use +/-/#/~ visibility.",
