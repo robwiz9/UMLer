@@ -89,10 +89,48 @@ const endpointMarker = (edge: SceneEdge, end: "source" | "target"): string => {
   return markerDefinition(marker).shortLabel;
 };
 
-const umlRelationshipKind = (edge: SceneEdge): string => {
-  if (edge.semantic.family === "uml" && edge.semantic.relationship !== undefined) {
-    return edge.semantic.relationship;
+type InheritanceKind = "inheritance" | "realization";
+
+interface InheritanceTerminal {
+  readonly side: "source" | "target";
+  readonly kind: InheritanceKind;
+}
+
+const inheritanceTerminals = (edge: SceneEdge): readonly InheritanceTerminal[] => {
+  const terminals: InheritanceTerminal[] = [];
+  for (const side of ["source", "target"] as const) {
+    const marker = edge.markers[side];
+    if (
+      marker.family === "uml" &&
+      (marker.kind === "inheritance" || marker.kind === "realization")
+    ) {
+      terminals.push({ side, kind: marker.kind });
+    } else if (marker.family === "er" && marker.kind === "inheritance") {
+      terminals.push({ side, kind: "inheritance" });
+    }
   }
+  return terminals;
+};
+
+const semanticRelationship = (edge: SceneEdge): string | undefined =>
+  edge.semantic.family === "uml" ? edge.semantic.relationship : undefined;
+
+const umlRelationshipKind = (edge: SceneEdge): string => {
+  const semantic = semanticRelationship(edge);
+  // A concrete semantic relationship wins, except the generic association:
+  // an inheritance/realization marker on an association overrides it.
+  if (semantic !== undefined && semantic !== "association") return semantic;
+  for (const end of ["target", "source"] as const) {
+    const marker = edge.markers[end];
+    if (
+      marker.family === "uml" &&
+      (marker.kind === "inheritance" || marker.kind === "realization")
+    ) {
+      return marker.kind;
+    }
+    if (marker.family === "er" && marker.kind === "inheritance") return "inheritance";
+  }
+  if (semantic !== undefined) return semantic;
   for (const end of ["target", "source"] as const) {
     const marker = edge.markers[end];
     if (marker.family === "uml") return marker.kind;
@@ -156,11 +194,47 @@ const relationshipLine = (
   edge: SceneEdge,
   sourceId: string,
   targetId: string,
+  warnings: string[],
 ): string => {
+  const center = zoneLabel(edge, "center");
+  const terminals = inheritanceTerminals(edge);
+  const semantic = semanticRelationship(edge);
+  const semanticInheritance =
+    semantic === "inheritance" || semantic === "realization";
+  if (terminals.length > 0 || semanticInheritance) {
+    if (terminals.length > 1) {
+      warnings.push(
+        `Class relation ${edgeName(edge) || edge.id} has inheritance markers on both ends; using the target as parent.`,
+      );
+    }
+    // The terminal marker is the visual superclass end. Derive the semantic
+    // child -> parent direction from it, never from the stored source/target.
+    const terminal = terminals.find((entry) => entry.side === "target") ?? terminals[0] ?? null;
+    const kind =
+      semantic === "inheritance" || semantic === "realization"
+        ? semantic
+        : terminal?.kind ?? "inheritance";
+    const parent = terminal?.side === "source" ? sourceId : targetId;
+    const child = terminal?.side === "source" ? targetId : sourceId;
+    if (terminal === null) {
+      warnings.push(
+        `Class ${kind} ${edgeName(edge) || edge.id} has no inheritance marker; assuming child=${child} parent=${parent}.`,
+      );
+    }
+    return `R${id} kind=${kind}${field("name", center)} | child=${child} parent=${parent}${
+      terminal === null ? " direction=assumed" : ""
+    }${selfFlag(edge)}${hiddenFlag(edge)}`;
+  }
+
   const kind = umlRelationshipKind(edge);
   const sourceLabel = zoneLabel(edge, "source");
   const targetLabel = zoneLabel(edge, "target");
-  const center = zoneLabel(edge, "center");
+  const keyword = center.replace(/[«»]/g, "").trim().toLowerCase();
+  if (keyword === "extends" || keyword === "implements") {
+    warnings.push(
+      `Class relation ${edgeName(edge) || edge.id} is labelled "${keyword}" but has no inheritance/realization terminal; its direction is unverified.`,
+    );
+  }
   const whole = markerWholeSide(edge);
   const wholeRef = whole === "target" ? targetId : sourceId;
   const partRef = whole === "target" ? sourceId : targetId;
@@ -269,6 +343,7 @@ const readInstructions = (
       "# C=class, R=relationship. Members use +/-/#/~ visibility.",
       "# method(...) -> return; {abstract,static}. Rows are separated by semicolons.",
       "# aggregation/composition include whole=C part=C; kind= gives the relation type.",
+      "# inheritance/realization use child= (subclass) and parent= (superclass), from the marker end.",
     ],
     "uml-object": [
       "# O=object, L=link. classifier= is the object type; L kind= is the relation type.",
@@ -551,7 +626,7 @@ const serializeClass = (
     const targetNode = attachmentNodeId(edge.target);
     const source = sourceNode === null ? "@free" : classIds.get(sourceNode) ?? "@unknown";
     const target = targetNode === null ? "@free" : classIds.get(targetNode) ?? "@unknown";
-    writer.push(relationshipLine(String(index + 1), edge, source, target));
+    writer.push(relationshipLine(String(index + 1), edge, source, target, warnings));
     if (source === "@unknown" || target === "@unknown") {
       warnings.push(`Class relation ${edgeName(edge) || edge.id} has an unresolved endpoint.`);
     }

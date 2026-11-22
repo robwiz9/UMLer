@@ -11,7 +11,7 @@ import type { SceneEdge } from "../src/model/edges.ts";
 import type { TableNode } from "../src/model/nodes.ts";
 import { createEdgeForDiagram } from "../src/model/edge-create.ts";
 import { insertEdge } from "../src/model/edits.ts";
-import { asEdgeId, asNodeId } from "../src/model/ids.ts";
+import { asEdgeId, asLabelId, asNodeId } from "../src/model/ids.ts";
 
 let passed = 0;
 const failures: string[] = [];
@@ -139,6 +139,96 @@ const utilityText = digestOf(
 check(
   /C\d+ "Order" table=class abstract=no interface=no\s+stereotype="utility"/.test(utilityText),
   "a non-semantic stereotype remains free text",
+);
+
+// Inheritance/realization direction comes from the terminal marker, not from
+// the stored source/target order. A parent->child line with the hollow
+// triangle at the parent (source) must still read child -> parent.
+const realizationBase = fixture("uml-class").edges[asEdgeId("edge_realizes")];
+if (realizationBase === undefined) throw new Error("missing realization edge");
+const singleRelationship = (edge: SceneEdge): SceneDocument => ({
+  ...fixture("uml-class"),
+  edges: { [edge.id]: edge },
+});
+const noneMarker = { family: "none" as const, kind: "none" as const };
+const reversedInheritance: SceneEdge = {
+  ...realizationBase,
+  id: asEdgeId("edge_parent_child"),
+  source: realizationBase.target, // parent (PaymentMethod, C1)
+  target: realizationBase.source, // child (CardPayment, C3)
+  markers: {
+    source: { family: "uml", kind: "inheritance" },
+    target: noneMarker,
+  },
+  semantic: { family: "uml", relationship: "association" },
+  labels: [
+    {
+      id: asLabelId("label_extends"),
+      zone: "center",
+      text: "« extends »",
+      anchor: { kind: "edgePoint", t: 0.5 },
+      offset: { x: 0, y: -12 },
+      locked: false,
+      visible: true,
+    },
+  ],
+};
+const reversedText = digestOf(singleRelationship(reversedInheritance));
+check(
+  /R1 kind=inheritance name="« extends »" \| child=C3 parent=C1/.test(reversedText),
+  "a source-end inheritance marker still yields child=C3 parent=C1",
+);
+check(
+  !reversedText.includes("C1 -> C3"),
+  "inheritance direction never falls back to the stored source -> target order",
+);
+
+const standardInheritance: SceneEdge = {
+  ...reversedInheritance,
+  id: asEdgeId("edge_child_parent"),
+  source: realizationBase.source, // child (CardPayment, C3)
+  target: realizationBase.target, // parent (PaymentMethod, C1)
+  markers: {
+    source: noneMarker,
+    target: { family: "uml", kind: "inheritance" },
+  },
+};
+const standardText = digestOf(singleRelationship(standardInheritance));
+check(
+  /R1 kind=inheritance name="« extends »" \| child=C3 parent=C1/.test(standardText),
+  "a target-end inheritance marker yields child=C3 parent=C1",
+);
+check(
+  /R\d+ kind=realization[^\n]*\| child=C3 parent=C1/.test(classText),
+  "the fixture realization keeps child -> parent",
+);
+
+const assumedInheritance: SceneEdge = {
+  ...standardInheritance,
+  id: asEdgeId("edge_assumed"),
+  markers: { source: noneMarker, target: noneMarker },
+  semantic: { family: "uml", relationship: "inheritance" },
+};
+const assumedText = digestOf(singleRelationship(assumedInheritance));
+check(
+  /child=C3 parent=C1 direction=assumed/.test(assumedText),
+  "a markerless inheritance documents its assumed direction",
+);
+check(
+  assumedText.includes("has no inheritance marker"),
+  "a markerless inheritance raises a direction warning",
+);
+
+const unverifiedExtends: SceneEdge = {
+  ...standardInheritance,
+  id: asEdgeId("edge_unverified_extends"),
+  markers: { source: noneMarker, target: noneMarker },
+  semantic: { family: "uml", relationship: "association" },
+};
+const unverifiedText = digestOf(singleRelationship(unverifiedExtends));
+check(
+  unverifiedText.includes('is labelled "extends" but has no inheritance/realization terminal'),
+  "an extends label without an inheritance terminal raises a direction warning",
 );
 
 const classClone = structuredClone(fixture("uml-class"));

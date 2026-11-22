@@ -40,7 +40,7 @@ const PATTERN_LABELS: Record<StrokePattern, string> = {
   dotted: "Dotted",
 };
 const ROUTES: readonly EdgeRoutingMode[] = ["orthogonal", "straight"];
-const CLASS_STEREOTYPES = ["« use »", "« extends »", "« instantiate »"] as const;
+const CLASS_STEREOTYPES = ["« use »", "« instantiate »"] as const;
 const USE_CASE_STEREOTYPES = ["« include »", "« extend »"] as const;
 const SEQUENCE_STEREOTYPES = ["« instantiate »", "« destroy »"] as const;
 const ER_STEREOTYPES = ["« identifies »"] as const;
