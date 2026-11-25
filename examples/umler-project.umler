@@ -1,8 +1,8 @@
 {
   "format": "umler.project",
   "version": 1,
-  "exportedAt": "2026-11-25T23:20:58.092Z",
-  "activeSceneId": "scene_uml_sequence_checkout",
+  "exportedAt": "2026-11-25T23:23:23.023Z",
+  "activeSceneId": "scene_er_commerce",
   "scenes": [
     {
       "schemaVersion": "umler.scene/1",
