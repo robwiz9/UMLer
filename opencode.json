@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "servers": {
+      "godot": {
+        "type": "local",
+        "command": [
+          "npx",
+          "@coding-solo/godot-mcp"
+        ]
+      }
+    }
+  }
+}

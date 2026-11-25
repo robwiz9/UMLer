@@ -291,6 +291,10 @@ chooser opens.
   connector can be dragged along those parallel borders to set a preferred position. Live object moves
   reroute only incident and nearby connectors; the rest reuse their previous geometry. **Low performance
   mode** in the Layout panel freezes all connector routes until the object is dropped.
+- **Manual routing points**: Ctrl/Cmd+click any non-circuit connector to add a grid point, drag it to reshape,
+  and click it twice to remove it. This includes use-case relationships, sequence messages and unary
+  associations. A sequence message stays straight until a point is added; moving the message vertically
+  carries its routing points with it.
 - **ER relationship-label conversion**: the line menu shows a square `▦` action beside an ER relationship’s
   center label. It creates a relation-attribute table named after the label, tethers it to the relationship
   line, removes the old center label and selects the new table in one revision.

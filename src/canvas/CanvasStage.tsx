@@ -2776,8 +2776,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     const edge = scene.edges[edgeId];
     if (
       (event.ctrlKey || event.metaKey) &&
-      scene.meta.diagramKind !== "circuit" &&
-      edge?.semantic.family !== "sequence"
+      scene.meta.diagramKind !== "circuit"
     ) {
       const hit = closestPointOnPolyline(edgeLayout.points, world);
       if (hit !== null) {
@@ -5617,9 +5616,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                   onDragStart={(event) => beginReattach(selectedEdgeLayout.edgeId, "target", event)}
                 />
               ) : null}
-              {scene.meta.diagramKind !== "circuit" &&
-              selectedEdge !== undefined &&
-              selectedEdge.semantic.family !== "sequence"
+              {scene.meta.diagramKind !== "circuit" && selectedEdge !== undefined
                 ? selectedEdge.routing.waypoints.map((waypoint) => (
                     <circle
                       key={waypoint.id}

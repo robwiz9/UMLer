@@ -1308,6 +1308,26 @@ const resolveAttachment = (
 
 const directionIsHorizontal = (normal: Point): boolean => Math.abs(normal.x) >= Math.abs(normal.y);
 
+/**
+ * Sequence messages attach to spine ports whose normal is always east. With a
+ * manual route that is not enough: the stub must face the first/last waypoint,
+ * otherwise the line overshoots the lifeline and doubles back.
+ */
+const sequenceWaypointEnds = (
+  source: AttachmentResolution,
+  target: AttachmentResolution,
+  waypoints: readonly Point[],
+): { readonly source: AttachmentResolution; readonly target: AttachmentResolution } => {
+  const facing = (from: Point, candidates: readonly Point[]): Point => {
+    const other = candidates.find((candidate) => Math.abs(candidate.x - from.x) > EPSILON);
+    return point(other !== undefined && other.x < from.x ? -1 : 1, 0);
+  };
+  return {
+    source: { ...source, normal: facing(source.point, waypoints) },
+    target: { ...target, normal: facing(target.point, [...waypoints].reverse()) },
+  };
+};
+
 const simplifyPoints = (input: readonly Point[]): readonly Point[] => {
   const deduped: Point[] = [];
   for (const p of input) {
@@ -1710,8 +1730,9 @@ const selfWaypointRoute = (
   gridSize: number,
 ): { readonly points: readonly Point[]; readonly routedBy: EdgeLayout["routedBy"] } => {
   if (node.kind === "lifeline") {
+    const ends = sequenceWaypointEnds(source, target, waypoints);
     return {
-      points: routeThroughWaypoints(source, target, routing, waypoints),
+      points: routeThroughWaypoints(ends.source, ends.target, routing, waypoints),
       routedBy: "polyline",
     };
   }
@@ -2005,6 +2026,23 @@ const routeEdge = (
   endpointObstacles: readonly Rect[],
   collisionObstacles: readonly Rect[],
 ): { readonly points: readonly Point[]; readonly routedBy: EdgeLayout["routedBy"] } => {
+  // Manual routing points win over every automatic mode, including the
+  // straight time-axis policy for sequence messages.
+  if (edge.routing.waypoints.length > 0) {
+    const waypointPoints = edge.routing.waypoints.map((waypoint) => waypoint.point);
+    const ends = edge.semantic.family === "sequence"
+      ? sequenceWaypointEnds(source, target, waypointPoints)
+      : { source, target };
+    return {
+      points: routeThroughWaypoints(
+        ends.source,
+        ends.target,
+        edge.routing,
+        waypointPoints,
+      ),
+      routedBy: "polyline",
+    };
+  }
   // Sequence messages are time-axis geometry, not a routed graph edge. Ignore
   // any legacy/edited routing flag so an A* detour can never replace the
   // straight message line.
@@ -2012,17 +2050,6 @@ const routeEdge = (
     return {
       points: simplifyPoints([source.point, target.point]),
       routedBy: "straight",
-    };
-  }
-  if (edge.routing.waypoints.length > 0) {
-    return {
-      points: routeThroughWaypoints(
-        source,
-        target,
-        edge.routing,
-        edge.routing.waypoints.map((waypoint) => waypoint.point),
-      ),
-      routedBy: "polyline",
     };
   }
   if (edge.routing.mode === "straight" || edge.routing.mode === "bezier") {

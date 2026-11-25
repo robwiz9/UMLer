@@ -760,7 +760,19 @@ export const moveSequenceEdge = (
   };
   return updateEdge(scene, edgeId, (edge) =>
     edge.semantic.family === "sequence"
-      ? { ...edge, source: moved(edge.source), target: moved(edge.target) }
+      ? {
+          ...edge,
+          source: moved(edge.source),
+          target: moved(edge.target),
+          routing: {
+            ...edge.routing,
+            // Keep the manually shaped message with its endpoints.
+            waypoints: edge.routing.waypoints.map((waypoint) => ({
+              ...waypoint,
+              point: { x: waypoint.point.x, y: waypoint.point.y + deltaY },
+            })),
+          },
+        }
       : edge,
   );
 };
@@ -833,8 +845,18 @@ export const moveSequenceItems = (
         },
       };
     };
-    next = setEdgeAttachment(next, asEdgeId(edgeId), "source", moved(edge.source));
-    next = setEdgeAttachment(next, asEdgeId(edgeId), "target", moved(edge.target));
+    next = updateEdge(next, asEdgeId(edgeId), (current) => ({
+      ...current,
+      source: moved(edge.source),
+      target: moved(edge.target),
+      routing: {
+        ...current.routing,
+        waypoints: current.routing.waypoints.map((waypoint) => ({
+          ...waypoint,
+          point: { x: waypoint.point.x, y: waypoint.point.y + deltaY },
+        })),
+      },
+    }));
   }
   return next;
 };

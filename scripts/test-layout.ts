@@ -732,10 +732,8 @@ const selfMessage = createEdgeForDiagram(
   { nodeId: asNodeId("seq_order_service"), port: { kind: "spine", t: 0.32 } },
 );
 assert.ok(selfMessage !== null, "a lifeline may message itself");
-const selfMessageLayout = buildLayoutSnapshot(
-  insertEdge(UML_SEQUENCE_CHECKOUT, selfMessage),
-  measurer,
-);
+const selfMessageScene = insertEdge(UML_SEQUENCE_CHECKOUT, selfMessage);
+const selfMessageLayout = buildLayoutSnapshot(selfMessageScene, measurer);
 const selfMessageEdge = selfMessageLayout.edges[selfMessage.id];
 assert.ok(selfMessageEdge !== undefined);
 const serviceLane = selfMessageLayout.nodes[asNodeId("seq_order_service")];
@@ -749,6 +747,70 @@ assert.ok(
 assert.ok(
   Math.max(...selfMessageEdge.points.map((p) => p.x)) > serviceSpineX + 9,
   "the self message must visibly leave the lifeline",
+);
+
+// Sequence messages accept manual routing points too. Untouched messages stay
+// straight; adding a point switches the route to the shared polyline pass.
+const selfOut = selfMessageEdge.points[1];
+const selfBack = selfMessageEdge.points[2];
+if (selfOut === undefined || selfBack === undefined) throw new Error("self message route");
+const selfMessageWaypoint = {
+  x: selfOut.x + 18,
+  y: (selfOut.y + selfBack.y) / 2,
+};
+const selfMessageWaypointScene = addEdgeWaypoint(
+  selfMessageScene,
+  selfMessage.id,
+  selfMessageWaypoint,
+);
+const selfMessageWaypointEdge = buildLayoutSnapshot(
+  selfMessageWaypointScene,
+  measurer,
+).edges[selfMessage.id];
+assert.ok(selfMessageWaypointEdge !== undefined);
+assert.ok(
+  routeIncludes(selfMessageWaypointEdge.points, selfMessageWaypoint),
+  "a sequence self-message waypoint stays on the route",
+);
+
+const submitPoints = buildLayoutSnapshot(UML_SEQUENCE_CHECKOUT, measurer).edges.msg_submit?.points ??
+  [];
+const submitStart = submitPoints[0];
+const submitNext = submitPoints[1];
+if (submitStart === undefined || submitNext === undefined) throw new Error("submit route");
+const submitWaypoint = {
+  x: (submitStart.x + submitNext.x) / 2,
+  y: submitStart.y + 18,
+};
+const submitWaypointScene = addEdgeWaypoint(
+  UML_SEQUENCE_CHECKOUT,
+  asEdgeId("msg_submit"),
+  submitWaypoint,
+);
+const submitWaypointLayout = buildLayoutSnapshot(submitWaypointScene, measurer);
+const submitWaypointEdge = submitWaypointLayout.edges.msg_submit;
+assert.ok(submitWaypointEdge !== undefined);
+assert.equal(submitWaypointEdge.routedBy, "polyline");
+assert.ok(
+  submitWaypointEdge.points.length > 2,
+  "a sequence message with a waypoint is no longer forced straight",
+);
+assert.ok(
+  routeIncludes(submitWaypointEdge.points, submitWaypoint),
+  "a sequence message waypoint stays on the route",
+);
+assert.ok(
+  Math.max(...submitWaypointEdge.points.map((p) => p.x)) <=
+    Math.max(submitStart.x, submitNext.x) + 0.01,
+  "a sequence waypoint route does not overshoot its target lifeline",
+);
+const movedSubmit = moveSequenceEdge(submitWaypointScene, asEdgeId("msg_submit"), 18);
+assert.ok(
+  Math.abs(
+    (movedSubmit.edges[asEdgeId("msg_submit")]?.routing.waypoints[0]?.point.y ?? 0) -
+      (submitWaypoint.y + 18),
+  ) < 1e-6,
+  "moving a sequence message vertically carries its waypoints",
 );
 
 // A fresh entity table starts with one primary-key row.
@@ -1076,6 +1138,33 @@ for (let index = 1; index < ellipseEdge.points.length; index += 1) {
     "use-case ellipse routes must stay orthogonal",
   );
 }
+
+// Use-case relationships accept the same manual routing points.
+const useCaseRoute = ellipseEdge.points;
+const useCaseStart = useCaseRoute[0];
+const useCaseNext = useCaseRoute[1];
+if (useCaseStart === undefined || useCaseNext === undefined) throw new Error("use-case route");
+const useCaseWaypoint = {
+  x: (useCaseStart.x + useCaseNext.x) / 2,
+  y: (useCaseStart.y + useCaseNext.y) / 2 + 18,
+};
+const useCaseWaypointScene = addEdgeWaypoint(
+  UML_USE_CASE_SHOP,
+  asEdgeId("use_case_assoc"),
+  useCaseWaypoint,
+);
+const useCaseWaypointLayout = buildLayoutSnapshot(useCaseWaypointScene, measurer);
+const useCaseWaypointEdge = useCaseWaypointLayout.edges.use_case_assoc;
+assert.ok(useCaseWaypointEdge !== undefined);
+assert.equal(useCaseWaypointEdge.routedBy, "polyline");
+assert.ok(
+  routeIncludes(useCaseWaypointEdge.points, useCaseWaypoint),
+  "a use-case relationship waypoint stays on the route",
+);
+assert.ok(
+  useCaseWaypointEdge.points.length > 2,
+  "a use-case relationship with a waypoint is routed through it",
+);
 
 const useCaseLayout = buildLayoutSnapshot(UML_USE_CASE_SHOP, measurer);
 const useCaseAuto = autoLayoutFrames(UML_USE_CASE_SHOP, useCaseLayout);
