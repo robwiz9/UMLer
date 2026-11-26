@@ -1534,7 +1534,7 @@ export const App = () => {
   // switch. The dialog is not reachable from menus.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) return;
+      if (!((event.ctrlKey && event.shiftKey) || ((event.altKey || event.metaKey) && event.shiftKey))) return;
       if (event.key.toLowerCase() !== "l") return;
       event.preventDefault();
       event.stopPropagation();

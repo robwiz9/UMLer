@@ -884,7 +884,7 @@ export const NodeFocusMenu = ({
             </button>
           ) : null}
         </div>
-        {node.kind === "table" && node.tableKind === "class" ? (
+        {node.kind === "table" && (node.tableKind === "class" || node.tableKind === "entity") ? (
           <>
             <label className="field-label">
               Stereotype
