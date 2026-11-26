@@ -696,7 +696,14 @@ const ShapeBody = ({
         case "final":
           return (
             <>
-              <circle cx={center.x} cy={center.y} r={radius} fill="white" stroke={theme.colors.ink} strokeWidth={1} />
+              <circle
+                cx={center.x}
+                cy={center.y}
+                r={radius}
+                fill={theme.shape.fill.color ?? "white"}
+                stroke={theme.colors.ink}
+                strokeWidth={1}
+              />
               <circle cx={center.x} cy={center.y} r={Math.max(2, radius * 0.58)} fill={theme.colors.ink} />
             </>
           );
@@ -713,7 +720,7 @@ const ShapeBody = ({
             </g>
           );
         default:
-          return <circle cx={center.x} cy={center.y} r={Math.max(3, radius * 0.5)} fill="white" stroke={theme.colors.ink} />;
+          return <circle cx={center.x} cy={center.y} r={Math.max(3, radius * 0.5)} fill={theme.shape.fill.color ?? "white"} stroke={theme.colors.ink} />;
       }
     })();
     const labelFrame = labelDelta === undefined
@@ -755,7 +762,7 @@ const ShapeBody = ({
     const points = `${center.x},${frame.y} ${rectRight(frame)},${center.y} ${center.x},${rectBottom(frame)} ${frame.x},${center.y}`;
     return (
       <>
-        <polygon points={points} {...common} fill="white" />
+        <polygon points={points} {...common} />
         {skeleton ? null : <ShapeText layout={layout} onTextDoubleClick={onTextDoubleClick} onPartClick={onPartClick} />}
       </>
     );
@@ -946,7 +953,7 @@ const ImageBody = ({
         y={imageFrame.y}
         width={imageFrame.width}
         height={imageFrame.height}
-        fill="#f0ede5"
+        fill={theme.colors.grid}
       />
       {assetHref !== undefined ? (
         <image

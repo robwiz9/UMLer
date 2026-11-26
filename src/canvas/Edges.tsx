@@ -102,17 +102,19 @@ const ArrowGlyph = ({
   tip,
   forward,
   color,
+  fill,
 }: {
   readonly marker: EndpointMarker;
   readonly tip: Point;
   readonly forward: Point;
   readonly color: string;
+  readonly fill: string;
 }) => {
   if (marker.family === "none") return null;
   if (marker.family === "uml") {
     if (marker.kind === "inheritance" || marker.kind === "realization") {
       const shape = markerGeometry(tip, forward, 10, 9);
-      return <polygon points={polygonPoints([tip, shape.baseLeft, shape.baseRight])} fill="white" stroke={color} strokeWidth={0.9} />;
+      return <polygon points={polygonPoints([tip, shape.baseLeft, shape.baseRight])} fill={fill} stroke={color} strokeWidth={0.9} />;
     }
     if (marker.kind === "aggregation" || marker.kind === "composition") {
       const shape = markerGeometry(tip, forward, 12, 7);
@@ -124,7 +126,7 @@ const ArrowGlyph = ({
             shape.base,
             add(shape.mid, scale(shape.half, -1)),
           ])}
-          fill={marker.kind === "composition" ? color : "white"}
+          fill={marker.kind === "composition" ? color : fill}
           stroke={color}
           strokeWidth={0.9}
         />
@@ -189,7 +191,7 @@ const ArrowGlyph = ({
     return (
       <polygon
         points={polygonPoints([tip, shape.baseLeft, shape.baseRight])}
-        fill="white"
+        fill={fill}
         stroke={color}
         strokeWidth={0.9}
       />
@@ -222,7 +224,7 @@ const ArrowGlyph = ({
           y2={barCenter.y - shape.half.y}
         />
       ) : null}
-      {hasCircle ? <circle cx={circleCenter.x} cy={circleCenter.y} r={3.4} fill="white" /> : null}
+      {hasCircle ? <circle cx={circleCenter.x} cy={circleCenter.y} r={3.4} fill={fill} /> : null}
     </g>
   );
 };
@@ -231,10 +233,12 @@ const EdgeGlyphs = ({
   layout,
   markers,
   color,
+  fill,
 }: {
   readonly layout: EdgeLayout;
   readonly markers: EdgeLayerProps["edges"][number]["markers"];
   readonly color: string;
+  readonly fill: string;
 }) => {
   const points = layout.points;
   if (points.length < 2) return null;
@@ -247,8 +251,8 @@ const EdgeGlyphs = ({
 
   return (
     <>
-      <ArrowGlyph marker={markers.source} tip={first} forward={sourceForward} color={color} />
-      <ArrowGlyph marker={markers.target} tip={last} forward={scale(targetForward, -1)} color={color} />
+      <ArrowGlyph marker={markers.source} tip={first} forward={sourceForward} color={color} fill={fill} />
+      <ArrowGlyph marker={markers.target} tip={last} forward={scale(targetForward, -1)} color={color} fill={fill} />
     </>
   );
 };
@@ -309,7 +313,12 @@ export const EdgeLayer = ({
                 strokeLinejoin="round"
                 vectorEffect={nonScalingStroke ? "non-scaling-stroke" : undefined}
               />
-              <EdgeGlyphs layout={layout} markers={markers} color={stroke.color} />
+              <EdgeGlyphs
+                layout={layout}
+                markers={markers}
+                color={stroke.color}
+                fill={theme.shape.fill.color ?? "#ffffff"}
+              />
             </>
           ) : null}
           {renderLabels
