@@ -45,6 +45,7 @@ the manual client-id setup and personal-access-token fallback.
 | [05 — Step 3 editor](docs/05-step3-editor.md) | A* router, layered auto-layout, endpoint menus, table editor, label rules, verification |
 | [06 — Step 4 export](docs/06-step4-export.md) | Visual conventions vs CeTZ, selection bounds, page fitting, serializer, image resources, live WASM preview |
 | [07 — Circuit extension](docs/07-circuit-diagram-extension.md) | Circuit diagram kind: components, junctions, wires, omega crossings, 45° rotation, searchable palette, IEC/ANSI standard switch |
+| [08 — Live collaboration](docs/08-live-collaboration.md) | Temporary room-backed live editing, presence, cursors, last-confirmed field wins, GitHub leader autosave, auth and deployment limits |
 
 ## Repository layout
 
@@ -88,7 +89,9 @@ picker. If the remote changed, or was deleted, UMLer does not silently pick a si
 local with remote**, **Overwrite remote** (or **Recreate remote**) and **Cancel**. Edits to different scenes merge
 automatically and are written back without a warning; only scenes changed on both sides open the merge picker. That
 picker has three columns with local/remote scene metadata, commit author/time, canvas previews, and **local /
-remote / keep both** choices; keeping both inserts the remote scene as a new scene. Remote JSON is validated before
+remote / keep both** choices; keeping both inserts the remote scene as a new scene. Scene deletion is part of the
+three-way merge: a scene removed on one side and unchanged on the other is removed rather than reintroduced,
+while a scene edited on one side survives a deletion from the other side. Remote JSON is validated before
 it replaces the local project; a bad remote file never reaches the canvas.
 
 The open project, its GitHub path/SHA and the last sync baseline are autosaved locally, so a page refresh
@@ -99,6 +102,32 @@ A bound project also auto-saves to GitHub every 2 minutes when it has changes. T
 save is running. If the remote changed, auto-save does not open a modal: it shows a sticky warning toast and does
 nothing else until you click it, at which point the normal **Replace local with remote / Overwrite remote**
 chooser opens.
+
+## Live collaboration
+
+Live editing uses a small standalone room server, not the Vercel static deployment:
+
+```bash
+npm run collab:server   # ws://127.0.0.1:1234
+npm run dev
+```
+
+Open two tabs with `?collabRoom=devtest` in development, or set `VITE_COLLAB_URL` for a bound
+GitHub project. GitHub-backed sharing is disabled by default and must be enabled for the project
+first. The server applies confirmed field/array patches in receipt order, so two users
+editing the same field resolve to the **last confirmation**; edits to different fields merge. The
+top bar shows project collaborators and per-scene groups, and remote cursors use world coordinates.
+The first connected editor is the leader and owns the frequent GitHub autosave; leadership moves
+when that tab leaves. The compact footer indicator opens a participant menu with **Leave session**,
+**Rejoin** and **Disable on this browser**. Clicking a participant follows their active scene and
+canvas position — keeping your own zoom and their cursor visible; panning the canvas or picking a
+scene yourself exits the follow mode. A session stays live while at least one tab is
+connected; after the last participant leaves the room snapshot remains for `COLLAB_TTL_HOURS`
+(default 4 hours) so it can be rejoined. The room cache is temporary (`.collab-cache/` plus optional
+Redis snapshots, default TTL 4 hours); GitHub remains the durable project file. `COLLAB_SECRET`
+enables the Vercel `/api/collab/token` GitHub permission check and room-scoped tokens. The design,
+deployment notes and current limitations are in
+[08 — Live collaboration](docs/08-live-collaboration.md).
 
 ## What works now
 > **Current checkpoint: Step 4 complete plus the circuit diagram extension.**
@@ -422,9 +451,9 @@ PASS Circuit divider loop — 4 nodes, 4 edges, 0 errors, 0 warnings
 layout: OK
   fixtures: 7
   ER nodes/ports/edges: 3/30/2
-  ER content bounds: 585 × 223.9
+  ER content bounds: 585 × 207
 
-Persistence checks passed (41 assertions).
+Persistence checks passed (42 assertions).
 
 Clipboard checks passed (26 assertions).
 
@@ -432,13 +461,17 @@ Conversion checks passed (53 assertions).
 
 Circuit checks passed (116 assertions).
 
-GitHub project checks passed (73 assertions).
+GitHub project checks passed (82 assertions).
 
-Storage checks passed (30 assertions).
+Storage checks passed (42 assertions).
 
-CeTZ serializer checks passed (190 assertions).
+CeTZ serializer checks passed (202 assertions).
 
-OAuth relay checks passed (18 assertions).
+Digest checks passed (62 assertions).
+
+Collaboration checks passed (56 assertions).
+
+OAuth relay checks passed (23 assertions).
 ```
 
 Browser verification (Chrome DevTools): clicked table headers, sections, rows and other object text and

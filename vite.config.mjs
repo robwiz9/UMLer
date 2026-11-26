@@ -36,6 +36,14 @@ const githubOAuthPlugin = (clientId) => {
   const install = (middlewares) => {
     middlewares.use((request, response, next) => {
       const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
+      if (pathname === "/api/collab/token") {
+        sendJson(response, 501, {
+          error: "not_configured",
+          error_description:
+            "Live collaboration token minting runs on Vercel. Local development rooms run without COLLAB_SECRET.",
+        });
+        return;
+      }
       if (!pathname.startsWith("/api/github/oauth/")) {
         next();
         return;

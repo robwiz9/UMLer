@@ -129,6 +129,11 @@ const uniqueSceneTitle = (
  * Combines the two project copies. For each conflicting scene the chosen side
  * replaces both copies, or "both" keeps the local scene and inserts a renamed
  * copy of the remote scene as a separate project scene.
+ *
+ * When the last-sync baseline is provided, scene deletion is a first-class
+ * change: a scene deleted on one side and unchanged on the other is removed,
+ * while an edited scene survives a deletion from the other side. Without a
+ * baseline the old union behaviour is retained.
  */
 export const mergeProjectScenes = (
   localScenes: readonly SceneDocument[],
@@ -136,6 +141,7 @@ export const mergeProjectScenes = (
   remoteScenes: readonly SceneDocument[],
   remoteActiveSceneId: string,
   choices: Readonly<Record<string, MergeChoice>>,
+  baseline?: Readonly<Record<string, string>>,
 ): MergedProjectScenes => {
   const remoteById = new Map(remoteScenes.map((scene) => [scene.id, scene]));
   const scenes: SceneDocument[] = [];
@@ -143,19 +149,44 @@ export const mergeProjectScenes = (
   const usedTitles = new Set<string>();
   for (const scene of [...localScenes, ...remoteScenes]) usedTitles.add(scene.meta.title);
 
+  const baseDigest = (sceneId: string): string | undefined => baseline?.[sceneId];
+
   for (const local of localScenes) {
     const remote = remoteById.get(local.id);
-    const differs =
-      remote !== undefined && sceneDigest(local) !== sceneDigest(remote);
-    const choice: MergeChoice = differs ? choices[local.id] ?? null : null;
-    if (choice === "remote" && remote !== undefined) {
+    if (remote === undefined) {
+      // Local-only scene. If the baseline knows it, the remote side deleted it;
+      // drop it only when the local copy was not edited since that sync.
+      const base = baseDigest(local.id);
+      if (base !== undefined && sceneDigest(local) === base) continue;
+      scenes.push(local);
+      usedIds.add(local.id);
+      continue;
+    }
+    const localDigest = sceneDigest(local);
+    const remoteDigest = sceneDigest(remote);
+    if (localDigest === remoteDigest) {
+      scenes.push(local);
+      usedIds.add(local.id);
+      continue;
+    }
+    let choice: MergeChoice = choices[local.id] ?? null;
+    if (choice === null) {
+      const base = baseDigest(local.id);
+      if (base !== undefined) {
+        const localChanged = localDigest !== base;
+        const remoteChanged = remoteDigest !== base;
+        if (localChanged && !remoteChanged) choice = "local";
+        else if (!localChanged && remoteChanged) choice = "remote";
+      }
+    }
+    if (choice === "remote") {
       scenes.push(remote);
       usedIds.add(local.id);
       continue;
     }
     scenes.push(local);
     usedIds.add(local.id);
-    if (choice === "both" && remote !== undefined) {
+    if (choice === "both") {
       const title = uniqueSceneTitle(remote.meta.title, usedTitles);
       usedTitles.add(title);
       const now = new Date().toISOString();
@@ -175,6 +206,10 @@ export const mergeProjectScenes = (
   }
   for (const remote of remoteScenes) {
     if (usedIds.has(remote.id)) continue;
+    // Remote-only scene. If the baseline knows it, the local side deleted it;
+    // keep the remote copy only when it was edited remotely after that sync.
+    const base = baseDigest(remote.id);
+    if (base !== undefined && sceneDigest(remote) === base) continue;
     scenes.push(remote);
     usedIds.add(remote.id);
   }

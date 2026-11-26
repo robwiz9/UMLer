@@ -27,10 +27,16 @@ import {
   withNodeRotations,
 } from "../layout/build-layout.ts";
 import { resizeTableFrameBy, tableRowHeightFor } from "../layout/table-resize.ts";
-import type { EdgeLayout, LayoutSnapshot } from "../model/layout.ts";
+import type { EdgeLayout, LayoutSnapshot, NodeLayout, TextMeasurement } from "../model/layout.ts";
 import { autoLayoutFrames } from "../layout/auto-layout.ts";
 import { CanvasTextMeasurer } from "../layout/text.ts";
-import { zoomAtScreenPoint, type Camera, type ViewportSize } from "../canvas/camera.ts";
+import {
+  cameraForWorldCenter,
+  worldCenterForCamera,
+  zoomAtScreenPoint,
+  type Camera,
+  type ViewportSize,
+} from "../canvas/camera.ts";
 import { CanvasStage, type CanvasStageHandle } from "../canvas/CanvasStage.tsx";
 import { CodePanel } from "./CodePanel.tsx";
 import { GitHubDecisionDialog, type GitHubDecision, type GitHubDecisionOption } from "./GitHubDecisionDialog.tsx";
@@ -90,6 +96,15 @@ import {
   type GitHubSession,
 } from "./github-client.ts";
 import { useSceneHistory } from "./use-scene-history.ts";
+import { useCollaboration } from "../collab/use-collaboration.ts";
+import { collaborationHttpUrl, deriveRoomKey } from "../collab/room-key.ts";
+import { CollabUnlockDialog } from "./CollabUnlockDialog.tsx";
+import { CollaborationStatusMenu } from "./CollaborationStatusMenu.tsx";
+import {
+  collabColor,
+  type CollabProject,
+  type CollabUser,
+} from "../collab/protocol.ts";
 import {
   compareRemoteFile,
   conflictingScenes,
@@ -108,6 +123,7 @@ import type {
   EdgeAttachment,
   EdgeLabelZone,
   EdgeRoutingMode,
+  SceneEdge,
 } from "../model/edges.ts";
 import { portKey } from "../model/edges.ts";
 import type { EdgeEnd, EndpointMarker } from "../model/markers.ts";
@@ -412,28 +428,123 @@ const distanceAlongPolyline = (
   return closestArc;
 };
 
-const recolorLayoutText = (layout: LayoutSnapshot): LayoutSnapshot => {
-  const clone = structuredClone(layout) as LayoutSnapshot;
-  const recolor = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      for (const entry of value) recolor(entry);
-      return;
-    }
-    if (typeof value !== "object" || value === null) return;
-    const record = value as Record<string, unknown>;
-    if (
-      typeof record.text === "string" &&
-      typeof record.style === "object" &&
-      record.style !== null &&
-      "color" in record.style
-    ) {
-      (record.style as { color: string }).color = "#d4d4d4";
-    }
-    for (const entry of Object.values(record)) recolor(entry);
-  };
-  recolor(clone);
-  return clone;
+const DARK_TEXT_COLOR = "#d4d4d4";
+
+interface DarkLayoutCache {
+  readonly measurements: WeakMap<TextMeasurement, TextMeasurement>;
+  readonly nodes: WeakMap<NodeLayout, NodeLayout>;
+  readonly edges: WeakMap<EdgeLayout, EdgeLayout>;
+}
+
+interface DarkDisplayCache {
+  readonly nodes: WeakMap<SceneNode, SceneNode>;
+  readonly edges: WeakMap<SceneEdge, SceneEdge>;
+  readonly themes: WeakMap<Theme, Theme>;
+  readonly canvases: WeakMap<SceneDocument["canvas"], SceneDocument["canvas"]>;
+}
+
+const recolorMeasurement = (
+  measurement: TextMeasurement,
+  cache: DarkLayoutCache,
+): TextMeasurement => {
+  const cached = cache.measurements.get(measurement);
+  if (cached !== undefined) return cached;
+  const next = measurement.style.color === DARK_TEXT_COLOR
+    ? measurement
+    : { ...measurement, style: { ...measurement.style, color: DARK_TEXT_COLOR } };
+  cache.measurements.set(measurement, next);
+  return next;
 };
+
+/**
+ * Recolors only the text measurements, sharing every other object with the
+ * source layout. Unchanged node/edge layouts are cached by identity, so a
+ * keystroke in dark mode only walks the table being edited.
+ */
+const recolorNodeLayout = (layout: NodeLayout, cache: DarkLayoutCache): NodeLayout => {
+  const cached = cache.nodes.get(layout);
+  if (cached !== undefined) return cached;
+  let next: NodeLayout = layout;
+  switch (layout.kind) {
+    case "table":
+    case "relationAttribute":
+      next = {
+        ...layout,
+        header: {
+          ...layout.header,
+          text: recolorMeasurement(layout.header.text, cache),
+          ...(layout.header.stereotype === undefined
+            ? {}
+            : { stereotype: recolorMeasurement(layout.header.stereotype, cache) }),
+        },
+        sections: layout.sections.map((section) => ({
+          ...section,
+          ...(section.header === undefined
+            ? {}
+            : {
+                header: {
+                  ...section.header,
+                  text: recolorMeasurement(section.header.text, cache),
+                },
+              }),
+          rows: section.rows.map((row) => ({
+            ...row,
+            text: recolorMeasurement(row.text, cache),
+          })),
+        })),
+      };
+      break;
+    case "lifeline":
+      next = { ...layout, headText: recolorMeasurement(layout.headText, cache) };
+      break;
+    case "image":
+      next = layout.caption === undefined
+        ? layout
+        : { ...layout, caption: recolorMeasurement(layout.caption, cache) };
+      break;
+    case "comment":
+      next = {
+        ...layout,
+        lines: layout.lines.map((line) => recolorMeasurement(line, cache)),
+      };
+      break;
+    case "circuitComponent":
+    case "circuitJunction":
+      next = layout.label === undefined
+        ? layout
+        : { ...layout, label: recolorMeasurement(layout.label, cache) };
+      break;
+    default:
+      next = { ...layout, text: recolorMeasurement(layout.text, cache) };
+      break;
+  }
+  cache.nodes.set(layout, next);
+  return next;
+};
+
+const recolorEdgeLayout = (layout: EdgeLayout, cache: DarkLayoutCache): EdgeLayout => {
+  const cached = cache.edges.get(layout);
+  if (cached !== undefined) return cached;
+  const next = layout.labels.length === 0
+    ? layout
+    : {
+        ...layout,
+        labels: layout.labels.map((label) => ({
+          ...label,
+          text: recolorMeasurement(label.text, cache),
+        })),
+      };
+  cache.edges.set(layout, next);
+  return next;
+};
+
+const darkEdgeForDisplay = (edge: SceneEdge): SceneEdge => ({
+  ...edge,
+  style: {
+    ...edge.style,
+    stroke: { ...edge.style.stroke, color: DARK_TEXT_COLOR },
+  },
+});
 
 const DARK_THEME = (theme: SceneDocument["theme"]): SceneDocument["theme"] => ({
   colors: {
@@ -503,6 +614,27 @@ type SaveFileRead =
       readonly file: File;
     };
 
+const collabKeyStorageName = (roomId: string): string =>
+  `umler.collab.admin-key.${roomId}`;
+
+const loadStoredCollabKey = (roomId: string | null): string | null => {
+  if (roomId === null) return null;
+  try {
+    return window.localStorage.getItem(collabKeyStorageName(roomId));
+  } catch {
+    return null;
+  }
+};
+
+const storeCollabKey = (roomId: string, key: string | null): void => {
+  try {
+    if (key === null) window.localStorage.removeItem(collabKeyStorageName(roomId));
+    else window.localStorage.setItem(collabKeyStorageName(roomId), key);
+  } catch {
+    // A blocked storage area only disables remembering the key across reloads.
+  }
+};
+
 export const App = () => {
   const [initialProject] = useState(() => loadStoredProject());
   const initialScene =
@@ -515,6 +647,7 @@ export const App = () => {
     undo,
     redo,
     reset: resetHistory,
+    replace: replaceScene,
     canUndo,
     canRedo,
   } = useSceneHistory(initialScene);
@@ -601,11 +734,29 @@ export const App = () => {
   );
   const importTargetRef = useRef<ImportTarget>("scene");
   const canvasStageRef = useRef<CanvasStageHandle | null>(null);
+  const guestIdRef = useRef<string>(crypto.randomUUID());
   const manualSaveRef = useRef<() => void>(() => {});
   const autoSaveRef = useRef<() => void>(() => {});
   const startupCheckRef = useRef<() => void>(() => {});
   const startupCheckedRef = useRef(false);
   const fullLayoutRef = useRef<LayoutSnapshot | null>(null);
+  /** Scene + measurer that produced `fullLayoutRef`, for incremental layout reuse. */
+  const fullLayoutSourceRef = useRef<{
+    readonly scene: SceneDocument;
+    readonly measurer: CanvasTextMeasurer;
+  } | null>(null);
+  /** Dark-mode conversions keyed by source object, so unchanged items keep identity. */
+  const darkDisplayCacheRef = useRef<DarkDisplayCache>({
+    nodes: new WeakMap(),
+    edges: new WeakMap(),
+    themes: new WeakMap(),
+    canvases: new WeakMap(),
+  });
+  const darkLayoutCacheRef = useRef<DarkLayoutCache>({
+    measurements: new WeakMap(),
+    nodes: new WeakMap(),
+    edges: new WeakMap(),
+  });
   const saveFileHandleRef = useRef<SaveFileHandle | null>(null);
   const saveFileBaselineRef = useRef<LocalSaveBaseline | null>(null);
   const pendingLocalSaveRef = useRef(false);
@@ -773,32 +924,38 @@ export const App = () => {
   );
   const displayScene = useMemo(() => {
     if (colorMode === "light") return effectiveScene;
-    return {
-      ...effectiveScene,
-      canvas: { ...effectiveScene.canvas, background: DARK_CANVAS },
-      edges: Object.fromEntries(
-        Object.entries(effectiveScene.edges).map(([id, edge]) => [
-          id,
-          {
-            ...edge,
-            style: {
-              ...edge.style,
-              stroke: {
-                ...edge.style.stroke,
-                color: "#d4d4d4",
-              },
-            },
-          },
-        ]),
-      ),
-      theme: DARK_THEME(effectiveScene.theme),
-      nodes: Object.fromEntries(
-        Object.entries(effectiveScene.nodes).map(([id, node]) => [
-          id,
-          darkNodeForDisplay(node),
-        ]),
-      ),
-    };
+    const cache = darkDisplayCacheRef.current;
+    let theme = cache.themes.get(effectiveScene.theme);
+    if (theme === undefined) {
+      theme = DARK_THEME(effectiveScene.theme);
+      cache.themes.set(effectiveScene.theme, theme);
+    }
+    let canvas = cache.canvases.get(effectiveScene.canvas);
+    if (canvas === undefined) {
+      canvas = { ...effectiveScene.canvas, background: DARK_CANVAS };
+      cache.canvases.set(effectiveScene.canvas, canvas);
+    }
+    const edges = Object.fromEntries(
+      Object.entries(effectiveScene.edges).map(([id, edge]) => {
+        let display = cache.edges.get(edge);
+        if (display === undefined) {
+          display = darkEdgeForDisplay(edge);
+          cache.edges.set(edge, display);
+        }
+        return [id, display];
+      }),
+    );
+    const nodes = Object.fromEntries(
+      Object.entries(effectiveScene.nodes).map(([id, node]) => {
+        let display = cache.nodes.get(node);
+        if (display === undefined) {
+          display = darkNodeForDisplay(node);
+          cache.nodes.set(node, display);
+        }
+        return [id, display];
+      }),
+    );
+    return { ...effectiveScene, canvas, edges, theme, nodes };
   }, [colorMode, effectiveScene]);
   const layout = useMemo(() => {
     const hasPreview =
@@ -861,17 +1018,24 @@ export const App = () => {
         rerouteEdges = affected;
       }
     }
-    const next = buildLayoutSnapshot(
-      effectiveScene,
-      measurer,
-      reuseEdges === undefined
-        ? undefined
+    const source = fullLayoutSourceRef.current;
+    const reuseUnchanged =
+      !hasPreview && previous !== null && source !== null && source.measurer === measurer
+        ? { scene: source.scene, layout: previous, measurer }
+        : undefined;
+    const next = buildLayoutSnapshot(effectiveScene, measurer, {
+      ...(reuseEdges === undefined
+        ? {}
         : {
             reuseEdges,
             ...(rerouteEdges === undefined ? {} : { rerouteEdges }),
-          },
-    );
-    if (!lowPerformanceMode || !hasPreview) fullLayoutRef.current = next;
+          }),
+      ...(reuseUnchanged === undefined ? {} : { reuseUnchanged }),
+    });
+    if (!lowPerformanceMode || !hasPreview) {
+      fullLayoutRef.current = next;
+      fullLayoutSourceRef.current = { scene: effectiveScene, measurer };
+    }
     return next;
   }, [
     effectiveScene,
@@ -883,10 +1047,19 @@ export const App = () => {
     rotationPreview,
   ]);
 
-  const displayLayout = useMemo(
-    () => (colorMode === "dark" ? recolorLayoutText(layout) : layout),
-    [colorMode, layout],
-  );
+  const displayLayout = useMemo(() => {
+    if (colorMode === "light") return layout;
+    const cache = darkLayoutCacheRef.current;
+    return {
+      ...layout,
+      nodes: Object.fromEntries(
+        Object.entries(layout.nodes).map(([id, node]) => [id, recolorNodeLayout(node, cache)]),
+      ),
+      edges: Object.fromEntries(
+        Object.entries(layout.edges).map(([id, edge]) => [id, recolorEdgeLayout(edge, cache)]),
+      ),
+    };
+  }, [colorMode, layout]);
   const exportAssets = useMemo(
     () => ({ ...scene.assets, ...assetLibrary }),
     [scene.assets, assetLibrary],
@@ -1028,6 +1201,432 @@ export const App = () => {
     },
     [],
   );
+
+  const collabQueryRoom = useMemo(() => {
+    if (!import.meta.env.DEV) return null;
+    try {
+      return new URLSearchParams(window.location.search).get("collabRoom")?.trim() ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+  const collabEnvUrl = (import.meta.env.VITE_COLLAB_URL as string | undefined)?.trim();
+  const collabUrl = collabEnvUrl !== undefined && collabEnvUrl.length > 0
+    ? collabEnvUrl
+    : import.meta.env.DEV && collabQueryRoom !== null
+      ? "ws://127.0.0.1:1234"
+      : null;
+  const collabRoom = githubBinding !== null
+    ? `${githubBinding.owner}/${githubBinding.repo}@${githubBinding.branch}:${githubBinding.path}`
+    : collabQueryRoom;
+  const collabToken = (import.meta.env.VITE_COLLAB_TOKEN as string | undefined)?.trim() || null;
+  const collabUser = useMemo<CollabUser>(() => {
+    const login = githubSession?.user.login?.trim();
+    const id = login !== undefined && login.length > 0 ? login : `guest:${guestIdRef.current}`;
+    const name = githubSession?.user.name?.trim() || login || "Guest";
+    return {
+      id,
+      name,
+      login: login !== undefined && login.length > 0 ? login : undefined,
+      avatarUrl: githubSession?.user.avatarUrl || undefined,
+      color: collabColor(id),
+    };
+  }, [githubSession?.user.avatarUrl, githubSession?.user.login, githubSession?.user.name]);
+
+  const [collabAuthToken, setCollabAuthToken] = useState<string | null>(null);
+  const collabDevRoom = githubBinding === null ? collabQueryRoom : null;
+  const [collabRoomKey, setCollabRoomKey] = useState<string | null>(() =>
+    loadStoredCollabKey(collabRoom),
+  );
+  const [collabDialogOpen, setCollabDialogOpen] = useState(false);
+  const [collabSuspended, setCollabSuspended] = useState(false);
+  const [viewAsClientId, setViewAsClientId] = useState<string | null>(null);
+  const [collabDevProbe, setCollabDevProbe] = useState<"pending" | "open" | "locked">(
+    collabDevRoom !== null && collabRoomKey === null ? "pending" : "locked",
+  );
+  const collabUnlocked =
+    collabRoom !== null &&
+    collabUrl !== null &&
+    (collabRoomKey !== null || collabDevProbe === "open");
+  const [collabAuthPending, setCollabAuthPending] = useState(
+    githubSession !== null && collabRoom !== null && collabUrl !== null && collabUnlocked,
+  );
+  const [collabAuthBlocked, setCollabAuthBlocked] = useState(false);
+
+  useEffect(() => {
+    setCollabRoomKey(loadStoredCollabKey(collabRoom));
+    setCollabSuspended(false);
+    setViewAsClientId(null);
+  }, [collabRoom]);
+
+  // Promote other tabs of the same project in this browser as soon as one tab
+  // stores (or clears) the administrator key. The storage event only reaches
+  // tabs in the same storage partition; other browsers still need the code.
+  useEffect(() => {
+    if (collabRoom === null) return;
+    const storageKey = collabKeyStorageName(collabRoom);
+    const onStorage = (event: StorageEvent): void => {
+      if (event.storageArea !== window.localStorage || event.key !== storageKey) return;
+      if (event.newValue === null) {
+        setCollabRoomKey(null);
+        setCollabSuspended(false);
+        setViewAsClientId(null);
+        setCollabAuthToken(null);
+        setCollabAuthPending(false);
+        setCollabAuthBlocked(false);
+        return;
+      }
+      if (githubSession !== null) setCollabAuthPending(true);
+      setCollabRoomKey(event.newValue);
+      setCollabAuthBlocked(false);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [collabRoom, githubSession]);
+
+  // Development query-string rooms may connect without a key when the local
+  // server has no administrator code. Ask before opening a socket so a locked
+  // server does not produce a burst of rejected connection attempts.
+  useEffect(() => {
+    if (collabDevRoom === null || collabUrl === null || collabRoomKey !== null) {
+      setCollabDevProbe("locked");
+      return;
+    }
+    let cancelled = false;
+    setCollabDevProbe("pending");
+    const endpoint =
+      `${collaborationHttpUrl(collabUrl).replace(/\/+$/, "")}/unlock` +
+      `?room=${encodeURIComponent(collabDevRoom)}&key=`;
+    void (async () => {
+      try {
+        const response = await fetch(endpoint, { cache: "no-store" });
+        if (cancelled) return;
+        if (!response.ok) {
+          setCollabDevProbe("locked");
+          return;
+        }
+        const payload = await response.json().catch(() => ({})) as {
+          required?: unknown;
+        };
+        setCollabDevProbe(payload.required === false ? "open" : "locked");
+      } catch {
+        if (!cancelled) setCollabDevProbe("locked");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [collabDevRoom, collabRoomKey, collabUrl]);
+
+  useEffect(() => {
+    if (collabRoom === null || collabUrl === null || !collabUnlocked || collabSuspended) {
+      setCollabAuthToken(null);
+      setCollabAuthPending(false);
+      setCollabAuthBlocked(false);
+      return;
+    }
+    if (githubSession === null) {
+      // Local dev rooms can connect without a token. A production room with a
+      // configured COLLAB_SECRET will simply reject this guest connection.
+      setCollabAuthToken(null);
+      setCollabAuthPending(false);
+      setCollabAuthBlocked(false);
+      return;
+    }
+    let cancelled = false;
+    setCollabAuthPending(true);
+    setCollabAuthBlocked(false);
+    void (async () => {
+      try {
+        const response = await fetch("/api/collab/token", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ githubToken: githubSession.token, room: collabRoom }),
+        });
+        if (cancelled) return;
+        if (response.status === 501) {
+          setCollabAuthToken(null);
+          return;
+        }
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({})) as {
+            error?: string;
+            error_description?: string;
+          };
+          setCollabAuthBlocked(true);
+          showToast(
+            `Live collaboration unavailable: ${
+              payload.error_description ?? payload.error ?? `HTTP ${response.status}`
+            }`,
+            "error",
+          );
+          return;
+        }
+        const payload = await response.json() as { token?: unknown };
+        setCollabAuthToken(typeof payload.token === "string" ? payload.token : null);
+      } catch {
+        if (!cancelled) {
+          setCollabAuthBlocked(true);
+          showToast("Could not reach the live collaboration token endpoint.", "error");
+        }
+      } finally {
+        if (!cancelled) setCollabAuthPending(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [collabRoom, collabRoomKey, collabSuspended, collabUnlocked, collabUrl, githubSession, showToast]);
+
+  const applyCollabProject = useCallback(
+    (project: CollabProject) => {
+      const nextScenes = [...project.scenes];
+      setScenes(nextScenes);
+      setAssetLibrary({ ...(project.assets ?? {}) });
+      const active =
+        nextScenes.find((item) => item.id === activeSceneId) ?? nextScenes[0];
+      if (active !== undefined) {
+        replaceScene(active);
+        if (active.id !== activeSceneId) setActiveSceneId(active.id);
+      }
+    },
+    [activeSceneId, replaceScene],
+  );
+
+  const collab = useCollaboration({
+    enabled:
+      collabRoom !== null &&
+      collabUrl !== null &&
+      collabUnlocked &&
+      !collabSuspended &&
+      !collabAuthPending &&
+      !collabAuthBlocked,
+    url: collabUrl,
+    roomId: collabRoom,
+    token: collabAuthToken ?? collabToken,
+    key: collabRoomKey,
+    user: collabUser,
+    scenes,
+    assets: assetLibrary,
+    activeSceneId,
+    onRemoteProject: applyCollabProject,
+    onNotice: (message) => showToast(message),
+    onError: (message) => showToast(`Live collaboration: ${message}`, "error"),
+  });
+
+  const remoteCursors = useMemo(
+    () =>
+      collab.users.flatMap((entry) =>
+        entry.clientId === collab.selfId ||
+        entry.sceneId !== scene.id ||
+        entry.cursor === null
+          ? []
+          : [{
+              id: entry.clientId,
+              name: entry.user.name,
+              color: entry.user.color,
+              x: entry.cursor.x,
+              y: entry.cursor.y,
+            }],
+      ),
+    [collab.selfId, collab.users, scene.id],
+  );
+
+  const remoteMarquees = useMemo(
+    () =>
+      collab.users.flatMap((entry) =>
+        entry.clientId === collab.selfId ||
+        entry.sceneId !== scene.id ||
+        entry.marquee === undefined ||
+        entry.marquee === null
+          ? []
+          : [{
+              id: entry.clientId,
+              color: entry.user.color,
+              rect: entry.marquee,
+            }],
+      ),
+    [collab.selfId, collab.users, scene.id],
+  );
+
+  const handleCursorWorldChange = useCallback(
+    (point: Point | null) => {
+      collab.publishPresence(scene.id, point, null, null);
+    },
+    [collab.publishPresence, scene.id],
+  );
+
+  const handleMarqueeChange = useCallback(
+    (rect: Rect | null) => {
+      // Optional call keeps the local marquee cleanup safe during a stale HMR
+      // module swap; the hook provides this in normal builds.
+      collab.publishMarquee?.(scene.id, rect);
+    },
+    [collab.publishMarquee, scene.id],
+  );
+
+  // Publish the world-space view centre so another participant can follow this
+  // tab without changing their own zoom.
+  useEffect(() => {
+    if (collab.status !== "connected") return;
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+    collab.publishViewCenter?.(
+      scene.id,
+      worldCenterForCamera(camera, viewport, zoom),
+    );
+  }, [camera, collab.publishViewCenter, collab.status, scene.id, viewport, zoom]);
+
+  // Follow the selected collaborator's scene and world-space view centre. The
+  // observer keeps their own zoom; a manual pan clears viewAsClientId.
+  useEffect(() => {
+    if (viewAsClientId === null) return;
+    const target = collab.users.find((entry) => entry.clientId === viewAsClientId);
+    if (target === undefined) {
+      setViewAsClientId(null);
+      return;
+    }
+    if (target.sceneId !== activeSceneId) {
+      const targetScene = scenes.find((item) => item.id === target.sceneId);
+      if (targetScene === undefined) {
+        setViewAsClientId(null);
+        return;
+      }
+      activateSceneDocument(targetScene, false);
+      return;
+    }
+    const center = target.viewCenter;
+    if (center === undefined || center === null) return;
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+    const next = cameraForWorldCenter(center, viewport, zoom);
+    setCamera((current) =>
+      Math.abs(current.x - next.x) < 0.01 && Math.abs(current.y - next.y) < 0.01
+        ? current
+        : next,
+    );
+  }, [
+    activateSceneDocument,
+    activeSceneId,
+    collab.users,
+    scenes,
+    viewAsClientId,
+    viewport,
+    zoom,
+  ]);
+
+  const handleManualPan = useCallback(() => {
+    setViewAsClientId(null);
+  }, []);
+
+  const handleSceneChange = useCallback(
+    (sceneId: string) => {
+      setViewAsClientId(null);
+      loadScene(sceneId);
+    },
+    [loadScene],
+  );
+
+  const handleFit = useCallback(() => {
+    setViewAsClientId(null);
+    setFitNonce((value) => value + 1);
+  }, []);
+
+  // Deliberately undocumented shortcut for the administrator-only live-room
+  // switch. The dialog is not reachable from menus.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (!event.ctrlKey || !event.shiftKey || event.altKey || event.metaKey) return;
+      if (event.key.toLowerCase() !== "l") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setCollabDialogOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
+
+  const handleCollabUnlock = useCallback(
+    async (administratorCode: string): Promise<void> => {
+      if (collabRoom === null || collabUrl === null) {
+        throw new Error("Live collaboration is not configured.");
+      }
+      const key = await deriveRoomKey(administratorCode, collabRoom);
+      const endpoint =
+        `${collaborationHttpUrl(collabUrl).replace(/\/+$/, "")}/unlock` +
+        `?room=${encodeURIComponent(collabRoom)}&key=${encodeURIComponent(key)}`;
+      let response: Response;
+      try {
+        response = await fetch(endpoint, { cache: "no-store" });
+      } catch {
+        throw new Error("Could not reach the live collaboration server.");
+      }
+      if (response.status === 403) {
+        throw new Error("That administrator code was rejected.");
+      }
+      if (!response.ok) {
+        throw new Error(`The collaboration server returned HTTP ${response.status}.`);
+      }
+      const payload = await response.json().catch(() => ({})) as {
+        ok?: unknown;
+        required?: unknown;
+      };
+      if (payload.ok === false) {
+        throw new Error("That administrator code was rejected.");
+      }
+      storeCollabKey(collabRoom, key);
+      if (githubSession !== null) setCollabAuthPending(true);
+      setCollabSuspended(false);
+      setCollabRoomKey(key);
+      setCollabAuthBlocked(false);
+      setCollabDialogOpen(false);
+      showToast(
+        payload.required === false
+          ? "Live collaboration enabled. The room server has no administrator code configured."
+          : "Live collaboration enabled for this project.",
+        payload.required === false ? "warning" : "info",
+      );
+    },
+    [collabRoom, collabUrl, githubSession, showToast],
+  );
+
+  const handleCollabDisable = useCallback(() => {
+    if (collabRoom !== null) storeCollabKey(collabRoom, null);
+    setCollabSuspended(false);
+    setViewAsClientId(null);
+    setCollabRoomKey(null);
+    setCollabAuthToken(null);
+    setCollabAuthBlocked(false);
+    showToast("Live collaboration disabled on this browser.");
+  }, [collabRoom, showToast]);
+
+  const handleCollabLeave = useCallback(() => {
+    setViewAsClientId(null);
+    setCollabSuspended(true);
+    showToast("Left the live session. Use the collaboration indicator to rejoin.");
+  }, [showToast]);
+
+  const handleCollabRejoin = useCallback(() => {
+    setCollabSuspended(false);
+    showToast("Rejoining the live session…");
+  }, [showToast]);
+
+  const handleViewAs = useCallback(
+    (clientId: string) => {
+      const target = collab.users.find((entry) => entry.clientId === clientId);
+      const next = viewAsClientId === clientId ? null : clientId;
+      setViewAsClientId(next);
+      if (next === null) {
+        showToast("Stopped viewing the collaborator.");
+      } else if (target !== undefined) {
+        showToast(`Viewing ${target.user.name}. Pan the canvas to stop.`);
+      }
+    },
+    [collab.users, showToast, viewAsClientId],
+  );
+
+  const handleStopViewAs = useCallback(() => {
+    setViewAsClientId(null);
+    showToast("Stopped viewing the collaborator.");
+  }, [showToast]);
 
   const handleSceneDialogSubmit = useCallback(
     (
@@ -1516,6 +2115,7 @@ export const App = () => {
           remoteProject.scenes,
           remoteProject.activeSceneId,
           autoChoices,
+          baseline?.sceneDigests,
         );
         adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
         return writeLocalSnapshot(
@@ -1561,6 +2161,7 @@ export const App = () => {
               remoteProject.scenes,
               remoteProject.activeSceneId,
               { ...autoChoices, ...choices },
+              baseline?.sceneDigests,
             );
             adoptProjectLocally(merged.scenes, merged.activeSceneId, mergedAssets);
             const saved = await writeLocalSnapshot(
@@ -1722,6 +2323,7 @@ export const App = () => {
       localSnapshot: ProjectSnapshot,
       remoteDigest: string,
       choices: Readonly<Record<string, MergeChoice>>,
+      baseline: Readonly<Record<string, string>> | undefined,
       mode: GitHubSaveMode = "manual",
     ): Promise<void> => {
       const merged = mergeProjectScenes(
@@ -1730,6 +2332,7 @@ export const App = () => {
         remoteProject.scenes,
         remoteProject.activeSceneId,
         choices,
+        baseline,
       );
       const mergedAssets = {
         ...remoteProject.assets,
@@ -1794,6 +2397,7 @@ export const App = () => {
       localSnapshot: ProjectSnapshot,
       remoteDigest: string,
       choices: Readonly<Record<string, MergeChoice>>,
+      baseline?: Readonly<Record<string, string>>,
     ): void => {
       const merged = mergeProjectScenes(
         localSnapshot.scenes,
@@ -1801,6 +2405,7 @@ export const App = () => {
         remoteProject.scenes,
         remoteProject.activeSceneId,
         choices,
+        baseline,
       );
       const mergedAssets = {
         ...remoteProject.assets,
@@ -1980,6 +2585,7 @@ export const App = () => {
             snapshot,
             remoteDigest,
             autoChoices,
+            baseline,
             mode,
           );
         }, 0);
@@ -2026,6 +2632,7 @@ export const App = () => {
               snapshot,
               remoteDigest,
               { ...autoChoices, ...choices },
+              baseline,
             ),
         },
       });
@@ -2300,6 +2907,7 @@ export const App = () => {
   };
   autoSaveRef.current = () => {
     if (githubBinding === null || githubSession === null) return;
+    if (collab.status !== "disabled" && !collab.isLeader) return;
     if (githubBusy !== null) return;
     if (githubDecision !== null || githubDialogOpen) return;
     if (sceneDialog !== null || pendingProjectImport !== null) return;
@@ -2414,6 +3022,7 @@ export const App = () => {
           localSnapshot,
           remoteDigest,
           autoChoices,
+          baseline,
         );
       } catch {
         // A failed background refresh must not block editing or show a toast.
@@ -4458,7 +5067,7 @@ export const App = () => {
         scenes={scenes}
         activeSceneId={activeSceneId}
         canDeleteScene={scenes.length > 1}
-        onSceneChange={loadScene}
+        onSceneChange={handleSceneChange}
         panelVisible={panelVisible}
         onTogglePanel={toggleLayoutPanel}
         codePanelVisible={codePanelVisible}
@@ -4486,7 +5095,7 @@ export const App = () => {
         gridSize={scene.canvas.grid.size}
         onZoomIn={() => zoomBy(1.2)}
         onZoomOut={() => zoomBy(1 / 1.2)}
-        onFit={() => setFitNonce((value) => value + 1)}
+        onFit={handleFit}
         onResetZoom={resetZoom}
         onToggleGrid={() => setGridVisible((value) => !value)}
         onToggleSnap={() => setSnapEnabled((value) => !value)}
@@ -4614,6 +5223,9 @@ export const App = () => {
           onCopySelection={handleCopySelection}
           onPasteSelection={handlePasteSelection}
           imageAssets={assetLibrary}
+          remoteCursors={remoteCursors}
+          remoteMarquees={remoteMarquees}
+          onCursorWorldChange={handleCursorWorldChange}
           onDropImageFiles={(files, world) => {
             void handleDropImageFiles(files, world);
           }}
@@ -4626,6 +5238,7 @@ export const App = () => {
           selectedEdgeIds={selectedEdgeIds}
           selectedActivation={selectedActivation}
           fitNonce={fitNonce}
+          fitOnSceneChange={viewAsClientId === null}
           onSelectNode={selectNode}
           onSelectNodes={selectNodes}
           onToggleNodeSelection={toggleNodeSelection}
@@ -4685,6 +5298,8 @@ export const App = () => {
           onMergeJunction={handleMergeJunction}
           onMoveNodeLabel={handleMoveNodeLabel}
           onViewChange={handleViewChange}
+          onManualPan={handleManualPan}
+          onMarqueeChange={handleMarqueeChange}
           onPreviewFrames={setPreviewFrames}
           onCommitFrames={commitFrames}
           onCommitWireTranslation={commitWireTranslation}
@@ -4741,7 +5356,40 @@ export const App = () => {
           )}
         </span>
         <span className="status-spacer" />
+        {collabRoomKey !== null || collab.status !== "disabled" || collabSuspended ? (
+          <CollaborationStatusMenu
+            users={collab.users}
+            selfId={collab.selfId}
+            leaderId={collab.leaderId}
+            status={collab.status}
+            error={collab.error}
+            activeSceneId={scene.id}
+            scenes={scenes}
+            suspended={collabSuspended}
+            canRejoin={collabRoomKey !== null || collabDevProbe === "open"}
+            canDisable={collabRoomKey !== null}
+            viewAsId={viewAsClientId}
+            onViewAs={handleViewAs}
+            onStopViewAs={handleStopViewAs}
+            onLeave={handleCollabLeave}
+            onRejoin={handleCollabRejoin}
+            onDisable={handleCollabDisable}
+          />
+        ) : null}
       </footer>
+
+      {collabDialogOpen ? (
+        <CollabUnlockDialog
+          room={collabRoom}
+          httpUrl={collabUrl !== null ? collaborationHttpUrl(collabUrl) : null}
+          active={collabUnlocked}
+          canDisable={collabRoomKey !== null}
+          status={collab.status}
+          onClose={() => setCollabDialogOpen(false)}
+          onUnlock={handleCollabUnlock}
+          onDisable={handleCollabDisable}
+        />
+      ) : null}
 
       {sceneDialog !== null ? (
         <SceneDialog

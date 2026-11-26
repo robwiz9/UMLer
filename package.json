@@ -19,9 +19,11 @@
     "test:storage": "node --experimental-strip-types --no-warnings scripts/test-storage.ts",
     "test:cetz": "node --experimental-strip-types --no-warnings scripts/test-cetz.ts",
     "test:digest": "node --experimental-strip-types --no-warnings scripts/test-digest.ts",
+    "test:collab": "node --experimental-strip-types --no-warnings scripts/test-collab.ts",
     "test:oauth": "node scripts/test-oauth-proxy.mjs",
+    "collab:server": "node --env-file-if-exists=.env.local --experimental-strip-types --no-warnings server/collab/server.ts",
     "bootstrap:typst": "node scripts/bootstrap-typst-packages.mjs",
-    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:circuit && npm run test:github && npm run test:storage && npm run test:cetz && npm run test:digest && npm run test:oauth",
+    "check": "npm run typecheck && npm run validate:scene && npm run test:layout && npm run test:persistence && npm run test:clipboard && npm run test:convert && npm run test:circuit && npm run test:github && npm run test:storage && npm run test:cetz && npm run test:digest && npm run test:collab && npm run test:oauth",
     "proof": "typst compile --package-path .typst/packages --format png --ppi 96 docs/assets/notation-proof.typ docs/assets/notation-proof.png"
   },
   "keywords": [
@@ -36,6 +38,7 @@
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.3.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.7"
@@ -44,7 +47,9 @@
     "@myriaddreamin/typst-ts-renderer": "0.7.0",
     "@myriaddreamin/typst-ts-web-compiler": "0.7.0",
     "@myriaddreamin/typst.ts": "^0.7.0",
+    "@vercel/blob": "^2.9.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "ws": "^8.23.0"
   }
 }

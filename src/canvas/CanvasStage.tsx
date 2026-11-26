@@ -105,6 +105,14 @@ interface CanvasStageProps {
   readonly onCopySelection: () => void;
   readonly onPasteSelection: () => void;
   readonly imageAssets: Readonly<Record<string, ImageAsset>>;
+  readonly remoteCursors?: readonly {
+    readonly id: string;
+    readonly name: string;
+    readonly color: string;
+    readonly x: number;
+    readonly y: number;
+  }[];
+  readonly onCursorWorldChange?: (point: Point | null) => void;
   readonly onDropImageFiles: (files: readonly File[], world: Point) => void;
   readonly onAssignImageToNode: (nodeId: string, file: File) => Promise<void>;
   readonly onUseImageAsset: (nodeId: string, assetId: string) => void;
@@ -118,6 +126,8 @@ interface CanvasStageProps {
     readonly activationId: ActivationId;
   } | null;
   readonly fitNonce: number;
+  /** Suppress the automatic fit when the active scene changes (view-as mode). */
+  readonly fitOnSceneChange?: boolean;
   readonly onSelectNode: (nodeId: string | null) => void;
   readonly onSelectNodes: (nodeIds: readonly string[], primary?: string | null) => void;
   readonly onToggleNodeSelection: (nodeId: string) => void;
@@ -229,6 +239,15 @@ interface CanvasStageProps {
   readonly onMergeJunction: (nodeId: string) => void;
   readonly onMoveNodeLabel: (nodeId: string, offset: Point) => void;
   readonly onViewChange: (camera: Camera, zoom: number) => void;
+  /** Called when the user starts a manual pan, to release follow/view-as mode. */
+  readonly onManualPan?: () => void;
+  /** Publish or clear the local drag-to-select rectangle for other clients. */
+  readonly onMarqueeChange?: (rect: Rect | null) => void;
+  readonly remoteMarquees?: readonly {
+    readonly id: string;
+    readonly color: string;
+    readonly rect: Rect;
+  }[];
   readonly onPreviewFrames: (frames: Readonly<Record<string, Rect>>) => void;
   readonly onCommitFrames: (frames: Readonly<Record<string, Rect>>) => void;
   readonly onCommitWireTranslation: (
@@ -1214,6 +1233,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onCopySelection,
   onPasteSelection,
   imageAssets,
+  remoteCursors = [],
+  remoteMarquees = [],
+  onCursorWorldChange,
   onDropImageFiles,
   onAssignImageToNode,
   onUseImageAsset,
@@ -1224,6 +1246,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   selectedEdgeIds,
   selectedActivation,
   fitNonce,
+  fitOnSceneChange = true,
   onSelectNode,
   onSelectNodes,
   onToggleNodeSelection,
@@ -1282,6 +1305,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onMergeJunction,
   onMoveNodeLabel,
   onViewChange,
+  onManualPan,
+  onMarqueeChange,
   onPreviewFrames,
   onCommitFrames,
   onCommitWireTranslation,
@@ -1540,6 +1565,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     if (viewport.width < 1 || viewport.height < 1) return;
     const sceneChanged = lastFittedSceneIdRef.current !== scene.id;
     lastFittedSceneIdRef.current = scene.id;
+    if (sceneChanged && !fitOnSceneChange) return;
     const defaultZoom =
       sceneChanged && scene.meta.diagramKind === "circuit" ? 2 : undefined;
     const fitted = fitBounds(layoutRef.current.fitBounds, viewport, 64, defaultZoom);
@@ -1712,6 +1738,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       };
       setPanning(false);
       setMarquee(null);
+      onMarqueeChange?.(null);
       onSelectActivation(null);
       setActivationDraft(null);
       setActiveEndpoint(null);
@@ -1735,6 +1762,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     clearLongPress();
     interactionRef.current = null;
     setMarquee(null);
+    onMarqueeChange?.(null);
     setDraftEdge(null);
     setPanning(false);
     const [first, second] = [...activeTouchPointersRef.current.values()];
@@ -1768,6 +1796,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   const beginPan = (event: React.PointerEvent<SVGElement>): void => {
     const svg = svgRef.current;
     if (svg === null) return;
+    onManualPan?.();
     const screen = pointFromEvent(event, svg);
     panMovedRef.current = false;
     interactionRef.current = {
@@ -2367,6 +2396,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
       moved: false,
     };
     setMarquee(null);
+    onMarqueeChange?.(null);
     try {
       svg.setPointerCapture(event.pointerId);
     } catch {
@@ -3375,6 +3405,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         setSequenceLifelineSelection(nextLifelines);
         onSelectActivation(null);
         setMarquee(null);
+        onMarqueeChange?.(null);
         interactionRef.current = null;
         setPanning(false);
         const pointerId = interaction.pointerId;
@@ -3418,6 +3449,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
         onSelectEdge(null);
       }
       setMarquee(null);
+      onMarqueeChange?.(null);
       interactionRef.current = null;
       setPanning(false);
       const pointerId = interaction.pointerId;
@@ -3946,6 +3978,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
     lastPointerScreenRef.current = screen;
     const world = screenToWorld(screen, cameraRef.current, zoomRef.current);
     setCursorWorld(world);
+    onCursorWorldChange?.(world);
 
     if (mobileMode && event.pointerType === "touch") {
       activeTouchPointersRef.current.set(event.pointerId, screen);
@@ -4056,7 +4089,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           zoomRef.current > 3;
       interaction.moved = moved;
       interaction.currentWorld = world;
-      setMarquee(moved ? rectFromPoints(interaction.startWorld, world) : null);
+      const rect = moved ? rectFromPoints(interaction.startWorld, world) : null;
+      setMarquee(rect);
+      onMarqueeChange?.(rect);
       return;
     }
 
@@ -5162,6 +5197,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
           lastPointerScreenRef.current = null;
           setHoveredPort(null);
           setHoveredObjectNodeId(null);
+          onCursorWorldChange?.(null);
         }}
         onContextMenu={handleContextMenu}
         onAuxClick={(event) => {
@@ -5258,6 +5294,42 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
                 }
                 onActivationPointerDown={handleActivationPointerDown}
               />
+            );
+          })}
+          {remoteCursors.map((cursor) => {
+            const labelWidth = Math.max(30, cursor.name.length * 5.4) / zoom;
+            return (
+              <g key={cursor.id} pointerEvents="none">
+                <circle
+                  cx={cursor.x}
+                  cy={cursor.y}
+                  r={4 / zoom}
+                  fill={cursor.color}
+                  stroke="white"
+                  strokeWidth={1.4 / zoom}
+                />
+                <g transform={`translate(${cursor.x + 7 / zoom} ${cursor.y - 7 / zoom})`}>
+                  <rect
+                    x={0}
+                    y={-11 / zoom}
+                    width={labelWidth}
+                    height={13 / zoom}
+                    rx={3 / zoom}
+                    fill={cursor.color}
+                    fillOpacity={0.92}
+                  />
+                  <text
+                    x={3.5 / zoom}
+                    y={-2.6 / zoom}
+                    fontFamily="Segoe UI, sans-serif"
+                    fontSize={8.5 / zoom}
+                    fontWeight={600}
+                    fill="white"
+                  >
+                    {cursor.name}
+                  </text>
+                </g>
+              </g>
             );
           })}
           {selectedActivationFrame !== null ? (
@@ -5778,6 +5850,27 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               />
             </g>
           ) : null}
+          {remoteMarquees.map((entry) => {
+            const { rect } = entry;
+            if (rect.width <= 0 || rect.height <= 0) return null;
+            return (
+              <g key={`remote-marquee-${entry.id}`} pointerEvents="none">
+                <rect
+                  className="remote-marquee"
+                  x={rect.x}
+                  y={rect.y}
+                  width={rect.width}
+                  height={rect.height}
+                  fill={entry.color}
+                  fillOpacity={0.08}
+                  stroke={entry.color}
+                  strokeWidth={1 / zoom}
+                  strokeDasharray={`${4 / zoom} ${3 / zoom}`}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </g>
+            );
+          })}
           {marquee !== null ? (
             <rect
               x={marquee.x}

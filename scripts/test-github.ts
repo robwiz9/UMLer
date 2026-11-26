@@ -301,6 +301,98 @@ assert(
   "edits to the same scenes on both sides should produce two conflicts",
 );
 
+// Scene deletion is a first-class project change when a last-sync baseline is
+// available. This is what stops a remote deletion from being re-added by a
+// browser tab that still has the old scene locally.
+const deletionBaseline = sceneDigestMap(scenes);
+assert(
+  conflictingScenes([first, second, third], [first, third], deletionBaseline).length === 0,
+  "a one-sided deletion is not a both-present conflict",
+);
+const mergedRemoteDeletion = mergeProjectScenes(
+  [first, second, third],
+  second.id,
+  [first, third],
+  third.id,
+  {},
+  deletionBaseline,
+);
+assert(
+  !mergedRemoteDeletion.scenes.some((scene) => scene.id === second.id),
+  "an unchanged scene deleted remotely must be removed locally",
+);
+assert(mergedRemoteDeletion.scenes.length === 2, "remote deletion should reduce the merged scene count");
+assert(
+  mergedRemoteDeletion.activeSceneId === third.id,
+  "a deleted active scene should fall back to the remote active scene",
+);
+
+const mergedLocalDeletion = mergeProjectScenes(
+  [first, third],
+  first.id,
+  [first, second, third],
+  third.id,
+  {},
+  deletionBaseline,
+);
+assert(
+  !mergedLocalDeletion.scenes.some((scene) => scene.id === second.id),
+  "an unchanged scene deleted locally must not be re-added from remote",
+);
+assert(mergedLocalDeletion.scenes.length === 2, "local deletion should reduce the merged scene count");
+
+const locallyEditedSecond = {
+  ...second,
+  revision: second.revision + 1,
+  meta: { ...second.meta, updatedAt: "2026-01-06T00:00:00.000Z" },
+};
+const mergedEditAgainstRemoteDeletion = mergeProjectScenes(
+  [first, locallyEditedSecond, third],
+  first.id,
+  [first, third],
+  first.id,
+  {},
+  deletionBaseline,
+);
+assert(
+  mergedEditAgainstRemoteDeletion.scenes.some(
+    (scene) => scene.id === second.id && scene.revision === locallyEditedSecond.revision,
+  ),
+  "a locally edited scene survives a remote deletion",
+);
+
+const remotelyEditedSecond = {
+  ...second,
+  revision: second.revision + 2,
+  meta: { ...second.meta, updatedAt: "2026-01-07T00:00:00.000Z" },
+};
+const mergedEditAgainstLocalDeletion = mergeProjectScenes(
+  [first, third],
+  first.id,
+  [first, remotelyEditedSecond, third],
+  first.id,
+  {},
+  deletionBaseline,
+);
+assert(
+  mergedEditAgainstLocalDeletion.scenes.some(
+    (scene) => scene.id === second.id && scene.revision === remotelyEditedSecond.revision,
+  ),
+  "a remotely edited scene survives a local deletion",
+);
+
+const mergedWithoutBaseline = mergeProjectScenes(
+  [first],
+  first.id,
+  [first, second],
+  first.id,
+  {},
+);
+assert(
+  mergedWithoutBaseline.scenes.some((scene) => scene.id === second.id),
+  "without a baseline, remote-only scenes keep the old union behaviour",
+);
+
 const digest = projectDigest(scenes, first.id);
 assert(digest === projectDigest(scenes, first.id), "digest should be stable");
 assert(

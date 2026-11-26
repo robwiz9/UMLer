@@ -2573,7 +2573,102 @@ export interface BuildLayoutOptions {
   readonly reuseEdges?: Readonly<Record<string, EdgeLayout>>;
   /** Edge ids that must be recomputed even when `reuseEdges` is supplied. */
   readonly rerouteEdges?: ReadonlySet<string>;
+  /**
+   * Previous pass plus the scene it was measured from. Node layouts are reused
+   * for unchanged nodes, and connector geometry is reused when nothing that
+   * affects routing changed (for example editing row text inside a fixed
+   * frame). Purely a performance hint: the result is identical to a full pass.
+   */
+  readonly reuseUnchanged?: {
+    readonly scene: SceneDocument;
+    readonly layout: LayoutSnapshot;
+    readonly measurer: TextMeasurer;
+  };
 }
+
+const samePointValue = (a: Point, b: Point): boolean =>
+  a.x === b.x && a.y === b.y;
+
+const sameRectValue = (a: Rect, b: Rect): boolean =>
+  a.x === b.x &&
+  a.y === b.y &&
+  a.width === b.width &&
+  a.height === b.height;
+
+const sameEdgeObjects = (a: SceneDocument, b: SceneDocument): boolean => {
+  const aIds = Object.keys(a.edges);
+  const bIds = Object.keys(b.edges);
+  if (aIds.length !== bIds.length) return false;
+  for (let index = 0; index < aIds.length; index += 1) {
+    const edgeId = aIds[index];
+    if (edgeId === undefined || edgeId !== bIds[index]) return false;
+    if (a.edges[edgeId] !== b.edges[edgeId]) return false;
+  }
+  return true;
+};
+
+/**
+ * Everything the router reads from a node layout. Text measurements are
+ * deliberately excluded: rewording a row cannot move a connector.
+ */
+const sameRoutingGeometry = (a: NodeLayout, b: NodeLayout): boolean => {
+  if (a.kind !== b.kind) return false;
+  if (!sameRectValue(a.frame, b.frame) || !sameRectValue(a.bounds, b.bounds)) return false;
+  const aLabelFrame = "labelFrame" in a ? a.labelFrame : undefined;
+  const bLabelFrame = "labelFrame" in b ? b.labelFrame : undefined;
+  if (aLabelFrame === undefined || bLabelFrame === undefined) {
+    if (aLabelFrame !== bLabelFrame) return false;
+  } else if (!sameRectValue(aLabelFrame, bLabelFrame)) {
+    return false;
+  }
+  if (a.ports.length !== b.ports.length) return false;
+  for (let index = 0; index < a.ports.length; index += 1) {
+    const left = a.ports[index];
+    const right = b.ports[index];
+    if (
+      left === undefined ||
+      right === undefined ||
+      left.id !== right.id ||
+      !samePointValue(left.point, right.point) ||
+      !samePointValue(left.normal, right.normal)
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/**
+ * True when node frames/ports, connector inputs and the scene-wide routing
+ * settings all match, so the previous route map is still valid.
+ */
+const canReuseRoutes = (
+  previousScene: SceneDocument,
+  previousNodes: Readonly<Record<string, NodeLayout>>,
+  scene: SceneDocument,
+  nodes: Readonly<Record<string, NodeLayout>>,
+): boolean => {
+  if (
+    previousScene.id !== scene.id ||
+    previousScene.meta.diagramKind !== scene.meta.diagramKind ||
+    previousScene.theme !== scene.theme ||
+    previousScene.circuit !== scene.circuit ||
+    previousScene.canvas.grid.size !== scene.canvas.grid.size ||
+    !sameEdgeObjects(previousScene, scene)
+  ) {
+    return false;
+  }
+  const previousIds = Object.keys(previousNodes);
+  const nextIds = Object.keys(nodes);
+  if (previousIds.length !== nextIds.length) return false;
+  for (const nodeId of nextIds) {
+    const before = previousNodes[nodeId];
+    const after = nodes[nodeId];
+    if (before === undefined || after === undefined) return false;
+    if (before !== after && !sameRoutingGeometry(before, after)) return false;
+  }
+  return true;
+};
 
 export const buildLayoutSnapshot = (
   scene: SceneDocument,
@@ -2581,13 +2676,42 @@ export const buildLayoutSnapshot = (
   options: BuildLayoutOptions = {},
 ): LayoutSnapshot => {
   const ports = new Map<PortId, PortGeometry>();
+  const reuse = options.reuseUnchanged;
+  const canReuseNodes =
+    reuse !== undefined &&
+    reuse.measurer === measurer &&
+    reuse.scene.id === scene.id &&
+    reuse.scene.canvas.grid.size === scene.canvas.grid.size &&
+    reuse.scene.circuit === scene.circuit &&
+    sameEdgeObjects(reuse.scene, scene);
   const nodeLayouts = Object.fromEntries(
-    Object.values(scene.nodes).map((node) => [node.id, measureNode(node, scene, measurer, ports)]),
+    Object.values(scene.nodes).map((node) => {
+      const previousLayout = canReuseNodes && reuse !== undefined
+        ? reuse.layout.nodes[node.id]
+        : undefined;
+      const previousNode = canReuseNodes && reuse !== undefined
+        ? reuse.scene.nodes[node.id]
+        : undefined;
+      const layout = previousLayout !== undefined && previousNode === node
+        ? previousLayout
+        : measureNode(node, scene, measurer, ports);
+      if (layout === previousLayout) {
+        // A reused layout skips measureNode, so re-register its ports for the
+        // connector resolvers below.
+        for (const port of layout.ports) ports.set(port.id, port);
+      }
+      return [node.id, layout];
+    }),
   ) as Readonly<Record<string, NodeLayout>>;
   const portRecord = Object.fromEntries(ports) as Readonly<Record<string, PortGeometry>>;
+  const reuseEdges = options.reuseEdges ?? (
+    reuse !== undefined && canReuseRoutes(reuse.scene, reuse.layout.nodes, scene, nodeLayouts)
+      ? reuse.layout.edges
+      : undefined
+  );
   const partialReroute =
-    options.reuseEdges !== undefined && options.rerouteEdges !== undefined;
-  const computesEdges = options.reuseEdges === undefined || partialReroute;
+    reuseEdges !== undefined && options.rerouteEdges !== undefined;
+  const computesEdges = reuseEdges === undefined || partialReroute;
   const labelObstacles = computesEdges
     ? Object.values(nodeLayouts)
         .filter((node) => node.kind !== "frame" && node.kind !== "lifeline")
@@ -2602,13 +2726,13 @@ export const buildLayoutSnapshot = (
           return frames;
         })
     : [];
-  const placedLabelFrames: Rect[] = options.reuseEdges === undefined
+  const placedLabelFrames: Rect[] = reuseEdges === undefined
     ? []
-    : Object.values(options.reuseEdges)
+    : Object.values(reuseEdges)
         .filter((edge) => options.rerouteEdges?.has(edge.edgeId) !== true)
         .flatMap((edge) => edge.labels.map((label) => label.frame));
-  const routedEdgeLayouts = options.reuseEdges !== undefined && !partialReroute
-    ? options.reuseEdges
+  const routedEdgeLayouts = reuseEdges !== undefined && !partialReroute
+    ? reuseEdges
     : computeEdges(
         scene,
         nodeLayouts,
@@ -2616,14 +2740,14 @@ export const buildLayoutSnapshot = (
         measurer,
         labelObstacles,
         placedLabelFrames,
-        options.reuseEdges,
+        reuseEdges,
         options.rerouteEdges,
       );
 
   let edgeLayouts: Readonly<Record<string, EdgeLayout>>;
   let edgeCrossingCount = 0;
-  if (options.reuseEdges !== undefined && !partialReroute) {
-    edgeLayouts = options.reuseEdges;
+  if (reuseEdges !== undefined && !partialReroute) {
+    edgeLayouts = reuseEdges;
     edgeCrossingCount = Object.values(edgeLayouts).reduce(
       (sum, edge) => sum + (edge.bridges?.length ?? 0),
       0,

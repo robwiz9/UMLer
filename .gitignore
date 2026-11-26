@@ -5,6 +5,7 @@ dist/
 .research/
 .chrome-profile/
 .tmp*
+.collab-cache/
 cetz_dump.txt
 *.log
 .env.*.local

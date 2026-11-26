@@ -1,0 +1,3049 @@
+{
+  "format": "umler.scene",
+  "version": 1,
+  "exportedAt": "2026-11-25T21:26:55.345Z",
+  "scene": {
+    "schemaVersion": "umler.scene/1",
+    "id": "scene_bd402ece",
+    "revision": 1185,
+    "meta": {
+      "title": "ERD",
+      "diagramKind": "er",
+      "createdAt": "2026-11-20T11:34:08.570Z",
+      "updatedAt": "2026-11-25T21:26:01.733Z",
+      "appVersion": "0.1.0-step1",
+      "description": "Step 1 schema fixture"
+    },
+    "canvas": {
+      "grid": {
+        "size": 8,
+        "visible": true,
+        "majorEvery": 4,
+        "snapNodes": true,
+        "snapPorts": true,
+        "snapWaypoints": true,
+        "snapLabels": false,
+        "labelStep": 1
+      },
+      "background": "#ffffff",
+      "exportPadding": 18,
+      "minZoom": 0.2,
+      "maxZoom": 4,
+      "initialZoom": 1
+    },
+    "layout": {
+      "engine": "sugiyama",
+      "direction": "TB",
+      "spacing": "wide",
+      "rankGap": 126,
+      "nodeGap": 72,
+      "edgeGap": 48,
+      "respectLocks": true,
+      "reduceCrossings": true,
+      "maxIterations": 12
+    },
+    "theme": {
+      "colors": {
+        "ink": "#111111",
+        "muted": "#555555",
+        "canvas": "#ffffff",
+        "grid": "#e8e5df",
+        "gridMajor": "#d7d2c8",
+        "selection": "#2563eb",
+        "port": "#0f766e",
+        "portActive": "#0d9488",
+        "warning": "#b45309"
+      },
+      "table": {
+        "fill": {
+          "color": "#ffffff"
+        },
+        "stroke": {
+          "color": "#111111",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "text": {
+          "fontFamily": "Latin Modern Roman",
+          "fontSize": 12,
+          "color": "#111111",
+          "weight": 400
+        },
+        "headerFill": {
+          "color": "#f3f1eb"
+        },
+        "headerText": {
+          "fontFamily": "Latin Modern Roman",
+          "fontSize": 13,
+          "color": "#111111",
+          "weight": 700
+        },
+        "divider": {
+          "color": "#111111",
+          "width": 0.5,
+          "pattern": "solid"
+        },
+        "cornerRadius": 0,
+        "paddingX": 7,
+        "headerHeight": 29,
+        "rowHeight": 20,
+        "rowPaddingY": 2,
+        "sectionGap": 2
+      },
+      "shape": {
+        "fill": {
+          "color": "#ffffff"
+        },
+        "stroke": {
+          "color": "#111111",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "text": {
+          "fontFamily": "Latin Modern Roman",
+          "fontSize": 12,
+          "color": "#111111",
+          "weight": 400
+        },
+        "cornerRadius": 0,
+        "padding": 6
+      },
+      "edge": {
+        "stroke": {
+          "color": "#111111",
+          "width": 0.75,
+          "pattern": "solid"
+        },
+        "labelText": {
+          "fontFamily": "Latin Modern Roman",
+          "fontSize": 11,
+          "color": "#111111",
+          "weight": 400
+        },
+        "labelFill": {
+          "color": "#ffffff"
+        },
+        "labelPadding": 2,
+        "labelInset": 18,
+        "arrowScale": 1
+      }
+    },
+    "nodes": {
+      "entity_9f7c258e": {
+        "id": "entity_9f7c258e",
+        "name": "Umělecké dílo",
+        "frame": {
+          "x": -264,
+          "y": 1136,
+          "width": 144,
+          "height": 117
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_a179bccb",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_b29021c2",
+                "kind": "attribute",
+                "name": "id",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_ad6b3cb8",
+                "kind": "attribute",
+                "name": "název",
+                "constraints": []
+              },
+              {
+                "id": "row_78b9895e",
+                "kind": "attribute",
+                "name": "typ",
+                "constraints": []
+              },
+              {
+                "id": "row_2d29cbf1",
+                "kind": "attribute",
+                "name": "klíčová slova",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_f0d5771c": {
+        "id": "entity_f0d5771c",
+        "name": "Vystavení",
+        "frame": {
+          "x": -200,
+          "y": 968,
+          "width": 99,
+          "height": 99
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {
+          "weak": true
+        },
+        "sections": [
+          {
+            "id": "section_502702ae",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_a8a58b5b",
+                "kind": "attribute",
+                "name": "pořadí",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_a2656018",
+                "kind": "attribute",
+                "name": "od"
+              },
+              {
+                "id": "row_312fb506",
+                "kind": "attribute",
+                "name": "do",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_087eba68": {
+        "id": "entity_087eba68",
+        "name": "Expozice",
+        "frame": {
+          "x": -88,
+          "y": 1136,
+          "width": 99,
+          "height": 117
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_6a7a85c5",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_c7f48e6b",
+                "kind": "attribute",
+                "name": "id",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_6ebd5eb6",
+                "kind": "attribute",
+                "name": "název",
+                "constraints": []
+              },
+              {
+                "id": "row_63e2ade3",
+                "kind": "attribute",
+                "name": "od",
+                "constraints": []
+              },
+              {
+                "id": "row_852f3ef1",
+                "kind": "attribute",
+                "name": "do",
+                "constraints": []
+              },
+              {
+                "id": "row_1f4c05ba",
+                "kind": "attribute",
+                "name": "typ",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_0f1187ea": {
+        "id": "entity_0f1187ea",
+        "name": "Pronájem",
+        "frame": {
+          "x": 0,
+          "y": 968,
+          "width": 90,
+          "height": 121.33333333333333
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_f372b18e",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_b621668e",
+                "kind": "attribute",
+                "name": "id",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_c25a3c94",
+                "kind": "attribute",
+                "name": "od",
+                "constraints": []
+              },
+              {
+                "id": "row_e28f9974",
+                "kind": "attribute",
+                "name": "do",
+                "constraints": []
+              },
+              {
+                "id": "row_21f28ce9",
+                "kind": "attribute",
+                "name": "stav",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_552fb4a1": {
+        "id": "entity_552fb4a1",
+        "name": "Poplatek",
+        "frame": {
+          "x": 40,
+          "y": 1136,
+          "width": 160,
+          "height": 120
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_4f86bf6f",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_1dc5b1b8",
+                "kind": "attribute",
+                "name": "identifikátor platby",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_7c6a6618",
+                "kind": "attribute",
+                "name": "stav",
+                "constraints": []
+              },
+              {
+                "id": "row_c5659159",
+                "kind": "attribute",
+                "name": "částka",
+                "constraints": []
+              },
+              {
+                "id": "row_49a10bbd",
+                "kind": "attribute",
+                "name": "datum",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_5b674fd1": {
+        "id": "entity_5b674fd1",
+        "name": "Místnost",
+        "frame": {
+          "x": -256,
+          "y": 592,
+          "width": 112,
+          "height": 88
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_d6a02d94",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_529334bd",
+                "kind": "attribute",
+                "name": "číslo",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_1083988f",
+                "kind": "attribute",
+                "name": "poschodí"
+              },
+              {
+                "id": "row_34714a1e",
+                "kind": "attribute",
+                "name": "název",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_7c9328ed": {
+        "id": "entity_7c9328ed",
+        "name": "Expoziční místo",
+        "frame": {
+          "x": -288,
+          "y": 744,
+          "width": 152,
+          "height": 112
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {
+          "weak": true
+        },
+        "sections": [
+          {
+            "id": "section_c2e1c3a2",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_549ed635",
+                "kind": "attribute",
+                "name": "lokace",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_49d3e563",
+                "kind": "attribute",
+                "name": "velikost"
+              },
+              {
+                "id": "row_9e83a968",
+                "kind": "attribute",
+                "name": "cena",
+                "constraints": []
+              },
+              {
+                "id": "row_28a9d640",
+                "kind": "attribute",
+                "name": "typ",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_f9481610": {
+        "id": "entity_f9481610",
+        "name": "Agentura",
+        "frame": {
+          "x": 126,
+          "y": 997.5,
+          "width": 99,
+          "height": 75
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_c0e150a2",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_0f40e641",
+                "kind": "attribute",
+                "name": "IČO",
+                "constraints": []
+              },
+              {
+                "id": "row_5cf9c127",
+                "kind": "attribute",
+                "name": "název",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_c37e3854": {
+        "id": "entity_c37e3854",
+        "name": "Subjekt",
+        "frame": {
+          "x": -64,
+          "y": 808,
+          "width": 160,
+          "height": 104
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_3b2282cb",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_16434914",
+                "kind": "attribute",
+                "name": "identifikátor uživatele",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_27b26a97",
+                "kind": "attribute",
+                "name": "datum registrace",
+                "constraints": []
+              },
+              {
+                "id": "row_37c7e5c5",
+                "kind": "attribute",
+                "name": "adresa",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "entity_cf327be5": {
+        "id": "entity_cf327be5",
+        "name": "Osoba",
+        "frame": {
+          "x": 128,
+          "y": 744,
+          "width": 112,
+          "height": 112
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_0de4cea3",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_dfdf4e0d",
+                "kind": "attribute",
+                "name": "rodné číslo",
+                "constraints": []
+              },
+              {
+                "id": "row_d7a1e1e5",
+                "kind": "attribute",
+                "name": "jméno",
+                "constraints": []
+              },
+              {
+                "id": "row_3b3274a1",
+                "kind": "attribute",
+                "name": "příjmení",
+                "constraints": []
+              },
+              {
+                "id": "row_0c454e5a",
+                "kind": "attribute",
+                "name": "datum narození",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "node_3280d8fa": {
+        "id": "node_3280d8fa",
+        "name": "Umělec",
+        "frame": {
+          "x": 128,
+          "y": 640,
+          "width": 104,
+          "height": 72
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_0de4cea3",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_bdb3f4de",
+                "kind": "attribute",
+                "name": "umělecké jméno",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "node_a4977db3": {
+        "id": "node_a4977db3",
+        "name": "Zaměstnanec",
+        "frame": {
+          "x": -64,
+          "y": 744,
+          "width": 160,
+          "height": 32
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_0de4cea3",
+            "role": "attributes",
+            "rows": []
+          }
+        ]
+      },
+      "node_d5f43e64": {
+        "id": "node_d5f43e64",
+        "name": "Vybavení",
+        "frame": {
+          "x": -304,
+          "y": 968,
+          "width": 90,
+          "height": 63
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "table",
+        "tableKind": "entity",
+        "header": {},
+        "sections": [
+          {
+            "id": "section_d6a02d94",
+            "role": "attributes",
+            "rows": [
+              {
+                "id": "row_529334bd",
+                "kind": "attribute",
+                "name": "název",
+                "constraints": [
+                  "PK"
+                ]
+              },
+              {
+                "id": "row_34714a1e",
+                "kind": "attribute",
+                "name": "parametry",
+                "constraints": []
+              }
+            ]
+          }
+        ]
+      },
+      "relation_attribute_a433a852": {
+        "id": "relation_attribute_a433a852",
+        "name": "je vybaveno",
+        "frame": {
+          "x": -352,
+          "y": 878,
+          "width": 96,
+          "height": 48
+        },
+        "z": 3,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "headerFill": {
+            "color": "#f3f1eb"
+          },
+          "headerText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 13,
+            "color": "#111111",
+            "weight": 700
+          },
+          "divider": {
+            "color": "#111111",
+            "width": 0.5,
+            "pattern": "solid"
+          },
+          "cornerRadius": 0,
+          "paddingX": 7,
+          "headerHeight": 29,
+          "rowHeight": 20,
+          "rowPaddingY": 2,
+          "sectionGap": 2
+        },
+        "kind": "relationAttribute",
+        "rows": [
+          {
+            "id": "row_81275db1",
+            "kind": "attribute",
+            "name": "počet",
+            "constraints": []
+          }
+        ]
+      },
+      "reference_fa728b86": {
+        "id": "reference_fa728b86",
+        "name": "er-od-do",
+        "frame": {
+          "x": -54,
+          "y": 1058,
+          "width": 26,
+          "height": 26
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#0000ff",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "kind": "referencePoint",
+        "referenceId": "er-od-do",
+        "referenceVariant": "tdt",
+        "referenceIndex": 1,
+        "labelSize": 9,
+        "referToId": "er-od-do-explain",
+        "textStyle": {
+          "color": "#0000ff"
+        }
+      },
+      "reference_b576c23e": {
+        "id": "reference_b576c23e",
+        "name": "er-osoby",
+        "frame": {
+          "x": 113,
+          "y": 876,
+          "width": 26,
+          "height": 26
+        },
+        "z": 2,
+        "locked": false,
+        "visible": true,
+        "style": {
+          "fill": {
+            "color": "#ffffff"
+          },
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "text": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 12,
+            "color": "#111111",
+            "weight": 400
+          },
+          "cornerRadius": 0,
+          "padding": 6
+        },
+        "kind": "referencePoint",
+        "referenceId": "er-osoby",
+        "referenceVariant": "tdt",
+        "referenceIndex": 2,
+        "labelSize": 9,
+        "referToId": "er-"
+      }
+    },
+    "edges": {
+      "edge_406271a6": {
+        "id": "edge_406271a6",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_9f7c258e",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_f0d5771c",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_520195ca",
+            "zone": "target",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": -13.296880128815502,
+              "y": 10.353278080500104
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_3b910e25",
+            "zone": "source",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_1fc71fc1",
+            "zone": "center",
+            "text": "je vystaveno",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": -36.860681254755434,
+              "y": -0.597007611935851
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": []
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_26841656": {
+        "id": "edge_26841656",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_087eba68",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_f0d5771c",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_d3099cf4",
+            "zone": "target",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": -15.908121523887957,
+              "y": 11.13102650967835
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_6cb915e6",
+            "zone": "source",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": -8.567039987615843,
+              "y": -9.268552852490984
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_b85cf2ce",
+            "zone": "center",
+            "text": "je v rámci",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 31.19766825712947,
+              "y": 9.769957047245953
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": []
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_ec23187d": {
+        "id": "edge_ec23187d",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_f0d5771c",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_0f1187ea",
+          "port": {
+            "kind": "perimeter",
+            "side": "west"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_2478ccd5",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_96d229f6",
+            "zone": "target",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_84ae33e4",
+            "zone": "center",
+            "text": "« identifies »",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 0,
+              "y": 13.077651885385649
+            },
+            "locked": true,
+            "visible": true,
+            "textStyle": {
+              "italic": true
+            }
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "dashed"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_a38dc1d5": {
+        "id": "edge_a38dc1d5",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_552fb4a1",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_0f1187ea",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_0d969075",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 14.314731150198355,
+              "y": -9.749251902983815
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_682366e0",
+            "zone": "target",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 8.595882780184567,
+              "y": 9.547840099540508
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_1f1ae4d6",
+            "zone": "center",
+            "text": "je doplacen",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 47.51436565232831,
+              "y": -2.1889635567288224
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_73b1d910": {
+        "id": "edge_73b1d910",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_7c9328ed",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_5b674fd1",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_5d1518ff",
+            "zone": "source",
+            "text": "1..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": -15.374548769759741,
+              "y": -9.831657461491886
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_78bbfbdf",
+            "zone": "target",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": -12.420501678065904,
+              "y": 13.248729807219775
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_6143fdac",
+            "zone": "center",
+            "text": "« identifies »",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": -42.56511320529356,
+              "y": -0.031077197322474603
+            },
+            "locked": true,
+            "visible": true,
+            "textStyle": {
+              "italic": true
+            }
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "dashed"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_b0265d88": {
+        "id": "edge_b0265d88",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_0f1187ea",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_7c9328ed",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_95065e1b",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_d85c6142",
+            "zone": "target",
+            "text": "1..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_78f6f785",
+            "zone": "center",
+            "text": "rezervuje",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 28.422105152538244,
+              "y": 7.371327829003235
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [
+            {
+              "id": "waypoint_4dad366c",
+              "point": {
+                "x": -80,
+                "y": 848
+              },
+              "locked": true
+            }
+          ],
+          "avoidWireOverlap": true
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_251fbd4f": {
+        "id": "edge_251fbd4f",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_7c9328ed",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_f0d5771c",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_bee1d035",
+            "zone": "source",
+            "text": "1..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_7b681639",
+            "zone": "target",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_63842e93",
+            "zone": "center",
+            "text": "umístěno na",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": -32.71702474850474,
+              "y": -0.9885901804082096
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true,
+          "preferredPosition": -126
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_e1c6cfef": {
+        "id": "edge_e1c6cfef",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_f9481610",
+          "port": {
+            "kind": "perimeter",
+            "side": "west"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_c37e3854",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "labels": [],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "er",
+            "kind": "inheritance"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_471fee1e": {
+        "id": "edge_471fee1e",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_0f1187ea",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_c37e3854",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_25097a84",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 15.89340877409364,
+              "y": -11.002506890299173
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_060392e0",
+            "zone": "target",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 8.023677651858247,
+              "y": 10.83509646418895
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_53f0e0b0",
+            "zone": "center",
+            "text": "sjednal",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 23.23969710809707,
+              "y": -0.849167170092187
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true,
+          "preferredPosition": 0
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_d2dfaf6a": {
+        "id": "edge_d2dfaf6a",
+        "source": {
+          "target": "node",
+          "nodeId": "node_a4977db3",
+          "port": {
+            "kind": "perimeter",
+            "side": "west"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_5b674fd1",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_1efc2243",
+            "zone": "source",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_24534d0e",
+            "zone": "target",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 25.93288974197523,
+              "y": 0.5465247521394758
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_59b835c5",
+            "zone": "center",
+            "text": "spravuje",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_85b93b6b": {
+        "id": "edge_85b93b6b",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_cf327be5",
+          "port": {
+            "kind": "perimeter",
+            "side": "west"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_c37e3854",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "labels": [],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "preferredPosition": 819
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "er",
+            "kind": "inheritance"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_b63274b2": {
+        "id": "edge_b63274b2",
+        "source": {
+          "target": "node",
+          "nodeId": "node_3280d8fa",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_cf327be5",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "labels": [],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "preferredPosition": 180
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "er",
+            "kind": "inheritance"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_c2b59796": {
+        "id": "edge_c2b59796",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_cf327be5",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_f9481610",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_2684977f",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 13.3887639091773,
+              "y": 14.22964024020132
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_cc483ce0",
+            "zone": "target",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 16.45647296374591,
+              "y": -9.883932932997709
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_01d02d8b",
+            "zone": "center",
+            "text": "zastupuje",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 29.826261020770943,
+              "y": 3.1101927147163906
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "avoidWireOverlap": true,
+          "preferredPosition": 171
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_26c20266": {
+        "id": "edge_26c20266",
+        "source": {
+          "target": "node",
+          "nodeId": "node_a4977db3",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_cf327be5",
+          "port": {
+            "kind": "perimeter",
+            "side": "west"
+          }
+        },
+        "labels": [],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "preferredPosition": 765
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "er",
+            "kind": "inheritance"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_6037002a": {
+        "id": "edge_6037002a",
+        "source": {
+          "target": "node",
+          "nodeId": "node_d5f43e64",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_7c9328ed",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_0e5b4f43",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 15.59296993194991,
+              "y": -9.99182465014826
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_32d9c52b",
+            "zone": "target",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 15.361413814344502,
+              "y": 11.730608216716178
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [],
+          "preferredPosition": 799.5
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_8a4f1800": {
+        "id": "edge_8a4f1800",
+        "source": {
+          "target": "node",
+          "nodeId": "relation_attribute_a433a852",
+          "port": {
+            "kind": "perimeter",
+            "side": "north"
+          }
+        },
+        "target": {
+          "target": "edge",
+          "edgeId": "edge_6037002a",
+          "t": 0.43844887518690506
+        },
+        "labels": [],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": []
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "er",
+            "kind": "inheritance"
+          }
+        },
+        "semantic": {
+          "family": "er",
+          "name": "has"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "dashed"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_42aa17fb": {
+        "id": "edge_42aa17fb",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_9f7c258e",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "node_3280d8fa",
+          "port": {
+            "kind": "perimeter",
+            "side": "east"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_8a3d24b3",
+            "zone": "source",
+            "text": "0..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_2e98502a",
+            "zone": "target",
+            "text": "1..n",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          },
+          {
+            "id": "label_266318e4",
+            "zone": "center",
+            "text": "vytvořil",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": 0,
+              "y": -12
+            },
+            "locked": false,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": [
+            {
+              "id": "waypoint_09d8d23e",
+              "point": {
+                "x": -135,
+                "y": 1278
+              },
+              "locked": true
+            },
+            {
+              "id": "waypoint_a8c64fdc",
+              "point": {
+                "x": 261,
+                "y": 702
+              },
+              "locked": true
+            }
+          ]
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      },
+      "edge_4418ec10": {
+        "id": "edge_4418ec10",
+        "source": {
+          "target": "node",
+          "nodeId": "entity_0f1187ea",
+          "port": {
+            "kind": "perimeter",
+            "side": "south"
+          }
+        },
+        "target": {
+          "target": "node",
+          "nodeId": "entity_552fb4a1",
+          "port": {
+            "kind": "perimeter",
+            "side": "west"
+          }
+        },
+        "labels": [
+          {
+            "id": "label_95c355c1",
+            "zone": "source",
+            "text": "1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "source"
+            },
+            "offset": {
+              "x": 6.681228456931684,
+              "y": 9.51375430861367
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_6e1e0659",
+            "zone": "target",
+            "text": "0..1",
+            "anchor": {
+              "kind": "endpoint",
+              "end": "target"
+            },
+            "offset": {
+              "x": 11.149167585212751,
+              "y": -9.51375430861367
+            },
+            "locked": true,
+            "visible": true
+          },
+          {
+            "id": "label_7814ffb4",
+            "zone": "center",
+            "text": "má zálohu",
+            "anchor": {
+              "kind": "edgePoint",
+              "t": 0.5
+            },
+            "offset": {
+              "x": -32.78515745581034,
+              "y": 0.7307634769686047
+            },
+            "locked": true,
+            "visible": true
+          }
+        ],
+        "locked": false,
+        "visible": true,
+        "z": 10,
+        "routing": {
+          "mode": "orthogonal",
+          "avoidObstacles": true,
+          "obstaclePadding": 9,
+          "stubLength": 9,
+          "waypoints": []
+        },
+        "markers": {
+          "source": {
+            "family": "none",
+            "kind": "none"
+          },
+          "target": {
+            "family": "none",
+            "kind": "none"
+          }
+        },
+        "semantic": {
+          "family": "er"
+        },
+        "style": {
+          "stroke": {
+            "color": "#111111",
+            "width": 0.75,
+            "pattern": "solid"
+          },
+          "labelText": {
+            "fontFamily": "Latin Modern Roman",
+            "fontSize": 9.5,
+            "color": "#111111",
+            "weight": 400
+          },
+          "labelFill": {
+            "color": "#ffffff"
+          },
+          "labelPadding": 2,
+          "labelInset": 18,
+          "arrowScale": 1
+        }
+      }
+    },
+    "assets": {}
+  }
+}

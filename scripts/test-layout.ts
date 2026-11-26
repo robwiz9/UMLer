@@ -1432,6 +1432,54 @@ const overlaps = (a: Rect, b: Rect): boolean =>
   a.y + a.height > b.y + 0.001;
 assert.equal(overlaps(placedConverted, placedCustomers), false);
 assert.equal(overlaps(placedConverted, placedOrders), false);
+
+// Incremental layout: editing row text must keep connector geometry, while a
+// frame change must reroute. Both cases have to match a full measurement pass.
+const reuseTable = Object.values(ER_COMMERCE.nodes).find((node) => node.kind === "table");
+assert.ok(reuseTable !== undefined && reuseTable.kind === "table");
+const reuseRow = reuseTable.sections.flatMap((section) => section.rows)[0];
+assert.ok(reuseRow !== undefined);
+const reuseBaseline = buildLayoutSnapshot(ER_COMMERCE, measurer);
+const reuseEdited = updateRow(ER_COMMERCE, reuseTable.id, reuseRow.id, {
+  name: `${reuseRow.name}_x`,
+});
+const reuseLayout = buildLayoutSnapshot(reuseEdited, measurer, {
+  reuseUnchanged: { scene: ER_COMMERCE, layout: reuseBaseline, measurer },
+});
+for (const [edgeId, edgeLayout] of Object.entries(reuseBaseline.edges)) {
+  assert.equal(
+    reuseLayout.edges[edgeId],
+    edgeLayout,
+    "editing row text must reuse connector geometry",
+  );
+}
+const reuseFull = buildLayoutSnapshot(reuseEdited, measurer);
+assert.deepEqual(
+  Object.values(reuseLayout.edges).map((edge) => edge.points),
+  Object.values(reuseFull.edges).map((edge) => edge.points),
+);
+assert.deepEqual(
+  reuseLayout.exportBounds,
+  reuseFull.exportBounds,
+);
+
+const reuseMovedScene = withNodeFrames(reuseEdited, {
+  [reuseTable.id]: { ...reuseTable.frame, x: reuseTable.frame.x + 40 },
+});
+const reuseMovedLayout = buildLayoutSnapshot(reuseMovedScene, measurer, {
+  reuseUnchanged: { scene: reuseEdited, layout: reuseLayout, measurer },
+});
+const reuseMovedFull = buildLayoutSnapshot(reuseMovedScene, measurer);
+assert.deepEqual(
+  Object.values(reuseMovedLayout.edges).map((edge) => edge.points),
+  Object.values(reuseMovedFull.edges).map((edge) => edge.points),
+);
+assert.ok(
+  Object.values(reuseMovedLayout.edges).some(
+    (edge) => reuseLayout.edges[edge.edgeId] !== edge,
+  ),
+  "moving a frame must reroute connectors",
+);
 assert.equal(overlaps(placedExistingAttribute, placedCustomers), false);
 assert.equal(overlaps(placedExistingAttribute, placedOrders), false);
 const parentCenterX =

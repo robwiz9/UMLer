@@ -213,11 +213,15 @@ export const routeOrthogonalAStar = (input: OrthogonalRouterInput): OrthogonalRo
   });
 
   let goalKey: string | null = null;
+  let bestGoalTotal: number | null = null;
   let visited = 0;
 
   while (queue.size > 0) {
     const current = queue.pop();
     if (current === undefined) break;
+    // The heap is ordered by f = g + h; once even the most optimistic queued
+    // state cannot beat the best complete goal, no cheaper path exists.
+    if (bestGoalTotal !== null && current.estimate >= bestGoalTotal) break;
     if (current.cost > (best.get(current.key) ?? Number.POSITIVE_INFINITY)) continue;
     visited += 1;
     if (current.node === endIndex) {
@@ -228,6 +232,7 @@ export const routeOrthogonalAStar = (input: OrthogonalRouterInput): OrthogonalRo
         best.set(candidateKey, total);
         previous.set(candidateKey, current.key);
         goalKey = candidateKey;
+        bestGoalTotal = total;
       }
     }
 

@@ -126,12 +126,26 @@ export const useSceneHistory = (initial: SceneDocument) => {
     });
   }, []);
 
+  /**
+   * Replace the present scene without adding a local undo step. Used for
+   * remote collaboration snapshots; remote changes are not locally undoable.
+   */
+  const replace = useCallback((scene: SceneDocument) => {
+    setHistory((current) => ({
+      ...current,
+      present: scene,
+      future: [],
+      lastUpdateAt: 0,
+    }));
+  }, []);
+
   return {
     scene: history.present,
     setScene: update,
     undo,
     redo,
     reset,
+    replace,
     canUndo: history.past.length > 0,
     canRedo: history.future.length > 0,
   } as const;

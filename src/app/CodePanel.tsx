@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayoutSnapshot } from "../model/layout.ts";
 import type { SceneDocument } from "../model/scene.ts";
 import type { ImageAsset } from "../model/nodes.ts";
@@ -6,7 +6,7 @@ import {
   CETZ_EXPORT_VERSION,
   serializeSceneToCetz,
 } from "../export/cetz.ts";
-import { serializeSceneToDigest } from "../export/diagram-digest.ts";
+import { serializeSceneToDigest, type DigestResult } from "../export/diagram-digest.ts";
 import {
   defaultDiagramId,
   normalizeBorder,
@@ -434,10 +434,22 @@ export const CodePanel = ({
     saveSceneExportSettings(scene.id, settings);
   }, [scene.id, settings]);
 
-  const digest = useMemo(
-    () => serializeSceneToDigest(scene, layout),
-    [scene, layout],
-  );
+  // The LLM digest is only needed when the user copies or downloads it, so it
+  // is computed on demand and cached against the exact scene/layout pair.
+  const digestCacheRef = useRef<{
+    readonly scene: SceneDocument;
+    readonly layout: LayoutSnapshot;
+    readonly result: DigestResult;
+  } | null>(null);
+  const digestFor = useCallback((): DigestResult => {
+    const cached = digestCacheRef.current;
+    if (cached !== null && cached.scene === scene && cached.layout === layout) {
+      return cached.result;
+    }
+    const result = serializeSceneToDigest(scene, layout);
+    digestCacheRef.current = { scene, layout, result };
+    return result;
+  }, [scene, layout]);
 
   const result = useMemo(
     () =>
@@ -631,7 +643,7 @@ export const CodePanel = ({
 
   const copyDigest = async (): Promise<void> => {
     try {
-      await copyToClipboard(digest.text);
+      await copyToClipboard(digestFor().text);
       flashDigestState("copied");
     } catch {
       flashDigestState("error");
@@ -642,7 +654,7 @@ export const CodePanel = ({
     try {
       downloadTextFile(
         `${fileExportBase}.digest.txt`,
-        digest.text,
+        digestFor().text,
         "text/plain;charset=utf-8",
       );
       flashDigestState("saved");

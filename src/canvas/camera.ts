@@ -61,3 +61,23 @@ export const zoomAtScreenPoint = (
     },
   };
 };
+
+/** World point currently shown at the centre of the viewport. */
+export const worldCenterForCamera = (
+  camera: Camera,
+  viewport: ViewportSize,
+  zoom: number,
+): Point => ({
+  x: (viewport.width / 2 - camera.x) / zoom,
+  y: (viewport.height / 2 - camera.y) / zoom,
+});
+
+/** Camera translation that centres a world point at the current zoom. */
+export const cameraForWorldCenter = (
+  center: Point,
+  viewport: ViewportSize,
+  zoom: number,
+): Camera => ({
+  x: viewport.width / 2 - center.x * zoom,
+  y: viewport.height / 2 - center.y * zoom,
+});
