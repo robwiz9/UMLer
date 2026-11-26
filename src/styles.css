@@ -5367,6 +5367,32 @@ button {
   color: var(--ink);
 }
 
+/* Text-style controls sit on light paper in the base sheet. */
+:root[data-color-mode="semi-dark"] :is(.style-toggle, .text-style-size, .text-style-color),
+:root[data-color-mode="dark"] :is(.style-toggle, .text-style-size, .text-style-color) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] .style-toggle.on,
+:root[data-color-mode="dark"] .style-toggle.on {
+  border-color: #0078d4;
+  background: #04395e;
+  color: #ffffff;
+}
+
+:root[data-color-mode="semi-dark"] :is(.text-style-size input, .text-style-color input),
+:root[data-color-mode="dark"] :is(.text-style-size input, .text-style-color input) {
+  background: transparent;
+  color: var(--ink);
+}
+
+:root[data-color-mode="semi-dark"] :is(.text-style-controls, .background-control),
+:root[data-color-mode="dark"] :is(.text-style-controls, .background-control) {
+  border-top-color: var(--line);
+}
+
 :root[data-color-mode="semi-dark"] :is(
   .chip,
   .tool-toggle,

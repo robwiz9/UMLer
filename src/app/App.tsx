@@ -306,6 +306,8 @@ interface ToastAction {
 const CETZ_IMPORT_STATEMENT = `#import "@preview/cetz:${CETZ_EXPORT_VERSION}": canvas, draw`;
 
 const DARK_CANVAS = "#1e1e1e";
+/** Warm dark surface for note/comment nodes; the light default is #fffdf2. */
+const DARK_COMMENT_FILL = "#3a372e";
 const darkHeaderColor = (color: string | null | undefined): string | null | undefined => {
   if (color === null || color === undefined || color === "transparent") {
     return color;
@@ -355,6 +357,19 @@ const darkShapeStyle = (style: ShapeNodeStyle): ShapeNodeStyle => ({
 });
 
 const darkNodeForDisplay = (node: SceneNode): SceneNode => {
+  if (node.kind === "comment") {
+    // Comments fall back to a warm paper fill when no colour is set; use a
+    // dark note surface instead so the note does not glow in dark mode.
+    return {
+      ...node,
+      backgroundColor: node.backgroundColor === null
+        ? null
+        : node.backgroundColor === undefined
+          ? DARK_COMMENT_FILL
+          : darkHeaderColor(node.backgroundColor),
+      style: darkShapeStyle(node.style),
+    };
+  }
   if (node.kind === "table" || node.kind === "relationAttribute") {
     const tableFields = node.kind === "table"
       ? {
