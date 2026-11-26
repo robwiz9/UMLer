@@ -316,7 +316,7 @@ export const ER_ENDPOINT_MODES: readonly {
  * The label is free text; these are only shortcuts. In particular `0..n` and
  * `1..n` are endpoint cardinalities, not a whole-relationship `m:n` badge.
  */
-export const CARDINALITY_CHIPS = ["0", "1", "0..1", "0..n", "1..n", "1..*", "*"] as const;
+export const CARDINALITY_CHIPS = ["1", "0..1", "0..n", "1..n", "0..*", "1..*", "*"] as const;
 export type CardinalityChip = (typeof CARDINALITY_CHIPS)[number];
 
 export type UmlRelationshipKind =
