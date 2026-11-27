@@ -26,6 +26,7 @@ import type {
   EdgeLabelZone,
   EdgeMarkerSet,
   EdgeRoutingMode,
+  EdgeSemantic,
   SceneEdge,
 } from "./edges.ts";
 import { asActivationId, asEdgeId, asLabelId, asNodeId, asRowId, asSectionId, asWaypointId, newId, type ActivationId, type EdgeId, type LabelId, type NodeId, type RowId, type SectionId } from "./ids.ts";
@@ -626,13 +627,32 @@ export const setEndpointLabel = (
 ): SceneDocument =>
   updateEdge(scene, edgeId, (edge) => {
     const existing = edge.labels.find((label) => label.zone === zone);
+    const semantic: EdgeSemantic | undefined =
+      edge.semantic.family === "communication" && zone === "center"
+        ? {
+            ...edge.semantic,
+            signature: text.trim().length > 0 ? text : undefined,
+          }
+        : undefined;
+    const updated = (labels: readonly EdgeLabel[]): SceneEdge =>
+      semantic === undefined ? { ...edge, labels } : { ...edge, labels, semantic };
     if (text.trim().length === 0) {
-      return { ...edge, labels: edge.labels.filter((label) => label.zone !== zone) };
+      // A communication message may still carry an order prefix without a
+      // center label, so keep the record until both fields are empty.
+      if (existing?.order !== undefined && existing.order.trim().length > 0) {
+        return updated(
+          edge.labels.map((entry) =>
+            entry.zone === zone ? { ...entry, text } : entry,
+          ),
+        );
+      }
+      return updated(edge.labels.filter((label) => label.zone !== zone));
     }
     const label: EdgeLabel = {
       id: existing?.id ?? asLabelId(newId("label")),
       zone,
       text,
+      order: existing?.order,
       anchor: existing?.anchor ?? labelAnchor(zone),
       offset: existing?.offset ?? { x: 0, y: -12 },
       locked: existing?.locked ?? false,
@@ -640,13 +660,53 @@ export const setEndpointLabel = (
       maxWidth: existing?.maxWidth,
       textStyle: existing?.textStyle,
     };
-    return {
-      ...edge,
-      labels:
-        existing === undefined
-          ? [...edge.labels, label]
-          : edge.labels.map((entry) => (entry.zone === zone ? label : entry)),
-    };
+    return updated(
+      existing === undefined
+        ? [...edge.labels, label]
+        : edge.labels.map((entry) => (entry.zone === zone ? label : entry)),
+    );
+  });
+
+/** Sets the sequence/order prefix shown before a communication center label. */
+export const setEndpointLabelOrder = (
+  scene: SceneDocument,
+  edgeId: EdgeId,
+  zone: EdgeLabelZone,
+  order: string,
+): SceneDocument =>
+  updateEdge(scene, edgeId, (edge) => {
+    const existing = edge.labels.find((label) => label.zone === zone);
+    const hasOrder = order.trim().length > 0;
+    const semantic: EdgeSemantic | undefined =
+      edge.semantic.family === "communication" && zone === "center"
+        ? { ...edge.semantic, sequence: hasOrder ? order.trim() : "" }
+        : undefined;
+    const updated = (labels: readonly EdgeLabel[]): SceneEdge =>
+      semantic === undefined ? { ...edge, labels } : { ...edge, labels, semantic };
+    if (existing === undefined) {
+      if (!hasOrder) return edge;
+      const label: EdgeLabel = {
+        id: asLabelId(newId("label")),
+        zone,
+        text: "",
+        order,
+        anchor: labelAnchor(zone),
+        offset: { x: 0, y: -12 },
+        locked: false,
+        visible: true,
+      };
+      return updated([...edge.labels, label]);
+    }
+    if (!hasOrder && existing.text.trim().length === 0) {
+      return updated(edge.labels.filter((label) => label.zone !== zone));
+    }
+    return updated(
+      edge.labels.map((entry) =>
+        entry.zone === zone
+          ? { ...entry, order: hasOrder ? order : undefined }
+          : entry,
+      ),
+    );
   });
 
 /** Manual label placement; the offset is relative to the resolved edge anchor. */

@@ -18,6 +18,7 @@ interface EdgeInspectorProps {
   readonly focusToken?: number;
   readonly labelTextStyle: TextStyle;
   readonly onSetLabel: (zone: EdgeLabelZone, text: string) => void;
+  readonly onSetLabelOrder?: (zone: EdgeLabelZone, order: string) => void;
   readonly onSetLabelStyle: (zone: EdgeLabelZone, style: TextStyleOverride | undefined) => void;
   readonly onConvertCenterLabel?: () => void;
   readonly onSetStrokePattern: (pattern: StrokePattern) => void;
@@ -43,6 +44,7 @@ const ROUTES: readonly EdgeRoutingMode[] = ["orthogonal", "straight"];
 const CLASS_STEREOTYPES = ["« use »", "« instantiate »"] as const;
 const USE_CASE_STEREOTYPES = ["« include »", "« extend »"] as const;
 const SEQUENCE_STEREOTYPES = ["« instantiate »", "« destroy »"] as const;
+const COMMUNICATION_STEREOTYPES = ["« create »", "« destroy »"] as const;
 const ER_STEREOTYPES = ["« identifies »"] as const;
 
 const LinePatternPreview = ({ pattern }: { readonly pattern: StrokePattern }) => (
@@ -71,6 +73,7 @@ export const EdgeInspector = ({
   focusToken = 0,
   labelTextStyle,
   onSetLabel,
+  onSetLabelOrder,
   onSetLabelStyle,
   onConvertCenterLabel,
   onSetStrokePattern,
@@ -93,18 +96,24 @@ export const EdgeInspector = ({
   }, [focusToken]);
   const labelFor = (zone: EdgeLabelZone): string =>
     edge.labels.find((label) => label.zone === zone)?.text ?? "";
+  const orderFor = (zone: EdgeLabelZone): string =>
+    edge.labels.find((label) => label.zone === zone)?.order ?? "";
   const labelStyleFor = (zone: EdgeLabelZone): TextStyleOverride | undefined =>
     edge.labels.find((label) => label.zone === zone)?.textStyle;
   const isCircuit = variant === "circuit" || edge.semantic.family === "circuit";
+  const isCommunication =
+    edge.semantic.family === "communication" || diagramKind === "uml-communication";
   const stereotypes = diagramKind === "uml-class"
     ? CLASS_STEREOTYPES
     : diagramKind === "uml-use-case"
       ? USE_CASE_STEREOTYPES
       : diagramKind === "uml-sequence"
         ? SEQUENCE_STEREOTYPES
-        : diagramKind === "er" && erWeakEntity
-          ? ER_STEREOTYPES
-          : [];
+        : diagramKind === "uml-communication"
+          ? COMMUNICATION_STEREOTYPES
+          : diagramKind === "er" && erWeakEntity
+            ? ER_STEREOTYPES
+            : [];
   const applyStereotype = (stereotype: string): void => {
     onSetLabel("center", stereotype);
     onSetLabelStyle("center", {
@@ -114,7 +123,19 @@ export const EdgeInspector = ({
   };
   const centerField = (
     <>
-      <div className="center-label-row">
+      <div className={`center-label-row${isCommunication ? " communication-label-row" : ""}`}>
+        {isCommunication ? (
+          <label className="field-label order-field">
+            Order
+            <input
+              id={`${idPrefix}-edge-${edge.id}-order-label`}
+              name={`${idPrefix}-edge-${edge.id}-order-label`}
+              value={orderFor("center")}
+              placeholder="2.1"
+              onChange={(event) => onSetLabelOrder?.("center", event.target.value)}
+            />
+          </label>
+        ) : null}
         <label className="field-label">
           {isCircuit ? "Wire label" : "Center label"}
           <input
@@ -125,7 +146,13 @@ export const EdgeInspector = ({
             data-label-scope="edge"
             data-label-edge-id={edge.id}
             data-label-delete-only-empty={isCircuit ? undefined : "true"}
-            placeholder={isCircuit ? 'e.g. out or V_1' : "relationship name"}
+            placeholder={
+              isCircuit
+                ? "e.g. out or V_1"
+                : isCommunication
+                  ? "e.g. foo()"
+                  : "relationship name"
+            }
             onChange={(event) => onSetLabel("center", event.target.value)}
           />
         </label>

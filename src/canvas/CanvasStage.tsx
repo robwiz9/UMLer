@@ -138,6 +138,7 @@ interface CanvasStageProps {
   ) => void;
   readonly onSetMarker: (edgeId: string, end: EdgeEnd, marker: EndpointMarker) => void;
   readonly onSetEdgeLabel: (edgeId: string, zone: EdgeLabelZone, text: string) => void;
+  readonly onSetEdgeLabelOrder: (edgeId: string, zone: EdgeLabelZone, order: string) => void;
   readonly onSetEdgeLabelStyle: (
     edgeId: string,
     zone: EdgeLabelZone,
@@ -1255,6 +1256,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
   onSelectActivation,
   onSetMarker,
   onSetEdgeLabel,
+  onSetEdgeLabelOrder,
   onSetEdgeLabelStyle,
   onConvertToRelationAttribute,
   onSetStrokePattern,
@@ -6005,6 +6007,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, CanvasStageProps>(funct
               focusToken={lineFocusToken}
               labelTextStyle={scene.theme.edge.labelText}
               onSetLabel={(zone, text) => onSetEdgeLabel(selectedEdge.id, zone, text)}
+              onSetLabelOrder={(zone, order) =>
+                onSetEdgeLabelOrder(selectedEdge.id, zone, order)}
               onSetLabelStyle={(zone, style) => onSetEdgeLabelStyle(selectedEdge.id, zone, style)}
               onConvertCenterLabel={canConvertCenterLabel ? convertCenterLabel : undefined}
               onSetStrokePattern={(pattern) => onSetStrokePattern(selectedEdge.id, pattern)}

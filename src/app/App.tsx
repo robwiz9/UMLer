@@ -206,6 +206,7 @@ import {
   setEdgeLabelTextStyle,
   setEdgeWaypoint,
   setEndpointLabel,
+  setEndpointLabelOrder,
   setMarker,
   setNodeImage,
   setRoutingMode,
@@ -4598,6 +4599,13 @@ export const App = () => {
     setScene((current) => setEndpointLabel(current, asEdgeId(edgeId), zone, text));
   }, []);
 
+  const handleSetEdgeLabelOrder = useCallback(
+    (edgeId: string, zone: EdgeLabelZone, order: string) => {
+      setScene((current) => setEndpointLabelOrder(current, asEdgeId(edgeId), zone, order));
+    },
+    [],
+  );
+
   const handleSetEdgeLabelStyle = useCallback(
     (edgeId: string, zone: EdgeLabelZone, style: TextStyleOverride | undefined) => {
       setScene((current) => setEdgeLabelTextStyle(current, asEdgeId(edgeId), zone, style));
@@ -5262,6 +5270,7 @@ export const App = () => {
           onSelectActivation={selectActivation}
           onSetMarker={handleSetMarker}
           onSetEdgeLabel={handleSetEdgeLabel}
+          onSetEdgeLabelOrder={handleSetEdgeLabelOrder}
           onSetEdgeLabelStyle={handleSetEdgeLabelStyle}
           onConvertToRelationAttribute={handleConvertToRelationAttribute}
           onSetStrokePattern={handleSetStrokePattern}

@@ -257,17 +257,22 @@ const richTextBody = (
     body += "])";
     openScript = null;
   };
+  const segmentContent = (segment: RichTextSegment): string => {
+    const text = `#(${quote(segment.text)})`;
+    if (segment.italic === undefined) return text;
+    return `#text(style: ${segment.italic ? '"italic"' : '"normal"'})[${text}]`;
+  };
   for (const segment of segments) {
     if (segment.script === "normal") {
       closeScript();
-      body += `#(${quote(segment.text)})`;
+      body += segmentContent(segment);
       continue;
     }
     if (segment.depth === 1) {
       closeScript();
       body += `#${segment.script}([`;
       openScript = segment.script;
-      body += `#(${quote(segment.text)})`;
+      body += segmentContent(segment);
       continue;
     }
     if (openScript === null) {
@@ -276,8 +281,13 @@ const richTextBody = (
     }
     const baseline = (segment.depth - 1) *
       (segment.script === "sub" ? 0.15 : -0.2) * baseFontSize;
+    const props: string[] = [];
+    if (segment.italic !== undefined) {
+      props.push(`style: ${segment.italic ? '"italic"' : '"normal"'}`);
+    }
+    props.push(`size: ${segment.fontSize}pt`, `baseline: ${baseline}pt`);
     body +=
-      `#text(size: ${segment.fontSize}pt, baseline: ${baseline}pt)[#(${quote(segment.text)})]`;
+      `#text(${props.join(", ")})[#(${quote(segment.text)})]`;
   }
   closeScript();
   return body;
@@ -297,7 +307,9 @@ const textExpr = (measurement: TextMeasurement, scale: number): string => {
   parts.push(`fill: ${colorExpr(style.color)}`);
   if (
     measurement.segments !== undefined &&
-    measurement.segments.some((segment) => segment.script !== "normal")
+    measurement.segments.some(
+      (segment) => segment.script !== "normal" || segment.italic !== undefined,
+    )
   ) {
     return `text(${parts.join(", ")})[${richTextBody(measurement.segments, measurement.style.fontSize)}]`;
   }

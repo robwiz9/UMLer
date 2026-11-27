@@ -123,6 +123,12 @@ export interface EdgeLabel {
   readonly id: LabelId;
   readonly zone: EdgeLabelZone;
   readonly text: string;
+  /**
+   * Optional order prefix rendered before the label text, e.g. `2.1` in a
+   * communication diagram message (`2.1: foo()`). The prefix keeps the base
+   * label style, so an italic center label does not italicize the order.
+   */
+  readonly order?: string;
   readonly anchor: EdgeLabelAnchor;
   /** Manual offset from the resolved anchor, in scene units. */
   readonly offset: Point;

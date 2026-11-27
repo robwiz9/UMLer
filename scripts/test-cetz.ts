@@ -11,7 +11,7 @@ import { buildLayoutSnapshot } from "../src/layout/build-layout.ts";
 import { FixedTextMeasurer } from "../src/layout/text.ts";
 import { serializeSceneToCetz } from "../src/export/cetz.ts";
 import { createEdgeForDiagram } from "../src/model/edge-create.ts";
-import { insertEdge } from "../src/model/edits.ts";
+import { insertEdge, setEdgeLabelTextStyle } from "../src/model/edits.ts";
 import {
   DEFAULT_EXPORT_SETTINGS,
   pageSize,
@@ -22,7 +22,7 @@ import {
 import type { SceneDocument } from "../src/model/scene.ts";
 import type { SceneNode } from "../src/model/nodes.ts";
 import { NO_MARKER } from "../src/model/edges.ts";
-import { asNodeId } from "../src/model/ids.ts";
+import { asEdgeId, asNodeId } from "../src/model/ids.ts";
 import { DEFAULT_THEME } from "../src/model/styles.ts";
 
 let passed = 0;
@@ -449,6 +449,31 @@ if (useCase !== undefined) {
   check(!imageResult.code.includes("Place the referenced image file"), "no resource commentary in source");
   const folder = serialize(useCase.scene, { settings: { resourceFolder: "media/img/" } });
   check(folder.code.includes('image("media/img/brand.svg"'), "resource folder is normalized");
+}
+
+// ---------------------------------------------------------------------------
+// Communication labels combine a normal order prefix with an italic message.
+// ---------------------------------------------------------------------------
+const communicationFixture = STEP1_FIXTURES.find(
+  (fixture) => fixture.scene.meta.diagramKind === "uml-communication",
+);
+if (communicationFixture !== undefined) {
+  const communicationEdgeId = asEdgeId("comm_create");
+  const italicCommunication = setEdgeLabelTextStyle(
+    communicationFixture.scene,
+    communicationEdgeId,
+    "center",
+    { italic: true },
+  );
+  const communicationResult = serialize(italicCommunication);
+  check(
+    communicationResult.code.includes('#text(style: "normal")[#("1")]'),
+    "communication order stays upright",
+  );
+  check(
+    communicationResult.code.includes('#text(style: "italic")[#("create()")]'),
+    "communication message text is italic",
+  );
 }
 
 // ---------------------------------------------------------------------------

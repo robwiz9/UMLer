@@ -41,6 +41,8 @@ export interface RichTextSegment {
   readonly depth: number;
   readonly fontSize: number;
   readonly width: number;
+  /** Per-segment italic override; undefined inherits the measurement style. */
+  readonly italic?: boolean;
 }
 
 export interface PortGeometry {

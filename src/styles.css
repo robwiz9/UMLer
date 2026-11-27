@@ -2087,6 +2087,14 @@ button {
   margin: 6px 0;
 }
 
+.center-label-row .order-field {
+  flex: 0 0 56px;
+}
+
+.center-label-row .order-field input {
+  text-align: center;
+}
+
 .square-action {
   display: grid;
   flex: 0 0 auto;

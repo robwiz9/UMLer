@@ -49,7 +49,19 @@ export const RichLabelText = ({
           const dy = offset - previousOffset;
           previousOffset = offset;
           return (
-            <tspan key={index} x={x} dy={dy} fontSize={segment.fontSize}>
+            <tspan
+              key={index}
+              x={x}
+              dy={dy}
+              fontSize={segment.fontSize}
+              fontStyle={
+                segment.italic === undefined
+                  ? undefined
+                  : segment.italic
+                    ? "italic"
+                    : "normal"
+              }
+            >
               {segment.text}
             </tspan>
           );

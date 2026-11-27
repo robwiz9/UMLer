@@ -233,10 +233,12 @@ const label = (
   text: string,
   anchorT: number,
   offset = { x: 0, y: -12 },
+  order?: string,
 ): EdgeLabel => ({
   id: asLabelId(id),
   zone,
   text,
+  order,
   anchor: { kind: "edgePoint", t: anchorT },
   offset,
   locked: false,
@@ -807,7 +809,7 @@ export const UML_COMMUNICATION_CHECKOUT: SceneDocument = scene(
       { family: "communication", sequence: "1", signature: "create()", direction: "forward" },
       {
         markers: { source: NO_MARKER, target: generic("arrow") },
-        labels: [label("label_comm_create", "center", "1: create()", 0.5, { x: 0, y: -12 })],
+        labels: [label("label_comm_create", "center", "create()", 0.5, { x: 0, y: -12 }, "1")],
       },
     ),
     edge(
@@ -817,7 +819,7 @@ export const UML_COMMUNICATION_CHECKOUT: SceneDocument = scene(
       { family: "communication", sequence: "1.1", signature: "reserve()", direction: "forward" },
       {
         markers: { source: NO_MARKER, target: generic("arrow") },
-        labels: [label("label_comm_reserve", "center", "1.1: reserve()", 0.5, { x: 0, y: -12 })],
+        labels: [label("label_comm_reserve", "center", "reserve()", 0.5, { x: 0, y: -12 }, "1.1")],
       },
     ),
     edge(
@@ -828,7 +830,7 @@ export const UML_COMMUNICATION_CHECKOUT: SceneDocument = scene(
       {
         markers: { source: NO_MARKER, target: generic("arrow") },
         strokePattern: "dashed",
-        labels: [label("label_comm_confirm", "center", "1.2: confirmed", 0.5, { x: 0, y: -12 })],
+        labels: [label("label_comm_confirm", "center", "confirmed", 0.5, { x: 0, y: -12 }, "1.2")],
       },
     ),
   ],

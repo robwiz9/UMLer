@@ -39,6 +39,7 @@ import type {
 import { portKey } from "../model/edges.ts";
 import { markerExtent } from "../model/markers.ts";
 import { resolveTextStyle } from "../model/styles.ts";
+import type { TextStyle } from "../model/styles.ts";
 import { measureRichText } from "../model/rich-text.ts";
 import { imageCaptionBlockHeight } from "../model/image-geometry.ts";
 import type {
@@ -2196,6 +2197,64 @@ const placeLabelFrame = (
   return preferred;
 };
 
+/**
+ * Communication messages display their sequence number before the center
+ * label (`2.1: foo()`). The order keeps the base label style while the message
+ * text may be italic, so the two parts are measured as styled segments.
+ */
+const measureOrderedLabel = (
+  order: string,
+  body: string,
+  style: TextStyle,
+  measurer: TextMeasurer,
+  maxWidth?: number,
+): TextMeasurement => {
+  const orderText = order.trim();
+  if (orderText.length === 0) return measurer.measure(body, style, maxWidth);
+  const orderStyle: TextStyle = { ...style, italic: false };
+  const orderMeasurement = measurer.measure(orderText, orderStyle, maxWidth);
+  if (body.length === 0) {
+    return { ...orderMeasurement, text: orderText, style: orderStyle };
+  }
+  const bodyMeasurement = measurer.measure(body, style, maxWidth);
+  const separator = measurer.measure(": ", orderStyle, maxWidth);
+  const width = orderMeasurement.width + separator.width + bodyMeasurement.width;
+  return {
+    text: `${orderText}: ${body}`,
+    width,
+    height: Math.max(orderMeasurement.height, bodyMeasurement.height),
+    lines: 1,
+    truncated: maxWidth !== undefined && width > maxWidth,
+    style: orderStyle,
+    segments: [
+      {
+        text: orderText,
+        script: "normal",
+        depth: 0,
+        fontSize: orderStyle.fontSize,
+        width: orderMeasurement.width,
+        italic: false,
+      },
+      {
+        text: ": ",
+        script: "normal",
+        depth: 0,
+        fontSize: orderStyle.fontSize,
+        width: separator.width,
+        italic: false,
+      },
+      {
+        text: body,
+        script: "normal",
+        depth: 0,
+        fontSize: style.fontSize,
+        width: bodyMeasurement.width,
+        italic: style.italic === true,
+      },
+    ],
+  };
+};
+
 const measureLabel = (
   label: EdgeLabel,
   edgePoints: readonly Point[],
@@ -2214,7 +2273,11 @@ const measureLabel = (
   const labelText = typeof label.text === "string" ? label.text : "";
   const text = scene.meta.diagramKind === "circuit"
     ? measureRichText(labelText, style, measurer, label.maxWidth)
-    : measurer.measure(labelText, style, label.maxWidth);
+    : scene.meta.diagramKind === "uml-communication" &&
+        label.zone === "center" &&
+        label.order !== undefined
+      ? measureOrderedLabel(label.order, labelText, style, measurer, label.maxWidth)
+      : measurer.measure(labelText, style, label.maxWidth);
   const padding = scene.theme.edge.labelPadding;
   const width = text.width + padding * 2;
   const height = text.height + padding * 2;

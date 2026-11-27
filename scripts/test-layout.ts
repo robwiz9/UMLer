@@ -44,6 +44,7 @@ import {
   setEdgePreferredPosition,
   setEdgeWaypoint,
   setEndpointLabel,
+  setEndpointLabelOrder,
   setSceneTheme,
   setSectionVisibility,
   updateRow,
@@ -1540,6 +1541,49 @@ assert.deepEqual(
   relabeled.edges.edge_places?.labels.find((label) => label.zone === "center")?.textStyle,
   labelStyle,
   "renaming a label must keep its typography overrides",
+);
+
+// Communication messages combine a normal order prefix with the center label.
+const communicationEdgeId = asEdgeId("comm_create");
+const orderedCommunication = setEndpointLabelOrder(
+  UML_COMMUNICATION_CHECKOUT,
+  communicationEdgeId,
+  "center",
+  "2.1",
+);
+const orderedLayout = buildLayoutSnapshot(orderedCommunication, measurer);
+const orderedLabel = orderedLayout.edges[communicationEdgeId]?.labels.find(
+  (label) => label.zone === "center",
+);
+assert.ok(orderedLabel !== undefined);
+assert.equal(orderedLabel.text.text, "2.1: create()");
+assert.equal(orderedLabel.text.segments?.[0]?.text, "2.1");
+assert.equal(orderedLabel.text.segments?.[0]?.italic, false);
+
+const italicCommunication = setEdgeLabelTextStyle(
+  orderedCommunication,
+  communicationEdgeId,
+  "center",
+  { italic: true },
+);
+const italicLabelLayout = buildLayoutSnapshot(italicCommunication, measurer);
+const italicLabel = italicLabelLayout.edges[communicationEdgeId]?.labels.find(
+  (label) => label.zone === "center",
+);
+assert.ok(italicLabel !== undefined);
+assert.equal(italicLabel.text.text, "2.1: create()");
+assert.equal(italicLabel.text.segments?.[0]?.italic, false, "order stays upright");
+assert.equal(
+  italicLabel.text.segments?.[italicLabel.text.segments.length - 1]?.italic,
+  true,
+  "center label inherits the italic style",
+);
+
+const orderOnly = setEndpointLabel(italicCommunication, communicationEdgeId, "center", "");
+assert.equal(
+  orderOnly.edges[communicationEdgeId]?.labels.find((label) => label.zone === "center")?.order,
+  "2.1",
+  "clearing the center label keeps the order field",
 );
 
 console.log("layout: OK");
