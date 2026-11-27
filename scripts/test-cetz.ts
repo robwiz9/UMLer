@@ -22,6 +22,8 @@ import {
 import type { SceneDocument } from "../src/model/scene.ts";
 import type { SceneNode } from "../src/model/nodes.ts";
 import { NO_MARKER } from "../src/model/edges.ts";
+import { asNodeId } from "../src/model/ids.ts";
+import { DEFAULT_THEME } from "../src/model/styles.ts";
 
 let passed = 0;
 const failures: string[] = [];
@@ -448,6 +450,48 @@ if (useCase !== undefined) {
   const folder = serialize(useCase.scene, { settings: { resourceFolder: "media/img/" } });
   check(folder.code.includes('image("media/img/brand.svg"'), "resource folder is normalized");
 }
+
+// ---------------------------------------------------------------------------
+// Reference points can be left out of the generated Typst body.
+// ---------------------------------------------------------------------------
+const refScene = structuredClone(er.scene) as SceneDocument;
+const referencePointId = asNodeId("ref-test");
+(refScene.nodes as Record<string, SceneNode>)[referencePointId] = {
+  id: referencePointId,
+  name: "ref-test",
+  frame: { x: 10, y: 10, width: 26, height: 26 },
+  z: 99,
+  locked: false,
+  visible: true,
+  kind: "referencePoint",
+  referenceId: "ref-test",
+  referenceVariant: "td",
+  referenceIndex: 1,
+  labelSize: 9,
+  style: DEFAULT_THEME.shape,
+};
+const refsIncluded = serialize(refScene);
+const refsExcluded = serialize(refScene, {
+  settings: { excludeReferencePoints: true },
+});
+check(refsIncluded.code.includes("umler-reference"), "reference points are emitted by default");
+check(
+  !refsExcluded.code.includes("umler-reference"),
+  "excluded reference points are omitted from the Typst code",
+);
+check(
+  refsExcluded.stats.nodes === refsIncluded.stats.nodes - 1,
+  "excluded reference point is not counted as an exported node",
+);
+check(
+  refsExcluded.selection.nodes.every((node) => node.kind !== "referencePoint"),
+  "excluded reference point leaves the export selection",
+);
+check(
+  refsExcluded.canvasWidthPt <= refsIncluded.canvasWidthPt &&
+    refsExcluded.canvasHeightPt <= refsIncluded.canvasHeightPt,
+  "excluded reference points no longer affect the canvas bounds",
+);
 
 // ---------------------------------------------------------------------------
 // Unary / self relations: the same object owns both ends.

@@ -96,11 +96,16 @@ export const resolveExportSelection = (
   scope: ExportScope,
   selectedNodeIds: readonly string[],
   selectedEdgeId: string | null,
+  excludeReferencePoints = false,
 ): ExportSelection => {
   const warnings: string[] = [];
   const allNodes = Object.values(scene.nodes).sort((a, b) => a.z - b.z);
   const allEdges = Object.values(scene.edges).sort((a, b) => a.z - b.z);
-  const visibleNodes = allNodes.filter((node) => node.visible !== false);
+  const visibleNodes = allNodes.filter(
+    (node) =>
+      node.visible !== false &&
+      !(excludeReferencePoints && node.kind === "referencePoint"),
+  );
   const visibleEdges = allEdges.filter((edge) => edge.visible !== false);
 
   let chosenNodes = visibleNodes;
@@ -131,7 +136,11 @@ export const resolveExportSelection = (
         }
       }
     }
-    chosenNodes = allNodes.filter((node) => seed.nodeIds.has(node.id));
+    chosenNodes = allNodes.filter(
+      (node) =>
+        seed.nodeIds.has(node.id) &&
+        !(excludeReferencePoints && node.kind === "referencePoint"),
+    );
     chosenEdges = allEdges.filter((edge) => includedEdges.has(edge.id));
     if (chosenNodes.length === 0 && chosenEdges.length === 0) {
       warnings.push("Nothing is selected; exporting the whole diagram instead.");

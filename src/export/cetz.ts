@@ -1544,6 +1544,7 @@ export const serializeSceneToCetz = (options: SerializeCetzOptions): CetzExportR
     settings.scope,
     selectedNodeIds,
     selectedEdgeId,
+    settings.excludeReferencePoints,
   );
   const page = pageSize(settings.page);
   const margins = pageMarginsPt(settings.page);

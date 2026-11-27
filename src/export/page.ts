@@ -216,6 +216,8 @@ export interface ExportSettings {
   readonly label?: string;
   readonly diagramId: string;
   readonly resourceFolder: string;
+  /** Omit reference point nodes from the generated Typst code. */
+  readonly excludeReferencePoints: boolean;
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
@@ -227,6 +229,7 @@ export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   border: DEFAULT_BORDER,
   diagramId: "",
   resourceFolder: "assets",
+  excludeReferencePoints: false,
 };
 
 /** Supports older persisted settings that predate the border fields. */
@@ -245,6 +248,7 @@ export interface ExportSettingsPatch {
   readonly label?: string;
   readonly diagramId?: string;
   readonly resourceFolder?: string;
+  readonly excludeReferencePoints?: boolean;
 }
 
 export const mergeExportSettings = (

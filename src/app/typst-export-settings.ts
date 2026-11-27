@@ -37,7 +37,10 @@ export const loadSceneExportSettings = (
     ) {
       return null;
     }
-    return value as ExportSettings;
+    return {
+      ...value,
+      excludeReferencePoints: value.excludeReferencePoints === true,
+    } as ExportSettings;
   } catch {
     return null;
   }

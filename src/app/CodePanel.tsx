@@ -60,6 +60,7 @@ interface StoredSettings {
   readonly rotation?: ExportRotation;
   readonly border?: Partial<BorderSettings>;
   readonly resourceFolder?: string;
+  readonly excludeReferencePoints?: boolean;
 }
 
 const STORAGE_KEY = "umler.typst-export.v1";
@@ -298,6 +299,9 @@ export const CodePanel = ({
   const [resourceFolder, setResourceFolder] = useState<string>(
     stored.current.resourceFolder ?? "assets",
   );
+  const [excludeReferencePoints, setExcludeReferencePoints] = useState<boolean>(
+    stored.current.excludeReferencePoints ?? false,
+  );
   const [diagramId, setDiagramId] = useState<string>(() => defaultDiagramId(scene.meta.title));
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [importState, setImportState] = useState<"idle" | "copied" | "error">("idle");
@@ -377,13 +381,14 @@ export const CodePanel = ({
       rotation,
       border,
       resourceFolder,
+      excludeReferencePoints,
     };
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       // Local storage can be unavailable in private windows; export still works.
     }
-  }, [page, zoom, align, rotation, border, resourceFolder]);
+  }, [page, zoom, align, rotation, border, resourceFolder, excludeReferencePoints]);
 
   useEffect(
     () => () => {
@@ -416,8 +421,20 @@ export const CodePanel = ({
       label,
       diagramId,
       resourceFolder,
+      excludeReferencePoints,
     }),
-    [page, zoom, scope, align, rotation, border, label, diagramId, resourceFolder],
+    [
+      page,
+      zoom,
+      scope,
+      align,
+      rotation,
+      border,
+      label,
+      diagramId,
+      resourceFolder,
+      excludeReferencePoints,
+    ],
   );
 
   useEffect(() => {
@@ -1126,6 +1143,20 @@ export const CodePanel = ({
                     </ul>
                   </div>
                 ) : null}
+                <label className="code-checkbox">
+                  <input
+                    id="code-exclude-reference-points"
+                    name="code-exclude-reference-points"
+                    type="checkbox"
+                    checked={excludeReferencePoints}
+                    onChange={(event) => setExcludeReferencePoints(event.target.checked)}
+                  />
+                  <span>Exclude reference points</span>
+                </label>
+                <p className="code-hint">
+                  Reference points stay on the canvas but are omitted from the
+                  generated Typst code.
+                </p>
               </>
             ) : null}
           </section>
